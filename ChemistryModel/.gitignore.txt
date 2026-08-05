@@ -1,0 +1,12 @@
+# Python virtual environment
+.venv/
+
+# Python-generated files
+__pycache__/
+*.pyc
+
+# Visual Studio files
+.vs/
+
+# Matplotlib/cache files
+.cache/
