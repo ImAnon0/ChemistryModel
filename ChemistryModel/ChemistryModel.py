@@ -6,6 +6,8 @@ from visualisation import show_animation
 
 from argon import ARGON_EPSILON_OVER_KELVIN
 
+from particle_setup import create_square_grid
+
 # ============================================================
 # Simulation settings
 # ============================================================
@@ -19,7 +21,7 @@ total_simulation_time = 8.0
 record_every = 8
 
 # Change this to compare colder and hotter argon systems.
-target_temperature_kelvin = 90
+target_temperature_kelvin = 0
 
 target_starting_temperature = (
     target_temperature_kelvin
@@ -31,23 +33,9 @@ target_starting_temperature = (
 # Initial particle state
 # ============================================================
 
-particle_positions = np.array(
-    [
-        [1.0, 1.0],
-        [2.5, 1.0],
-        [4.0, 1.0],
-
-        [1.0, 2.5],
-        [2.5, 2.5],
-        [4.0, 2.5],
-
-        [1.0, 4.0],
-        [2.5, 4.0],
-        [4.0, 4.0],
-
-        [5.2, 5.2]
-    ],
-    dtype=float
+particle_positions = create_square_grid(
+    particles_per_side=5,
+    box_size=box_size
 )
 
 particle_count = len(particle_positions)

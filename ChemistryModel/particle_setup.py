@@ -3,9 +3,17 @@ import numpy as np
 
 def create_square_grid(
     particles_per_side,
-    box_size
+    box_size,
+    minimum_spacing=0.9
 ):
     spacing = box_size / (particles_per_side + 1)
+
+    if spacing < minimum_spacing:
+        raise ValueError(
+            f"Particles are packed too closely. "
+            f"Calculated spacing: {spacing:.3f}. "
+            f"Minimum allowed spacing: {minimum_spacing:.3f}."
+        )
 
     particle_positions = []
 
