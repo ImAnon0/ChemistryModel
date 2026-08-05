@@ -16,12 +16,12 @@ box_size = 6.0
 particle_mass = 1.0
 
 time_step = 0.001
-total_simulation_time = 8.0
+total_simulation_time = 2.0
 
 record_every = 8
 
 # Change this to compare colder and hotter argon systems.
-target_temperature_kelvin = 0
+target_temperature_kelvin = 140
 
 target_starting_temperature = (
     target_temperature_kelvin

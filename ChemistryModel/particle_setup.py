@@ -6,7 +6,7 @@ def create_square_grid(
     box_size,
     minimum_spacing=0.9
 ):
-    spacing = box_size / (particles_per_side + 1)
+    spacing = box_size / particles_per_side
 
     if spacing < minimum_spacing:
         raise ValueError(
@@ -20,11 +20,11 @@ def create_square_grid(
     for row_index in range(particles_per_side):
         for column_index in range(particles_per_side):
             x_position = (
-                column_index + 1
+                column_index + 0.5
             ) * spacing
 
             y_position = (
-                row_index + 1
+                row_index + 0.5
             ) * spacing
 
             particle_positions.append(
