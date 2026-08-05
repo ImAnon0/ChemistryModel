@@ -2,28 +2,23 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 
+from interactions import calculate_all_interactions
+
 from argon import (
     ARGON_SIGMA_METERS,
     ARGON_EPSILON_OVER_KELVIN,
     ARGON_TIME_UNIT_SECONDS
 )
 
-from interactions import calculate_all_interactions
-from simulation import run_simulation
-
 # ============================================================
 # Simulation settings
 # ============================================================
 
-box_size = 15.0
+box_size = 6.0
 particle_mass = 1.0
 
 time_step = 0.001
 total_simulation_time = 8.0
-
-number_of_steps = int(
-    total_simulation_time / time_step
-)
 
 record_every = 8
 
@@ -111,105 +106,24 @@ velocity_scale = np.sqrt(
 
 particle_velocities *= velocity_scale
 
-
-# ============================================================
-# Run the simulation
-# ============================================================
-
-forces, potential_energy = calculate_all_interactions(
-    particle_positions,
-    box_size
+(
+    position_history,
+    time_history,
+    kinetic_energy_history,
+    potential_energy_history,
+    total_energy_history,
+    energy_drift_history,
+    temperature_history
+) = run_simulation(
+    starting_positions=particle_positions,
+    starting_velocities=particle_velocities,
+    particle_mass=particle_mass,
+    box_size=box_size,
+    time_step=time_step,
+    total_simulation_time=total_simulation_time,
+    record_every=record_every,
+    degrees_of_freedom=degrees_of_freedom
 )
-
-initial_kinetic_energy = (
-    0.5
-    * particle_mass
-    * np.sum(particle_velocities ** 2)
-)
-
-initial_total_energy = (
-    initial_kinetic_energy + potential_energy
-)
-
-
-position_history = []
-time_history = []
-
-kinetic_energy_history = []
-potential_energy_history = []
-total_energy_history = []
-energy_drift_history = []
-temperature_history = []
-
-
-for step_number in range(number_of_steps):
-    # Velocity-Verlet position update.
-
-    particle_positions = (
-        particle_positions
-        + particle_velocities * time_step
-        + 0.5
-        * (forces / particle_mass)
-        * time_step ** 2
-    )
-
-    # Periodic boundaries.
-
-    particle_positions %= box_size
-
-    new_forces, potential_energy = calculate_all_interactions(
-        particle_positions,
-        box_size
-    )
-
-    # Velocity-Verlet velocity update.
-
-    particle_velocities = (
-        particle_velocities
-        + 0.5
-        * (forces + new_forces)
-        / particle_mass
-        * time_step
-    )
-
-    forces = new_forces
-
-    if step_number % record_every == 0:
-        kinetic_energy = (
-            0.5
-            * particle_mass
-            * np.sum(particle_velocities ** 2)
-        )
-
-        temperature = (
-            2.0
-            * kinetic_energy
-            / degrees_of_freedom
-        )
-
-        total_energy = (
-            kinetic_energy + potential_energy
-        )
-
-        energy_drift = (
-            total_energy - initial_total_energy
-        )
-
-        current_time = (
-            (step_number + 1) * time_step
-        )
-
-        position_history.append(
-            particle_positions.copy()
-        )
-
-        time_history.append(current_time)
-        kinetic_energy_history.append(kinetic_energy)
-        potential_energy_history.append(potential_energy)
-        total_energy_history.append(total_energy)
-        energy_drift_history.append(energy_drift)
-        temperature_history.append(temperature)
-
 
 # ============================================================
 # Animate the recorded simulation
