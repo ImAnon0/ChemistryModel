@@ -232,13 +232,62 @@ def run_live_window(
 
     starting_positions = simulation.positions_in_nanometers
 
+    # Colour and size by element when the simulation is backed by
+    # an ASE Atoms object. Falls back to plain dots otherwise.
+
+    marker_colours = None
+    marker_sizes = 45
+
+    chemistry_atoms = getattr(simulation, "atoms", None)
+
+    if chemistry_atoms is not None:
+        try:
+            from species import colours_for, sizes_for
+
+            marker_colours = colours_for(chemistry_atoms)
+            marker_sizes = sizes_for(chemistry_atoms)
+        except ImportError:
+            pass
+
     particle_markers = particle_axes.scatter(
         starting_positions[:, 0],
         starting_positions[:, 1],
         starting_positions[:, 2],
-        s=45,
+        s=marker_sizes,
+        c=marker_colours,
+        edgecolors="black",
+        linewidths=0.4,
         depthshade=True
     )
+
+    if marker_colours is not None:
+        from matplotlib.lines import Line2D
+        from species import ELEMENT_COLOURS, DEFAULT_COLOUR
+
+        present = []
+
+        for symbol in chemistry_atoms.get_chemical_symbols():
+            if symbol not in present:
+                present.append(symbol)
+
+        particle_axes.legend(
+            handles=[
+                Line2D(
+                    [0], [0],
+                    marker="o",
+                    linestyle="none",
+                    markersize=8,
+                    markerfacecolor=ELEMENT_COLOURS.get(
+                        symbol, DEFAULT_COLOUR
+                    ),
+                    markeredgecolor="black",
+                    label=symbol
+                )
+                for symbol in present
+            ],
+            loc="upper right",
+            fontsize=9
+        )
 
     time_trace = deque(maxlen=trace_length)
     temperature_trace = deque(maxlen=trace_length)
@@ -371,6 +420,19 @@ def run_live_window(
             "on " if simulation.thermostat_is_on else "off"
         )
 
+        species_line = ""
+
+        if chemistry_atoms is not None:
+            try:
+                from species import summarise_molecules
+
+                species_line = (
+                    "\nMolecules    "
+                    + summarise_molecules(simulation.atoms)
+                )
+            except ImportError:
+                pass
+
         readout_text.set_text(
             f"Time         {simulation.elapsed_picoseconds:8.2f} ps\n"
             f"Temperature  {simulation.temperature_kelvin:8.1f} K\n"
@@ -379,6 +441,7 @@ def run_live_window(
             f"Kinetic      {simulation.kinetic_energy:8.2f}\n"
             f"Potential    {simulation.potential_energy:8.2f}\n"
             f"Total        {simulation.total_energy:8.2f}"
+            + species_line
         )
 
         return particle_markers, measured_line, target_line
