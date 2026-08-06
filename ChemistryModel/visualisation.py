@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+
 from matplotlib.animation import FuncAnimation
 
 from argon import (
@@ -18,37 +19,55 @@ def show_animation(
     temperature_history,
     box_size
 ):
+    # Matplotlib has no real depth sorting, so this is a quick
+    # look rather than a proper renderer. Past a few hundred
+    # particles, use trajectory.write_xyz_trajectory and OVITO.
+
     box_size_nanometers = (
         box_size
         * ARGON_SIGMA_METERS
         * 1e9
     )
 
-    figure, axes = plt.subplots()
+    figure = plt.figure(figsize=(8, 7))
+
+    axes = figure.add_subplot(111, projection="3d")
 
     axes.set_xlim(0.0, box_size_nanometers)
     axes.set_ylim(0.0, box_size_nanometers)
-    axes.set_aspect("equal")
+    axes.set_zlim(0.0, box_size_nanometers)
+
+    axes.set_box_aspect((1.0, 1.0, 1.0))
 
     axes.set_xlabel("X position (nm)")
     axes.set_ylabel("Y position (nm)")
+    axes.set_zlabel("Z position (nm)")
+
     axes.set_title(
-        "Two-Dimensional Lennard-Jones Argon Model"
+        "Three-Dimensional Lennard-Jones Argon Model"
     )
-    axes.grid()
+
+    starting_positions_nanometers = (
+        position_history[0]
+        * ARGON_SIGMA_METERS
+        * 1e9
+    )
 
     particle_markers = axes.scatter(
-        [],
-        [],
-        s=120
+        starting_positions_nanometers[:, 0],
+        starting_positions_nanometers[:, 1],
+        starting_positions_nanometers[:, 2],
+        s=40,
+        depthshade=True
     )
 
-    information_text = axes.text(
+    information_text = figure.text(
         0.02,
-        0.98,
+        0.97,
         "",
-        transform=axes.transAxes,
-        verticalalignment="top"
+        verticalalignment="top",
+        family="monospace",
+        fontsize=9
     )
 
     def update_animation(frame_number):
@@ -69,35 +88,37 @@ def show_animation(
             * ARGON_EPSILON_OVER_KELVIN
         )
 
-        particle_markers.set_offsets(
-            current_positions_nanometers
+        # 3D scatter needs both calls; set_offsets alone is 2D only.
+
+        particle_markers._offsets3d = (
+            current_positions_nanometers[:, 0],
+            current_positions_nanometers[:, 1],
+            current_positions_nanometers[:, 2]
         )
 
         information_text.set_text(
-            f"Time: {time_picoseconds:.3f} ps\n"
-            f"Temperature: {temperature_kelvin:.2f} K\n"
-            f"Kinetic: "
-            f"{kinetic_energy_history[frame_number]:.4f}\n"
-            f"Potential: "
-            f"{potential_energy_history[frame_number]:.4f}\n"
-            f"Total: "
-            f"{total_energy_history[frame_number]:.6f}\n"
-            f"Energy drift: "
-            f"{energy_drift_history[frame_number]:+.8f}"
+            f"Time:         {time_picoseconds:8.3f} ps\n"
+            f"Temperature:  {temperature_kelvin:8.2f} K\n"
+            f"Kinetic:      {kinetic_energy_history[frame_number]:8.3f}\n"
+            f"Potential:    {potential_energy_history[frame_number]:8.3f}\n"
+            f"Total:        {total_energy_history[frame_number]:8.4f}\n"
+            f"Energy drift: {energy_drift_history[frame_number]:+8.5f}"
         )
 
-        return (
-            particle_markers,
-            information_text
-        )
+        return particle_markers, information_text
 
     animation = FuncAnimation(
         figure,
         update_animation,
         frames=len(position_history),
-        interval=10,
-        blit=True,
+        interval=30,
+        blit=False,
         repeat=True
     )
+
+    # Keeping a reference stops the animation being garbage
+    # collected before the window opens.
+
+    figure._chemistry_model_animation = animation
 
     plt.show()
