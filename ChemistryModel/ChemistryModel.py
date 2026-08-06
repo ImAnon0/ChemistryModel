@@ -8,6 +8,8 @@ from argon import ARGON_EPSILON_OVER_KELVIN
 
 from particle_setup import create_square_grid
 
+import time
+
 # ============================================================
 # Simulation settings
 # ============================================================
@@ -90,6 +92,8 @@ velocity_scale = np.sqrt(
 
 particle_velocities *= velocity_scale
 
+simulation_start_time = time.perf_counter()
+
 (
     position_history,
     time_history,
@@ -107,6 +111,13 @@ particle_velocities *= velocity_scale
     total_simulation_time=total_simulation_time,
     record_every=record_every,
     degrees_of_freedom=degrees_of_freedom
+)
+
+simulation_end_time = time.perf_counter()
+
+print(
+    f"Simulation calculated in "
+    f"{simulation_end_time - simulation_start_time:.2f} seconds."
 )
 
 show_animation(

@@ -58,7 +58,7 @@ def calculate_lennard_jones_pair(
     return force_on_a, potential_energy
 
 
-def calculate_all_interactions(
+def calculate_all_interactions_slow(
     particle_positions,
     box_size,
     epsilon=1.0,
@@ -95,3 +95,50 @@ def calculate_all_interactions(
             )
 
     return total_forces, total_potential_energy
+
+def calculate_all_interactions(
+    particle_positions,
+    box_size,
+    epsilon=1.0,
+    sigma=1.0
+):
+    particle_displacements = (
+        particle_positions[np.newaxis, :, :]
+        - particle_positions[:, np.newaxis, :]
+    )
+
+    particle_displacements -= (
+        box_size
+        * np.round(particle_displacements / box_size)
+    )
+
+    distance_squared = np.sum(
+        particle_displacements ** 2,
+        axis=2
+    )
+
+    particle_count = len(particle_positions)
+
+    self_interaction_mask = np.eye(
+        particle_count,
+        dtype=bool
+    )
+
+    overlapping_particles = (
+        (distance_squared == 0.0)
+        & ~self_interaction_mask
+    )
+
+    if np.any(overlapping_particles):
+        raise ValueError(
+            "Two particles cannot occupy exactly the same position."
+        )
+
+    distance_squared[self_interaction_mask] = np.inf
+
+    return calculate_all_interactions_slow(
+        particle_positions,
+        box_size,
+        epsilon,
+        sigma
+    )
