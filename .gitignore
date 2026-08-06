@@ -1,12 +1,21 @@
-# Python virtual environment
-.venv/
+# Simulation output
+*.xyz
 
-# Python-generated files
-__pycache__/
-*.pyc
+# Downloaded model weights
+*.model
+mace_cache/
 
-# Visual Studio files
-.vs/
-
-# Matplotlib/cache files
-.cache/
+# Packages installed with pip --target
+torch/
+ase/
+mace/
+e3nn/
+nvidia/
+sympy/
+networkx/
+functorch/
+*.dist-info/
+*.egg-info/
+**/.venv/
+**/.vs/
+**/__pycache__/

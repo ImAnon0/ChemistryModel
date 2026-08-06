@@ -68,7 +68,7 @@ if force_field == "mace":
     atoms.calc = mace_mp(
         model="small",
         default_dtype="float32",
-        device="cpu"      # change to "cuda" if you have an NVIDIA GPU
+        device="cuda"      # change to "cuda" if you have an NVIDIA GPU
     )
 else:
     from ase.calculators.lj import LennardJones
