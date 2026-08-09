@@ -197,8 +197,9 @@ def run_live_window(
     steps_per_frame=8,
     frame_interval_milliseconds=40,
     trace_length=400,
+    species_every_frames=5,
     minimum_temperature_kelvin=1.0,
-    maximum_temperature_kelvin=400.0
+    maximum_temperature_kelvin=1500.0
 ):
     # Needs an interactive matplotlib backend (TkAgg, QtAgg).
     # If the window opens but nothing moves, that is the cause.
@@ -238,14 +239,27 @@ def run_live_window(
     marker_colours = None
     marker_sizes = 45
 
+    molecule_tracker = None
+
     chemistry_atoms = getattr(simulation, "atoms", None)
 
     if chemistry_atoms is not None:
         try:
-            from species import colours_for, sizes_for
+            from species import (
+                colours_for,
+                sizes_for,
+                MoleculeTracker
+            )
 
             marker_colours = colours_for(chemistry_atoms)
             marker_sizes = sizes_for(chemistry_atoms)
+
+            # Built once, here, because it carries bond history
+            # between frames. Building it inside the draw callback
+            # would reset that history every frame and defeat the
+            # whole point of it.
+
+            molecule_tracker = MoleculeTracker()
         except ImportError:
             pass
 
@@ -291,6 +305,12 @@ def run_live_window(
 
     time_trace = deque(maxlen=trace_length)
     temperature_trace = deque(maxlen=trace_length)
+
+    # Single-element lists because the draw callback is a closure
+    # and needs to mutate these without a nonlocal declaration.
+
+    frames_drawn = [0]
+    last_species_text = [""]
 
     measured_line, = trace_axes.plot(
         [],
@@ -386,6 +406,19 @@ def run_live_window(
         if not control_state["paused"]:
             simulation.step(steps_per_frame)
 
+        if getattr(simulation, "diverged", False):
+            # Freeze rather than carry on displaying nonsense.
+            # Reset clears the flag and restarts cleanly.
+
+            control_state["paused"] = True
+
+            readout_text.set_text(
+                "DIVERGED, run stopped\n\n"
+                + simulation.divergence_reason
+            )
+
+            return particle_markers, measured_line, target_line
+
         positions = simulation.positions_in_nanometers
 
         particle_markers._offsets3d = (
@@ -422,16 +455,22 @@ def run_live_window(
 
         species_line = ""
 
-        if chemistry_atoms is not None:
-            try:
-                from species import summarise_molecules
+        if molecule_tracker is not None:
+            # The neighbour search and connected components pass
+            # both run on the CPU while the GPU waits, so doing
+            # this every frame throttles the whole animation.
+            # Between updates the last result is reused.
 
-                species_line = (
-                    "\nMolecules    "
-                    + summarise_molecules(simulation.atoms)
+            frames_drawn[0] += 1
+
+            if frames_drawn[0] % species_every_frames == 0:
+                last_species_text[0] = (
+                    molecule_tracker.summarise(simulation.atoms)
                 )
-            except ImportError:
-                pass
+
+            species_line = (
+                "\nMolecules    " + last_species_text[0]
+            )
 
         readout_text.set_text(
             f"Time         {simulation.elapsed_picoseconds:8.2f} ps\n"

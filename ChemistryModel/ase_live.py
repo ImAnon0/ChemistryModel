@@ -49,6 +49,15 @@ class AseLiveSimulation:
 
     @property
     def degrees_of_freedom(self):
+        # The usual -3 assumes centre-of-mass momentum is
+        # conserved. Langevin kicks each atom independently, so it
+        # puts COM drift straight back every step, and that motion
+        # is thermal like everything else. Subtracting it while
+        # the thermostat runs biases the reported temperature.
+
+        if self.thermostat_is_on:
+            return 3 * len(self.atoms)
+
         return 3 * len(self.atoms) - 3
 
     @property
@@ -125,8 +134,16 @@ class AseLiveSimulation:
 
         self.elapsed_time = 0.0
 
+        self.diverged = False
+        self.divergence_reason = ""
+
     def step(self, number_of_steps=1):
         for _ in range(number_of_steps):
+            self._check_stability()
+
+            if self.diverged:
+                return
+
             accelerations = (
                 self.forces
                 / self.masses[:, np.newaxis]
@@ -159,6 +176,80 @@ class AseLiveSimulation:
                 self._apply_langevin()
 
             self.elapsed_time += self.time_step
+
+    # Any run this far above target has diverged, not heated up.
+    # Once velocities run away the readout shows numbers like
+    # 1e33 K, which is a broken integrator rather than a result.
+
+    RUNAWAY_TEMPERATURE_FACTOR = 20.0
+
+    def _check_stability(self):
+        # Sets a flag rather than raising, so the live window can
+        # freeze the run and show the reason instead of the whole
+        # program dying with a traceback. Anything driving this
+        # class headlessly should check `diverged` after stepping.
+
+        if self.diverged:
+            return
+
+        if not np.all(np.isfinite(self.forces)):
+            self.diverged = True
+
+            self.divergence_reason = (
+                "Forces came back NaN or infinite. The calculator "
+                "has been pushed outside anything it can evaluate."
+                + self._divergence_advice()
+            )
+
+            return
+
+        runaway_limit = (
+            self.RUNAWAY_TEMPERATURE_FACTOR
+            * max(self._target_temperature_kelvin, 1.0)
+        )
+
+        if self.temperature_kelvin > runaway_limit:
+            self.diverged = True
+
+            self.divergence_reason = (
+                f"Temperature reached "
+                f"{self.temperature_kelvin:.3e} K against a "
+                f"target of {self._target_temperature_kelvin:.0f} "
+                f"K. This is numerical divergence, not heating."
+                + self._divergence_advice()
+            )
+
+    def _divergence_advice(self):
+        # A neural network potential has no analytic repulsive
+        # core, so outside its training data it returns arbitrary
+        # forces rather than large ones. A single bad force gives
+        # a huge velocity, which lands the next step further out
+        # of domain still. That feedback loop is what this catches.
+
+        return (
+            "\n"
+            "\n  Likely causes, in order:"
+            "\n    1. Free atoms or radicals in the box. MACE-OFF"
+            "\n       is trained on neutral closed-shell molecules,"
+            "\n       so a lone C, N or O atom is outside anything"
+            "\n       it has seen, at any temperature. Start from"
+            "\n       whole molecules, not scattered atoms."
+            "\n    2. Temperature too high. Above roughly 600 K"
+            "\n       bonds dissociate into radicals, which is the"
+            "\n       same problem arriving by another route."
+            "\n       Try 500 K."
+            "\n    3. Molecules placed overlapping. Check the"
+            "\n       closest contact printed at startup is above"
+            "\n       about 2 A."
+            "\n    4. Timestep too large. Try 1.0 fs with"
+            "\n       hydrogen_mass = 3.0, or 0.5 fs with None."
+            "\n"
+            "\n  A neural network potential has no analytic"
+            "\n  repulsive core, so outside its training data it"
+            "\n  returns arbitrary forces rather than large ones."
+            "\n  One bad force gives a huge velocity, which lands"
+            "\n  the next step further out of domain still."
+        )
 
     def _apply_langevin(self):
         decay = np.exp(-self.friction * self.time_step)
