@@ -34,6 +34,7 @@ class Recorder:
         self.thinned_count = 0
 
         self.positions = []
+        self.velocities = []
         self.times = []
         self.potential = []
         self.kinetic = []
@@ -47,7 +48,7 @@ class Recorder:
         return len(self.positions) == 0
 
     def capture(self, positions, time, potential, kinetic,
-                temperature):
+                temperature, velocities=None):
         # Frames arrive at a fixed rate but are only kept every
         # `stride` of them.
 
@@ -61,6 +62,16 @@ class Recorder:
         self.positions.append(
             np.asarray(positions, dtype=np.float32).copy()
         )
+
+        # Velocities are kept so a run can be picked up again
+        # exactly where it stopped. Without them a resumed run has
+        # to draw fresh thermal velocities, which throws away all
+        # the momentum and gives a small artificial kick.
+
+        if velocities is not None:
+            self.velocities.append(
+                np.asarray(velocities, dtype=np.float32).copy()
+            )
 
         self.times.append(float(time))
         self.potential.append(float(potential))
@@ -82,6 +93,7 @@ class Recorder:
         # resolution, and the buffer never grows.
 
         self.positions = self.positions[::2]
+        self.velocities = self.velocities[::2]
         self.times = self.times[::2]
         self.potential = self.potential[::2]
         self.kinetic = self.kinetic[::2]
@@ -114,6 +126,7 @@ class Recorder:
         self.thinned_count = 0
 
         self.positions.clear()
+        self.velocities.clear()
         self.times.clear()
         self.potential.clear()
         self.kinetic.clear()
@@ -200,12 +213,24 @@ class Recorder:
 
     # --------------------------------------------------------
 
+    @property
+    def has_velocities(self):
+        return len(self.velocities) == len(self.positions) > 0
+
     def save(self, path):
+        extra = {}
+
+        if self.has_velocities:
+            extra["velocities"] = np.array(
+                self.velocities, dtype=np.float32
+            )
+
         np.savez_compressed(
             path,
             symbols=np.array(self.symbols),
             box_size=self.box_size,
             positions=np.array(self.positions, dtype=np.float32),
+            **extra,
             times=np.array(self.times),
             potential=np.array(self.potential),
             kinetic=np.array(self.kinetic),
@@ -227,6 +252,11 @@ class Recorder:
         recorder.positions = [
             frame for frame in data["positions"]
         ]
+
+        if "velocities" in data.files:
+            recorder.velocities = [
+                frame for frame in data["velocities"]
+            ]
 
         recorder.times = list(data["times"])
         recorder.potential = list(data["potential"])

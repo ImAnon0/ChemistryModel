@@ -68,17 +68,7 @@ CHANNEL_RADIUS = 2.2
 CHANNEL_ENERGY = 45.0
 
 
-# Loose atoms condense and react. Molecule mixtures start from
-# something stable and need heat or a spark to do anything.
-
-STARTS = {
-    "loose H + O": ("atoms", {"H": 40, "O": 20}),
-    "loose C H N O": ("atoms", {"C": 8, "H": 44, "N": 6, "O": 8}),
-    "Miller-Urey": ("molecules", {"CH4": 6, "NH3": 4, "H2O": 6, "H2": 8}),
-    "water box": ("molecules", {"H2O": 24}),
-    "methane box": ("molecules", {"CH4": 12}),
-    "H rich loose": ("atoms", {"C": 8, "H": 60, "N": 6, "O": 8}),
-}
+from mixtures import STARTS
 
 
 # Standard chemistry colours, so the picture reads the way a
@@ -297,6 +287,13 @@ class Viewer(QtWidgets.QWidget):
             "Play recording", self.toggle_playback
         )
         left.addWidget(self.play_button)
+
+        left.addWidget(
+            self.button(
+                "Continue from this frame",
+                self.continue_from_here
+            )
+        )
 
         row = QtWidgets.QHBoxLayout()
         row.addWidget(self.button("Back to live", self.go_live))
@@ -807,16 +804,24 @@ class Viewer(QtWidgets.QWidget):
         # element should have. Fewer means a radical, which is
         # real chemistry; more means an over-coordinated clump.
 
-        first, second = self.current_bonds()
+        # Bond order, not neighbour count. A double bond is
+        # one partner but two bonds, so counting partners would
+        # report the carbon in CO2 as a radical when it is
+        # perfectly satisfied.
 
-        counts = {}
+        import analysis
+        import reactive
 
-        for a, b in zip(first, second):
-            if self.molecule_labels[a] != label:
-                continue
+        counted = analysis.bond_counts(
+            positions,
+            reactive.types_from_symbols(symbols),
+            self.box_size
+        )
 
-            counts[int(a)] = counts.get(int(a), 0) + 1
-            counts[int(b)] = counts.get(int(b), 0) + 1
+        counts = {
+            int(index): int(value)
+            for index, value in enumerate(counted)
+        }
 
         expected = {"H": 1, "C": 4, "N": 3, "O": 2}
 
@@ -1018,6 +1023,105 @@ class Viewer(QtWidgets.QWidget):
             f"T {self.recorder.temperature[index]:.0f} K"
         )
 
+    def continue_from_here(self):
+        # Rebuild the simulation from whichever frame is on
+        # screen and carry on from there. Useful when a run has
+        # settled and you want to push it further, or when
+        # something interesting appears partway through and you
+        # would rather explore forward from that point than from
+        # the start.
+
+        if len(self.recorder) == 0:
+            print("nothing recorded to continue from")
+            return
+
+        index = (
+            self.scrubber.value() if self.replaying
+            else len(self.recorder) - 1
+        )
+
+        positions = self.recorder.positions[index]
+        symbols = self.recorder.symbols
+
+        from reactive_torch import ReactiveSimulation
+
+        self.simulation = ReactiveSimulation(
+            symbols=symbols,
+            positions=positions.astype(float),
+            box_size=self.recorder.box_size,
+            time_step=TIME_STEP,
+            target_temperature=(
+                self.simulation.target_temperature
+            ),
+            friction=FRICTION,
+        )
+
+        if self.recorder.has_velocities:
+            import torch
+
+            self.simulation.velocities = torch.tensor(
+                self.recorder.velocities[index].astype(float),
+                device=self.simulation.device,
+                dtype=self.simulation.dtype
+            )
+
+            note = "velocities restored"
+        else:
+            note = (
+                "no velocities in this recording, "
+                "redrawn thermally"
+            )
+
+        self.simulation.elapsed_femtoseconds = float(
+            self.recorder.times[index]
+        )
+
+        self.simulation.forces, self.simulation._potential_energy = (
+            self.simulation.compute_forces()
+        )
+
+        # Everything after the resume point is discarded, so the
+        # recording stays a single consistent timeline rather
+        # than branching.
+
+        self.recorder.positions = self.recorder.positions[:index + 1]
+        self.recorder.velocities = (
+            self.recorder.velocities[:index + 1]
+            if self.recorder.velocities else []
+        )
+        self.recorder.times = self.recorder.times[:index + 1]
+        self.recorder.potential = self.recorder.potential[:index + 1]
+        self.recorder.kinetic = self.recorder.kinetic[:index + 1]
+        self.recorder.temperature = (
+            self.recorder.temperature[:index + 1]
+        )
+
+        self.box_size = float(self.recorder.box_size)
+
+        self.scatter.setData(
+            pos=self.simulation.positions_numpy % self.box_size,
+            color=self.atom_colours(),
+            size=self.atom_sizes(),
+            pxMode=False
+        )
+
+        self.scrubber.blockSignals(True)
+        self.scrubber.setRange(0, max(len(self.recorder) - 1, 0))
+        self.scrubber.setValue(len(self.recorder) - 1)
+        self.scrubber.blockSignals(False)
+
+        self.go_live()
+        self.paused = False
+        self.pause_button.setText("Pause")
+
+        self.add_box_outline()
+        self.recentre()
+
+        print(
+            f"continuing from frame {index + 1} "
+            f"at {self.recorder.times[index]:.0f} fs ({note})"
+        )
+
     def on_save(self):
         if len(self.recorder) == 0:
             print("nothing recorded yet")
@@ -1039,6 +1143,9 @@ class Viewer(QtWidgets.QWidget):
         if not path:
             return
 
+        self.load_recording_from(path)
+
+    def load_recording_from(self, path):
         self.recorder = Recorder.load(path)
         self.box_size = self.recorder.box_size
 
@@ -1184,7 +1291,11 @@ class Viewer(QtWidgets.QWidget):
                         self.simulation.elapsed_femtoseconds,
                         self.simulation.potential_energy,
                         self.simulation.kinetic_energy,
-                        self.simulation.temperature
+                        self.simulation.temperature,
+                        velocities=(
+                            self.simulation.velocities
+                            .detach().cpu().numpy()
+                        )
                     )
 
                     captured = True
@@ -1276,9 +1387,24 @@ class Viewer(QtWidgets.QWidget):
 def main():
     pg.setConfigOptions(antialias=True)
 
-    application = QtWidgets.QApplication(sys.argv)
+    # Optional: py run_reactive_gl.py --load runs/run_003.npz
+    # The browser uses this to open a recording directly.
+
+    load_path = None
+
+    if "--load" in sys.argv:
+        position = sys.argv.index("--load")
+
+        if position + 1 < len(sys.argv):
+            load_path = sys.argv[position + 1]
+
+    application = QtWidgets.QApplication(sys.argv[:1])
 
     viewer = Viewer()
+
+    if load_path:
+        viewer.load_recording_from(load_path)
+
     viewer.show()
 
     sys.exit(application.exec())
