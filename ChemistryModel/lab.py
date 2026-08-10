@@ -78,22 +78,24 @@ def read_heartbeat(folder, pid):
 
 
 def entry_seeds(folder):
-    # Which seeds have finished, read from the entry files rather
-    # than the index. Entries appear the moment a run completes
-    # and cannot be clobbered by another process, so they are the
-    # honest source for progress.
-
     seeds = set()
 
     directory = os.path.join(folder, "entries")
 
     if os.path.isdir(directory):
         for name in os.listdir(directory):
+
             if name.startswith("seed_") and name.endswith(".json"):
                 try:
-                    seeds.add(int(name[5:-5]))
+                    seed = int(name[5:-5])
                 except ValueError:
                     continue
+
+                # ✅ MUST be inside the same block
+                npz_path = os.path.join(folder, f"run_s{seed:04d}.npz")
+
+                if os.path.exists(npz_path):
+                    seeds.add(seed)
 
     if not seeds:
         for entry in read_index(folder):
@@ -101,7 +103,6 @@ def entry_seeds(folder):
                 seeds.add(int(entry["seed"]))
 
     return seeds
-
 
 def find_batches(root):
     found = []
@@ -1296,8 +1297,8 @@ class Lab(QtWidgets.QWidget):
 
         job.process = subprocess.Popen(
             command,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.STDOUT,
+            stdout=None,
+            stderr=None
         )
 
         job.pid = job.process.pid
