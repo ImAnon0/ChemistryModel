@@ -57,6 +57,52 @@ def read_index(path):
         return []
 
 
+def read_heartbeat(folder, pid):
+    # What the process is partway through right now. Named by
+    # process id so several jobs sharing a folder each read their
+    # own.
+
+    if not pid:
+        return None
+
+    path = os.path.join(folder, f".progress_{int(pid)}.json")
+
+    if not os.path.exists(path):
+        return None
+
+    try:
+        with open(path) as handle:
+            return json.load(handle)
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def entry_seeds(folder):
+    # Which seeds have finished, read from the entry files rather
+    # than the index. Entries appear the moment a run completes
+    # and cannot be clobbered by another process, so they are the
+    # honest source for progress.
+
+    seeds = set()
+
+    directory = os.path.join(folder, "entries")
+
+    if os.path.isdir(directory):
+        for name in os.listdir(directory):
+            if name.startswith("seed_") and name.endswith(".json"):
+                try:
+                    seeds.add(int(name[5:-5]))
+                except ValueError:
+                    continue
+
+    if not seeds:
+        for entry in read_index(folder):
+            if entry.get("seed") is not None:
+                seeds.add(int(entry["seed"]))
+
+    return seeds
+
+
 def find_batches(root):
     found = []
 
@@ -167,16 +213,27 @@ class Choice(QtWidgets.QComboBox):
 
 class Job:
 
-    def __init__(self, name, arguments, out, runs):
+    def __init__(self, name, arguments, out, runs, seeds=None):
         self.name = name
         self.arguments = arguments
         self.out = out
         self.runs = runs
 
+        # Which seeds belong to this job. Several jobs can share
+        # one folder, so counting everything in that folder would
+        # have every part reporting the same progress.
+
+        self.seeds = list(seeds) if seeds else []
+
         self.state = "queued"
         self.process = None
         self.pid = None
         self.reattached = False
+
+        # How far through the run currently being computed.
+
+        self.run_fraction = 0.0
+        self.run_seed = None
         self.started = None
         self.finished = None
         self.completed = 0
@@ -190,6 +247,7 @@ class Job:
             "runs": self.runs,
             "state": self.state,
             "pid": self.pid,
+            "seeds": self.seeds,
         }
 
     @classmethod
@@ -197,6 +255,7 @@ class Job:
         job = cls(
             stored["name"], stored["arguments"],
             stored["out"], stored["runs"],
+            stored.get("seeds"),
         )
 
         job.state = stored.get("state", "queued")
@@ -205,24 +264,55 @@ class Job:
         return job
 
     def refresh(self):
-        # Progress and recent results come from the index the
-        # batch writes after each run.
+        # Progress comes from the entry files each run writes,
+        # which appear one at a time and can be attributed to a
+        # particular job by seed.
+
+        done = entry_seeds(self.out)
+
+        if self.seeds:
+            mine = [seed for seed in self.seeds if seed in done]
+
+            self.completed = len(mine)
+        else:
+            self.completed = len(done)
+
+            mine = sorted(done)
+
+        beat = read_heartbeat(self.out, self.pid)
+
+        if beat and beat.get("steps_total"):
+            self.run_fraction = min(
+                beat["steps_done"] / beat["steps_total"], 1.0
+            )
+
+            self.run_seed = beat.get("seed")
+        else:
+            self.run_fraction = 0.0
+            self.run_seed = None
 
         index = read_index(self.out)
 
-        self.completed = len(index)
+        wanted = set(mine)
 
         self.headlines = [
             f"{entry.get('seed', '?')}: {entry.get('headline', '')}"
-            for entry in index[-4:]
-        ]
+            for entry in index
+            if not self.seeds or entry.get("seed") in wanted
+        ][-4:]
 
     @property
     def fraction(self):
         if not self.runs:
             return 0.0
 
-        return min(self.completed / self.runs, 1.0)
+        # The run in progress counts as its own fraction of one,
+        # so the bar creeps rather than jumping once every few
+        # minutes.
+
+        return min(
+            (self.completed + self.run_fraction) / self.runs, 1.0
+        )
 
     @property
     def elapsed(self):
@@ -565,6 +655,18 @@ class Lab(QtWidgets.QWidget):
         }
 
     def refresh_existing(self):
+        # Every control on this tab can be typed into, so any of
+        # them can be momentarily blank or zero. Nothing here
+        # should be able to take the window down mid-edit.
+
+        try:
+            self.describe_settings()
+        except Exception as problem:
+            self.existing_note.setText(
+                f"waiting for a valid value\n\n{problem}"
+            )
+
+    def describe_settings(self):
         name = self.mixture_box.currentText()
 
         entry = self.available.get(name)
@@ -585,10 +687,20 @@ class Lab(QtWidgets.QWidget):
 
             box = self.box_size.value()
 
-            self.atom_note.setText(
-                f"{total} atoms, density "
-                f"{total / (box ** 3):.4f} atoms per cubic angstrom"
-            )
+            # The box comes from a box you can type into, so it is
+            # briefly empty or zero while being edited. Dividing
+            # by it then takes the whole window down.
+
+            if box > 0:
+                self.atom_note.setText(
+                    f"{total} atoms, density "
+                    f"{total / (box ** 3):.4f} atoms per cubic "
+                    f"angstrom"
+                )
+            else:
+                self.atom_note.setText(
+                    f"{total} atoms, waiting for a box size"
+                )
 
         if self.mode_box.currentIndex() == 1:
             self.describe_continuation()
@@ -613,8 +725,9 @@ class Lab(QtWidgets.QWidget):
                 f"conditions, in {label}.\n\n"
                 f"seeds {min(seeds)} to {max(seeds)}\n"
                 f"{unstable} of them unstable\n\n"
-                f"Queueing more will continue from seed "
-                f"{max(seeds) + 1} and write to the same folder."
+                f"Next runs will take seeds "
+                f"{self.planned_seeds_text(path)}\n"
+                f"and write to the same folder."
                 + self.parallel_note()
             )
         else:
@@ -675,6 +788,28 @@ class Lab(QtWidgets.QWidget):
         )
 
         self.preview.setPlainText(" ".join(self.build_arguments()))
+
+    def planned_seeds_text(self, out):
+        wanted = int(self.seeds.value())
+
+        start, taken = self.next_free_seed(out)
+
+        planned = []
+
+        cursor = start
+
+        while len(planned) < max(wanted, 1) and len(planned) < 12:
+            if cursor not in taken:
+                planned.append(cursor)
+
+            cursor += 1
+
+        text = ", ".join(str(value) for value in planned)
+
+        if wanted > len(planned):
+            text += ", ..."
+
+        return text
 
     def parallel_note(self):
         if not self.parallel.isChecked():
@@ -868,7 +1003,11 @@ class Lab(QtWidgets.QWidget):
             except ValueError:
                 start = 0
         else:
-            start = (max(seeds) + 1) if seeds else 0
+            # From the lowest seed not present, so gaps left by
+            # crashed or interrupted runs get filled rather than
+            # skipped over.
+
+            start = min(seeds) if seeds else 0
 
         while start in seeds:
             start += 1
@@ -894,15 +1033,35 @@ class Lab(QtWidgets.QWidget):
                 1 for entry in source
                 if entry.get("stable") is not False
             )
-        else:
-            total = len(read_index(out)) + int(self.seeds.value())
 
-        job = Job(
-            name=os.path.basename(out),
-            arguments=self.build_arguments(),
-            out=out,
-            runs=total,
-        )
+            job = Job(
+                name=os.path.basename(out),
+                arguments=self.build_arguments(),
+                out=out,
+                runs=total,
+            )
+        else:
+            wanted = int(self.seeds.value())
+
+            start, taken = self.next_free_seed(out)
+
+            planned = []
+
+            cursor = start
+
+            while len(planned) < wanted:
+                if cursor not in taken:
+                    planned.append(cursor)
+
+                cursor += 1
+
+            job = Job(
+                name=os.path.basename(out),
+                arguments=self.build_arguments(),
+                out=out,
+                runs=wanted,
+                seeds=planned,
+            )
 
         self.jobs.append(job)
 
@@ -955,7 +1114,8 @@ class Lab(QtWidgets.QWidget):
                 name=f"{os.path.basename(out)}  part {part + 1}",
                 arguments=arguments,
                 out=out,
-                runs=existing + wanted,
+                runs=count,
+                seeds=range(cursor, cursor + count),
             )
 
             self.jobs.append(job)
@@ -1014,10 +1174,10 @@ class Lab(QtWidgets.QWidget):
         layout.addLayout(controls)
 
         self.jobs_table = QtWidgets.QTableWidget()
-        self.jobs_table.setColumnCount(7)
+        self.jobs_table.setColumnCount(8)
         self.jobs_table.setHorizontalHeaderLabels([
-            "batch", "state", "progress", "runs",
-            "elapsed", "left", "recent",
+            "batch", "state", "this run", "batch",
+            "runs", "elapsed", "left", "recent",
         ])
         self.jobs_table.horizontalHeader().setStretchLastSection(True)
         self.jobs_table.setSelectionBehavior(
@@ -1166,7 +1326,7 @@ class Lab(QtWidgets.QWidget):
                 # handle to poll. The lock file it wrote says
                 # whether it is still alive.
 
-                state, lock = running.state_of(job.out)
+                state, lock = running.state_of(job.out, job.pid)
 
                 if state != "running":
                     job.finished = time.time()
@@ -1177,17 +1337,22 @@ class Lab(QtWidgets.QWidget):
                     )
 
         if not self.queue_paused:
-            running = sum(
+            # Named 'active' rather than 'running': a local called
+            # running would shadow the module of that name for the
+            # whole function, and the reattach check above would
+            # fail with it.
+
+            active = sum(
                 1 for job in self.jobs if job.state == "running"
             )
 
             for job in self.jobs:
-                if running >= self.concurrency:
+                if active >= self.concurrency:
                     break
 
                 if job.state == "queued":
                     self.start_job(job)
-                    running += 1
+                    active += 1
 
         self.draw_jobs()
 
@@ -1202,13 +1367,27 @@ class Lab(QtWidgets.QWidget):
             else:
                 remaining = "-"
 
-            bar = "#" * int(job.fraction * 18)
-            bar += "-" * (18 - len(bar))
+            def bar(fraction, width=16):
+                filled = int(fraction * width)
+
+                return "#" * filled + "-" * (width - filled)
+
+            if job.state == "running":
+                run_bar = (
+                    f"[{bar(job.run_fraction)}] "
+                    f"{job.run_fraction:3.0%}"
+                )
+
+                if job.run_seed is not None:
+                    run_bar += f"  seed {job.run_seed}"
+            else:
+                run_bar = "-"
 
             values = [
                 job.name,
                 job.state,
-                f"[{bar}] {job.fraction:3.0%}",
+                run_bar,
+                f"[{bar(job.fraction)}] {job.fraction:3.0%}",
                 f"{job.completed}/{job.runs}",
                 clock(job.elapsed) if job.started else "-",
                 remaining,
@@ -1218,7 +1397,7 @@ class Lab(QtWidgets.QWidget):
             for column, value in enumerate(values):
                 item = QtWidgets.QTableWidgetItem(str(value))
 
-                if column in (2, 6):
+                if column in (2, 3, 7):
                     item.setFont(QtGui.QFont("Consolas", 9))
 
                 if job.state == "failed":
@@ -1284,10 +1463,19 @@ class Lab(QtWidgets.QWidget):
 
         row = QtWidgets.QHBoxLayout()
         row.addWidget(
-            self.button("Compare batches", self.on_compare)
+            self.button("Summarise this batch", self.on_summarise)
         )
         row.addWidget(
+            self.button("Compare batches", self.on_compare)
+        )
+        left.addLayout(row)
+
+        row = QtWidgets.QHBoxLayout()
+        row.addWidget(
             self.button("Export CSV", self.on_export)
+        )
+        row.addWidget(
+            self.button("Species table", self.on_species)
         )
         left.addLayout(row)
 
@@ -1429,6 +1617,290 @@ class Lab(QtWidgets.QWidget):
             sys.executable, "run_reactive_gl.py",
             "--load", os.path.abspath(self.results_paths[row]),
         ])
+
+    def batch_numbers(self, index, key):
+        values = [
+            float(entry[key]) for entry in index
+            if entry.get(key) is not None
+            and entry.get("stable") is not False
+        ]
+
+        return np.array(values) if values else np.array([])
+
+    def on_summarise(self):
+        # Everything about one folder in one place: how the runs
+        # were set up, the spread of every measure across them,
+        # and which molecules turned up how often.
+
+        position = self.results_batch.currentIndex()
+
+        if position < 0 or position >= len(self.batches):
+            return
+
+        label, path = self.batches[position]
+
+        index = read_index(path)
+
+        if not index:
+            self.results_report.setPlainText("nothing in this batch")
+            return
+
+        first = index[0]
+
+        unstable = [
+            entry for entry in index
+            if entry.get("stable") is False
+        ]
+
+        usable = len(index) - len(unstable)
+
+        lines = []
+
+        lines.append("=" * 62)
+        lines.append(f"  {label}")
+        lines.append("=" * 62)
+        lines.append("")
+        lines.append(
+            f"  {len(index)} runs, {usable} usable"
+            + (f", {len(unstable)} excluded as unstable"
+               if unstable else "")
+        )
+
+        seeds = sorted(
+            entry.get("seed", -1) for entry in index
+        )
+
+        lines.append(f"  seeds {min(seeds)} to {max(seeds)}")
+        lines.append("")
+
+        lines.append("  how these were run")
+        lines.append("  " + "-" * 46)
+
+        def stated(key, suffix="", template="{:g}"):
+            # A missing field is reported as unknown rather than
+            # filled in with a default. A summary that quietly
+            # shows 250 K for a run that was actually held at 500
+            # is worse than one that admits it does not know.
+
+            value = first.get(key)
+
+            if value is None:
+                return "not recorded"
+
+            try:
+                return template.format(float(value)) + suffix
+            except (TypeError, ValueError):
+                return str(value) + suffix
+
+        settings = [
+            ("mixture", first.get("mixture") or "not recorded"),
+            ("atoms", first.get("atoms", "not recorded")),
+            ("box", stated("box", " A")),
+            ("density", (
+                f"{first.get('atoms', 0) / (first.get('box', 1) ** 3):.4f}"
+                " atoms per cubic angstrom"
+                if first.get("atoms") and first.get("box")
+                else "not recorded"
+            )),
+            ("duration", stated("picoseconds", " ps")),
+            ("starting temperature", stated("hot_temperature", " K")),
+            ("held until", stated("hot_until_fs", " fs")),
+            ("trap temperature", stated("cool_temperature", " K")),
+        ]
+
+        if first.get("continued_from"):
+            settings.append(
+                ("continued from", first["continued_from"])
+            )
+
+            settings.append(
+                ("added", stated("added_picoseconds", " ps"))
+            )
+
+        if first.get("expand_to"):
+            settings.append(
+                ("box expands to", f"{first['expand_to']:g} A")
+            )
+
+        if first.get("strikes"):
+            settings += [
+                ("strikes", first.get("strikes")),
+                ("channel temperature",
+                 f"{first.get('strike_temperature', 0):g} K"),
+                ("bonds broken per strike",
+                 first.get("strike_dissociation")),
+            ]
+
+        for name, value in settings:
+            lines.append(f"    {name:<24} {value}")
+
+        lines.append("")
+        lines.append("")
+        lines.append("  measures across the usable runs")
+        lines.append("  " + "-" * 58)
+        lines.append(
+            f"    {'':<22}{'mean':>8}{'sd':>8}"
+            f"{'lowest':>9}{'highest':>9}"
+        )
+
+        measures = [
+            ("heavy_bonds_formed", "bonds formed"),
+            ("late_formed", "formed after 2500 fs"),
+            ("late_broke", "broke after 2500 fs"),
+            ("turnovers", "pairs changed twice"),
+            ("largest_closed", "largest closed shell"),
+            ("largest_any", "largest of any kind"),
+            ("most_carbon", "longest carbon count"),
+            ("best_chain", "best carbon chain"),
+            ("best_tail", "best clean tail"),
+            ("species_count", "distinct species"),
+            ("final_temperature", "ended at (K)"),
+            ("final_potential", "final energy (eV)"),
+            ("wall_seconds", "seconds per run"),
+        ]
+
+        for key, name in measures:
+            values = self.batch_numbers(index, key)
+
+            if not len(values):
+                continue
+
+            spread = (
+                values.std(ddof=1) if len(values) > 1 else 0.0
+            )
+
+            lines.append(
+                f"    {name:<22}{values.mean():>8.1f}"
+                f"{spread:>8.1f}{values.min():>9.1f}"
+                f"{values.max():>9.1f}"
+            )
+
+        # A trap that does not match where the runs ended is
+        # worth pointing at: either the schedule did not do what
+        # was asked, or the metadata is describing a different
+        # run than the one that happened.
+
+        trap = first.get("cool_temperature")
+
+        ended = self.batch_numbers(index, "final_temperature")
+
+        if trap is not None and len(ended):
+            drift = abs(ended.mean() - float(trap))
+
+            if drift > 0.25 * float(trap) + 40:
+                lines.append("")
+                lines.append(
+                    f"    note: these were set to trap at "
+                    f"{float(trap):g} K but ended around "
+                    f"{ended.mean():.0f} K."
+                )
+                lines.append(
+                    "    Either the schedule was overridden or "
+                    "the settings above are not the ones used."
+                )
+
+        # Which molecules, and in how many runs.
+
+        counts = {}
+        closed = {}
+
+        for entry in index:
+            if entry.get("stable") is False:
+                continue
+
+            for name in entry.get("final_species", []):
+                counts[name] = counts.get(name, 0) + 1
+
+            for name in entry.get("closed_shell", []):
+                closed[name] = closed.get(name, 0) + 1
+
+        lines.append("")
+        lines.append("")
+        lines.append("  molecules surviving to the end")
+        lines.append("  " + "-" * 58)
+        lines.append(
+            f"    {'formula':<14}{'in runs':>9}{'closed shell':>14}"
+        )
+
+        ordered = sorted(
+            counts.items(),
+            key=lambda item: (-item[1], -len(item[0])),
+        )
+
+        for name, number in ordered[:26]:
+            lines.append(
+                f"    {name:<14}{number:>4}/{usable:<4}"
+                f"{closed.get(name, 0):>9}/{usable:<4}"
+            )
+
+        if len(ordered) > 26:
+            lines.append(
+                f"    ... and {len(ordered) - 26} more"
+            )
+
+        # The best single result in the folder.
+
+        biggest = max(
+            (
+                entry for entry in index
+                if entry.get("stable") is not False
+            ),
+            key=lambda entry: entry.get("largest_any", 0),
+            default=None,
+        )
+
+        if biggest:
+            lines.append("")
+            lines.append("")
+            lines.append("  biggest single product")
+            lines.append("  " + "-" * 58)
+            lines.append(
+                f"    run {biggest.get('number', 0):03d}, "
+                f"seed {biggest.get('seed', '?')}: "
+                f"{biggest.get('headline', '')}"
+            )
+
+        if unstable:
+            lines.append("")
+            lines.append("")
+            lines.append("  excluded")
+            lines.append("  " + "-" * 58)
+
+            for entry in unstable:
+                lines.append(
+                    f"    seed {entry.get('seed', '?')}: energy "
+                    f"jumped "
+                    f"{entry.get('largest_energy_jump', 0):.0f} eV"
+                )
+
+        self.results_title.setText(f"summary of {label}")
+        self.results_report.setPlainText("\n".join(lines))
+
+    def on_species(self):
+        # A table of every molecule against every batch, written
+        # to results/species.csv and shown here.
+
+        import export
+
+        batches = export.find_batches(self.root)
+
+        if not batches:
+            self.results_report.setPlainText("no batches found")
+            return
+
+        rows = export.load(batches)
+
+        os.makedirs("results", exist_ok=True)
+
+        path = os.path.join("results", "species.csv")
+
+        export.write_species(rows, path)
+
+        with open(path) as handle:
+            text = handle.read()
+
+        self.results_title.setText(f"species table -> {path}")
+        self.results_report.setPlainText(text)
 
     def on_compare(self):
         # Which products appear in which conditions, and how the
@@ -1668,7 +2140,7 @@ class Lab(QtWidgets.QWidget):
             if job.state not in ("running", "queued"):
                 continue
 
-            state, lock = running.state_of(job.out)
+            state, lock = running.state_of(job.out, job.pid)
 
             if state == "running":
                 job.state = "running"

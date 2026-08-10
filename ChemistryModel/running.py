@@ -30,14 +30,32 @@ import time
 
 LOCK_NAME = ".running"
 
+
+def lock_names(folder):
+    # Several batches can fill one folder at once, so each writes
+    # its own lock rather than sharing a filename. Sharing meant
+    # whichever process exited first deleted the lock for all of
+    # them, and the panel then believed every part had finished.
+
+    if not os.path.isdir(folder):
+        return []
+
+    return [
+        os.path.join(folder, name)
+        for name in os.listdir(folder)
+        if name.startswith(LOCK_NAME)
+    ]
+
 # If the index has not been written to in this long, a lock is
 # treated as left over from something that died.
 
 STALE_AFTER = 3600.0
 
 
-def lock_path(folder):
-    return os.path.join(folder, LOCK_NAME)
+def lock_path(folder, pid=None):
+    return os.path.join(
+        folder, f"{LOCK_NAME}_{pid or os.getpid()}"
+    )
 
 
 def write_lock(folder, command=None):
@@ -51,24 +69,63 @@ def write_lock(folder, command=None):
         }, handle)
 
 
-def remove_lock(folder):
+def remove_lock(folder, pid=None):
     try:
-        os.remove(lock_path(folder))
+        os.remove(lock_path(folder, pid))
     except OSError:
         pass
 
 
-def read_lock(folder):
-    path = lock_path(folder)
+def clear_dead_locks(folder):
+    # Tidies locks left behind by processes that are gone.
 
-    if not os.path.exists(path):
-        return None
+    removed = 0
 
-    try:
-        with open(path) as handle:
-            return json.load(handle)
-    except (json.JSONDecodeError, OSError):
-        return None
+    for path in lock_names(folder):
+        try:
+            with open(path) as handle:
+                lock = json.load(handle)
+        except (json.JSONDecodeError, OSError):
+            lock = {}
+
+        if not is_alive(lock.get("pid")):
+            try:
+                os.remove(path)
+                removed += 1
+            except OSError:
+                pass
+
+    return removed
+
+
+def read_lock(folder, pid=None):
+    # With a process id, look for that one specifically. Without,
+    # return any lock whose process is still alive, so a folder
+    # being filled by several batches still reports as busy.
+
+    if pid is not None:
+        paths = [lock_path(folder, pid)]
+    else:
+        paths = lock_names(folder)
+
+    best = None
+
+    for path in paths:
+        if not os.path.exists(path):
+            continue
+
+        try:
+            with open(path) as handle:
+                lock = json.load(handle)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        if is_alive(lock.get("pid")):
+            return lock
+
+        best = best or lock
+
+    return best
 
 
 def is_alive(pid):
@@ -115,10 +172,10 @@ def index_touched(folder):
     return os.path.getmtime(path)
 
 
-def state_of(folder):
+def state_of(folder, pid=None):
     # Returns one of "running", "stale" or "gone", plus the lock.
 
-    lock = read_lock(folder)
+    lock = read_lock(folder, pid)
 
     if lock is None:
         return "gone", None

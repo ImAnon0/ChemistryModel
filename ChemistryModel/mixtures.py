@@ -35,7 +35,7 @@ BUILT_IN = {
     "water box": ("molecules", {"H2O": 24}),
     "methane box": ("molecules", {"CH4": 12}),
     "H rich loose": ("atoms", {"C": 8, "H": 60, "N": 6, "O": 8}),
-    "H rich x5": ("atoms", {"C": 40, "H": 200, "N": 20, "O": 30}),
+    "H rich x5": ("atoms", {"C": 40, "H": 300, "N": 30, "O": 40}),
     "carbon rich": ("atoms", {"C": 80, "H": 200, "N": 20, "O": 30}),
 }
 

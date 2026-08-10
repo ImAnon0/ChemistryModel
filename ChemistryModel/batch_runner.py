@@ -213,7 +213,8 @@ def resize_toward(simulation, target, rate=0.002):
     return True
 
 
-def run_one(mixture, seed, options, progress=None):
+def run_one(mixture, seed, options, progress=None,
+            folder=None):
     from recorder import Recorder
 
     simulation = build_simulation(
@@ -261,8 +262,14 @@ def run_one(mixture, seed, options, progress=None):
 
         steps_done += this_chunk
 
-        if progress is not None and steps_done % (chunk * 20) == 0:
-            progress.show(steps_done)
+        if steps_done % (chunk * 20) == 0:
+            if progress is not None:
+                progress.show(steps_done)
+
+            if folder is not None:
+                write_heartbeat(
+                    folder, seed, steps_done, total_steps, started
+                )
 
         recorder.capture(
             simulation.positions_numpy,
@@ -466,8 +473,18 @@ def continue_one(path, options, progress=None):
 
         steps_done += this_chunk
 
-        if progress is not None and steps_done % (chunk * 20) == 0:
-            progress.show(steps_done)
+        if steps_done % (chunk * 20) == 0:
+            if progress is not None:
+                progress.show(steps_done)
+
+            if options.out:
+                write_heartbeat(
+                    options.out,
+                    int(recorder.times[last]),
+                    steps_done,
+                    added_steps,
+                    started,
+                )
 
         recorder.capture(
             simulation.positions_numpy,
@@ -505,6 +522,39 @@ def continue_one(path, options, progress=None):
 
 
 ENTRIES = "entries"
+
+
+def heartbeat_path(folder):
+    return os.path.join(folder, f".progress_{os.getpid()}.json")
+
+
+def write_heartbeat(folder, seed, done, total, started):
+    # How far through the current run this process is.
+    #
+    # The control panel cannot see the progress bar printed to the
+    # console, and counting finished runs only moves once every
+    # several minutes. A small file written as the run proceeds
+    # gives the panel something to show in between.
+
+    try:
+        with open(heartbeat_path(folder), "w") as handle:
+            json.dump({
+                "pid": os.getpid(),
+                "seed": seed,
+                "steps_done": done,
+                "steps_total": total,
+                "run_started": started,
+                "updated": time.time(),
+            }, handle)
+    except OSError:
+        pass
+
+
+def clear_heartbeat(folder):
+    try:
+        os.remove(heartbeat_path(folder))
+    except OSError:
+        pass
 
 
 def entry_path(folder, seed):
@@ -869,6 +919,16 @@ def run_continuation(options):
             ),
             "continued_from": source,
             "added_picoseconds": options.picoseconds,
+            # Recorded explicitly rather than inherited: a
+            # continuation can be run at a different temperature
+            # from the batch it extends, and inheriting the old
+            # value would describe the wrong experiment.
+            "cool_temperature": options.cool_temperature,
+            "hot_temperature": options.cool_temperature,
+            "hot_until_fs": 0.0,
+            "strikes": strikes,
+            "strike_temperature": options.strike_temperature,
+            "strike_dissociation": options.strike_dissociation,
             "wall_seconds": round(seconds, 1),
             "headline": analysis.headline(result),
             "final_species": sorted({
@@ -1064,7 +1124,13 @@ def main():
     used = existing_seeds(options.out)
 
     if options.first_seed is None:
-        options.first_seed = (max(used) + 1) if used else 0
+        # Start from the lowest seed not already present rather
+        # than from one past the highest. A batch that crashed
+        # partway, or one split across several processes, leaves
+        # gaps; jumping past them means those boxes are never run
+        # and the folder ends up with holes in it.
+
+        options.first_seed = min(used) if used else 0
 
     if index:
         print(
@@ -1117,13 +1183,25 @@ def main():
 
     if skipped:
         print(
-            f"Skipping seeds already run here: "
+            f"Already here, so skipped: "
             + ", ".join(str(value) for value in skipped)
+        )
+
+    gaps = [
+        value for value in planned
+        if used and value < max(used)
+    ]
+
+    if gaps:
+        print(
+            f"Filling gaps left by earlier runs: "
+            + ", ".join(str(value) for value in gaps)
         )
 
     try:
         run_all(planned, mixture, options, index, index_path, progress)
     finally:
+        clear_heartbeat(options.out)
         running.remove_lock(options.out)
 
 
@@ -1134,7 +1212,7 @@ def run_all(planned, mixture, options, index, index_path, progress):
         progress.start_run()
 
         recorder, simulation, seconds, strikes = run_one(
-            mixture, seed, options, progress
+            mixture, seed, options, progress, options.out
         )
 
         progress.finish_run()
@@ -1218,9 +1296,13 @@ def run_all(planned, mixture, options, index, index_path, progress):
 
         index = rebuild_index(options.out)
 
+        # Reported by seed rather than by position: with several
+        # processes filling one folder, position is not settled
+        # until every one of them has finished.
+
         print(
-            f"run {number:03d}  seed {seed:3d}  "
-            f"{seconds:6.1f} s  {len(recorder):5d} frames  "
+            f"seed {seed:<5d} {seconds:6.1f} s  "
+            f"{len(recorder):5d} frames  "
             f"-> {entry['headline']}"
         )
 

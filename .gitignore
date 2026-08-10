@@ -19,3 +19,16 @@ functorch/
 **/.venv/
 **/.vs/
 **/__pycache__/
+*.npz
+*.xyz
+
+# Run output and analysis
+runs/
+results/
+.analysis_cache/
+dashboard.html
+
+# Local settings the lab writes
+lab_queue.json
+lab_templates.json
+mixtures.json
