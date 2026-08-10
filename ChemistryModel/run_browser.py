@@ -13,6 +13,7 @@ from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
 from recorder import Recorder
 
 import analysis
+import analysis_cache
 
 
 # ============================================================
@@ -152,22 +153,57 @@ def compare_batches(batches):
     lines.append("")
     lines.append("")
     lines.append("-" * 66)
-    lines.append("  HEAVY-ATOM BONDS FORMED, average per run")
+    lines.append("  AVERAGES PER RUN")
     lines.append("-" * 66)
     lines.append("")
+    lines.append(
+        "  Matched conditions share the same box until the first"
+    )
+    lines.append(
+        "  discharge, so only the 'late' columns can separate them."
+    )
+    lines.append("")
+
+    columns = [
+        ("heavy_bonds_formed", "bonds"),
+        ("late_formed", "late formed"),
+        ("late_broke", "late broke"),
+        ("turnovers", "turnovers"),
+        ("largest_closed", "closed"),
+        ("largest_any", "any"),
+        ("most_carbon", "carbons"),
+        ("species_count", "species"),
+    ]
+
+    header = f"    {'batch':<20}"
+
+    for key, title in columns:
+        header += f"{title:>13}"
+
+    lines.append(header)
+    lines.append("    " + "-" * (20 + 13 * len(columns)))
 
     for label, index in loaded:
-        values = [
-            entry.get("heavy_bonds_formed", 0) for entry in index
-        ]
+        row = f"    {label[:20]:<20}"
 
-        average = sum(values) / max(len(values), 1)
+        for key, title in columns:
+            values = [
+                entry.get(key, 0) for entry in index
+                if key in entry
+            ]
 
-        lines.append(
-            f"    {label:<16} {average:6.1f}   "
-            f"(lowest {min(values, default=0)}, "
-            f"highest {max(values, default=0)})"
-        )
+            if values:
+                row += f"{sum(values) / len(values):>13.1f}"
+            else:
+                row += f"{'-':>13}"
+
+        lines.append(row)
+
+    lines.append("")
+    lines.append(
+        "  A dash means the batch predates these measurements."
+    )
+    lines.append("  Run reindex.py to fill them in.")
 
     return lines
 
@@ -187,6 +223,13 @@ class Browser(QtWidgets.QWidget):
         self.current = None
         self.current_recorder = None
         self.current_result = None
+
+        # Structure fingerprinting is worth about three and a half
+        # times everything else put together, and it is only
+        # needed when looking closely at one run rather than
+        # clicking through many. Off by default, on when wanted.
+
+        self.want_structures = False
 
         self.setWindowTitle(f"Runs - {os.path.abspath(root)}")
         self.resize(1500, 900)
@@ -254,6 +297,15 @@ class Browser(QtWidgets.QWidget):
             "Write report to file", self.write_report
         )
         left.addWidget(self.report_button)
+
+        self.structures_button = self.button(
+            "Structures: off", self.toggle_structures
+        )
+        left.addWidget(self.structures_button)
+
+        left.addWidget(
+            self.button("Clear cached results", self.on_clear_cache)
+        )
 
         layout.addLayout(left, stretch=2)
 
@@ -434,16 +486,27 @@ class Browser(QtWidgets.QWidget):
 
         recorder = Recorder.load(path)
 
-        result = analysis.analyse(
-            recorder, stride=ANALYSIS_STRIDE
+        result = analysis_cache.analyse_cached(
+            recorder,
+            path,
+            analysis.analyse,
+            stride=ANALYSIS_STRIDE,
+            structures=self.want_structures,
         )
 
         self.current_recorder = recorder
         self.current_result = result
 
-        self.report.setPlainText(
-            "\n".join(analysis.summary_lines(result))
-        )
+        lines = analysis.summary_lines(result)
+
+        if not self.want_structures:
+            lines.insert(
+                0,
+                "  structures off - press the button on the left "
+                "to identify isomers"
+            )
+
+        self.report.setPlainText("\n".join(lines))
 
         self.energy_curve.setData(
             np.array(recorder.times),
@@ -451,6 +514,29 @@ class Browser(QtWidgets.QWidget):
         )
 
     # --------------------------------------------------------
+
+    def toggle_structures(self):
+        self.want_structures = not self.want_structures
+
+        self.structures_button.setText(
+            "Structures: on" if self.want_structures
+            else "Structures: off"
+        )
+
+        row = self.list_widget.currentRow()
+
+        if row >= 0:
+            self.on_select(row)
+
+    def on_clear_cache(self):
+        removed = analysis_cache.clear(self.root)
+
+        print(f"cleared {removed} cached results")
+
+        row = self.list_widget.currentRow()
+
+        if row >= 0:
+            self.on_select(row)
 
     def open_in_viewer(self):
         if self.current is None:

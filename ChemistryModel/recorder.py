@@ -35,6 +35,15 @@ class Recorder:
 
         self.positions = []
         self.velocities = []
+
+        # The cell can change during a run, since the viewer can
+        # squeeze or stretch it. Storing only the size it started
+        # at means anything re-analysed later wraps coordinates
+        # against the wrong cell: a box saved as 12 A but actually
+        # grown to 20 A folds distant atoms onto each other and
+        # invents bonds between them.
+
+        self.box_sizes = []
         self.times = []
         self.potential = []
         self.kinetic = []
@@ -48,7 +57,7 @@ class Recorder:
         return len(self.positions) == 0
 
     def capture(self, positions, time, potential, kinetic,
-                temperature, velocities=None):
+                temperature, velocities=None, box_size=None):
         # Frames arrive at a fixed rate but are only kept every
         # `stride` of them.
 
@@ -73,6 +82,11 @@ class Recorder:
                 np.asarray(velocities, dtype=np.float32).copy()
             )
 
+        self.box_sizes.append(
+            float(box_size) if box_size is not None
+            else float(self.box_size)
+        )
+
         self.times.append(float(time))
         self.potential.append(float(potential))
         self.kinetic.append(float(kinetic))
@@ -94,6 +108,7 @@ class Recorder:
 
         self.positions = self.positions[::2]
         self.velocities = self.velocities[::2]
+        self.box_sizes = self.box_sizes[::2]
         self.times = self.times[::2]
         self.potential = self.potential[::2]
         self.kinetic = self.kinetic[::2]
@@ -127,6 +142,7 @@ class Recorder:
 
         self.positions.clear()
         self.velocities.clear()
+        self.box_sizes.clear()
         self.times.clear()
         self.potential.clear()
         self.kinetic.clear()
@@ -142,6 +158,8 @@ class Recorder:
 
         positions = self.positions[index]
 
+        box = self.box_at(index)
+
         count = len(positions)
 
         first = []
@@ -150,9 +168,7 @@ class Recorder:
         for i in range(count):
             offsets = positions[i + 1:] - positions[i]
 
-            offsets -= self.box_size * np.round(
-                offsets / self.box_size
-            )
+            offsets -= box * np.round(offsets / box)
 
             distances = np.linalg.norm(offsets, axis=1)
 
@@ -213,6 +229,24 @@ class Recorder:
 
     # --------------------------------------------------------
 
+    def box_at(self, index):
+        # Falls back to the single stored size for recordings made
+        # before the cell could change.
+
+        if index < len(self.box_sizes):
+            return self.box_sizes[index]
+
+        return self.box_size
+
+    @property
+    def box_changed(self):
+        if len(self.box_sizes) < 2:
+            return False
+
+        return (
+            max(self.box_sizes) - min(self.box_sizes) > 0.01
+        )
+
     @property
     def has_velocities(self):
         return len(self.velocities) == len(self.positions) > 0
@@ -223,6 +257,11 @@ class Recorder:
         if self.has_velocities:
             extra["velocities"] = np.array(
                 self.velocities, dtype=np.float32
+            )
+
+        if len(self.box_sizes) == len(self.positions):
+            extra["box_sizes"] = np.array(
+                self.box_sizes, dtype=np.float32
             )
 
         np.savez_compressed(
@@ -252,6 +291,18 @@ class Recorder:
         recorder.positions = [
             frame for frame in data["positions"]
         ]
+
+        if "box_sizes" in data.files:
+            recorder.box_sizes = [
+                float(value) for value in data["box_sizes"]
+            ]
+
+            # The nominal size becomes the one the run ended at,
+            # so anything that only looks at box_size still gets
+            # something sensible.
+
+            if recorder.box_sizes:
+                recorder.box_size = recorder.box_sizes[-1]
 
         if "velocities" in data.files:
             recorder.velocities = [

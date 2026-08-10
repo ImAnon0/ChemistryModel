@@ -26,7 +26,8 @@ class ReactiveSimulation:
     def __init__(self, symbols, positions, box_size,
                  time_step=0.25, target_temperature=300.0,
                  friction=0.01, device=None, dtype=torch.float32,
-                 random_seed=7, rebuild_every=20):
+                 random_seed=7, rebuild_every=20,
+                 relax_on_start=True):
         # time_step is in femtoseconds, temperature in kelvin.
 
         if device is None:
@@ -45,7 +46,38 @@ class ReactiveSimulation:
 
         self.thermostat_is_on = True
 
+        # The largest distance any atom may travel in one step,
+        # in angstroms.
+        #
+        # Capping the force was the wrong handle: a hydrogen given
+        # a large force for one step gains velocity in proportion
+        # to that force over its mass, so a limit loose enough to
+        # leave ordinary forces alone would still let a thousand
+        # electronvolts into the lightest atom in the box.
+        #
+        # Limiting the move itself is direct and mass aware. At
+        # 250 K a hydrogen covers about 0.006 A per step and a
+        # carbon 0.002. The largest legitimate case is a hydrogen
+        # inside a 30,000 K discharge channel, which manages
+        # 0.068, so the limit must sit above that or it would
+        # quietly clip every lightning strike. At 0.15 there is
+        # room for the hottest real motion and none at all for the
+        # jumps of a third of an angstrom and more that wreck a
+        # run.
+
+        self.maximum_step = 0.15
+        self.capped_steps = 0
+
         self.random_generator = np.random.default_rng(random_seed)
+
+        # The thermostat draws from torch, and torch's global
+        # generator is shared and unseeded. Without a generator of
+        # its own, two runs started from identical positions
+        # diverge immediately, which makes matched seeds across
+        # conditions meaningless.
+
+        self.torch_generator = torch.Generator(device=self.device)
+        self.torch_generator.manual_seed(int(random_seed))
 
         types = R.types_from_symbols(symbols)
 
@@ -76,9 +108,33 @@ class ReactiveSimulation:
 
         self.neighbours = None
         self.neighbour_mask = None
+        self.reference_positions = None
+        self.rebuild_count = 0
         self.build_neighbours()
 
         self.forces, self._potential_energy = self.compute_forces()
+
+        # Atoms are placed with a minimum separation that is
+        # comfortable in a roomy box and much too tight in a
+        # crowded one. Packing 330 atoms into 12 angstroms leaves
+        # pairs deep inside each other's repulsive wall, and the
+        # first few steps then fling the box apart: measured on
+        # one such run, the opening kinetic energy was 2075 eV
+        # against 691 eV released by every bond formed in the
+        # following twenty picoseconds. The chemistry that
+        # followed was a product of that explosion rather than of
+        # the density it was supposed to be testing.
+        #
+        # Steepest descent with a per-atom cap on how far anything
+        # can move clears the overlaps without letting a large
+        # force become a large velocity.
+
+        # Skipped when picking up an existing run: the atoms
+        # are already settled, and relaxing them would discard
+        # the state being resumed.
+
+        if relax_on_start:
+            self.relax()
 
     # --------------------------------------------------------
 
@@ -111,6 +167,11 @@ class ReactiveSimulation:
         self.lone_pair_squeeze = float(R.LONE_PAIR_SQUEEZE)
 
         self.maximum_cutoff = float(R.MAXIMUM_CUTOFF)
+
+        # How much room the neighbour table has before it goes
+        # stale. The search radius below is the cutoff plus this.
+
+        self.neighbour_skin = 0.25 * self.maximum_cutoff
 
     @property
     def atom_count(self):
@@ -198,6 +259,36 @@ class ReactiveSimulation:
             velocities, device=self.device, dtype=self.dtype
         )
 
+    def needs_rebuild(self):
+        # Rebuilding on a fixed step count is not safe. The
+        # neighbour search reaches 1.25 times the bond cutoff, so
+        # there is only about 0.6 A of slack, and a hydrogen that
+        # has just taken a few eV from a lightning strike covers
+        # nearly 2 A in twenty steps. It would sail straight past
+        # atoms it should have bonded to, because the table still
+        # described where everything was five femtoseconds ago.
+        #
+        # Rebuilding when something has actually moved half the
+        # slack costs nothing when the box is cold and keeps the
+        # table honest when it is not.
+
+        if self.reference_positions is None:
+            return True
+
+        displacement = self.positions - self.reference_positions
+
+        displacement = displacement - self.box_size * torch.round(
+            displacement / self.box_size
+        )
+
+        largest = float(
+            torch.sqrt(
+                torch.max(torch.sum(displacement ** 2, dim=1))
+            )
+        )
+
+        return largest > 0.5 * self.neighbour_skin
+
     def build_neighbours(self):
         # A padded neighbour table of fixed width. Fixed width
         # means the angular term can be evaluated as one batched
@@ -208,7 +299,8 @@ class ReactiveSimulation:
         tree = cKDTree(positions, boxsize=self.box_size)
 
         lists = tree.query_ball_point(
-            positions, r=self.maximum_cutoff * 1.25
+            positions,
+            r=self.maximum_cutoff + self.neighbour_skin
         )
 
         count = len(positions)
@@ -246,6 +338,9 @@ class ReactiveSimulation:
         self.neighbour_mask = torch.tensor(
             mask, device=self.device, dtype=torch.bool
         )
+
+        self.reference_positions = self.positions.clone()
+        self.rebuild_count += 1
 
     # --------------------------------------------------------
 
@@ -431,6 +526,42 @@ class ReactiveSimulation:
 
         return bond_total + over_total + torch.sum(angle_energy)
 
+    def limit_move(self, movement):
+        # Trims any atom that would travel further than the limit
+        # in one step, leaving its direction alone.
+        #
+        # Velocity Verlet conserves energy well, but only while
+        # the potential is smooth across a timestep. Morse
+        # repulsion is not: two atoms that end a step inside each
+        # other feel thousands of electronvolts per angstrom, and
+        # the next step throws them across the box. Measured over
+        # forty runs that happened in about one in seven, each
+        # time adding hundreds of eV that no chemistry supplied.
+        #
+        # Trimming the step turns that throw into a shove. Nothing
+        # in ordinary running approaches the limit, so no normal
+        # trajectory changes; it acts only in the moments the
+        # integrator could not have handled anyway, and a shove is
+        # a far better approximation than an explosion.
+
+        if self.maximum_step <= 0:
+            return movement
+
+        distances = torch.linalg.norm(movement, dim=1)
+
+        scale = torch.clamp(
+            self.maximum_step
+            / torch.clamp(distances, min=1e-12),
+            max=1.0,
+        )
+
+        caught = int(torch.count_nonzero(scale < 1.0))
+
+        if caught:
+            self.capped_steps += caught
+
+        return movement * scale[:, None]
+
     def compute_forces(self):
         positions = self.positions.detach().requires_grad_(True)
 
@@ -439,6 +570,47 @@ class ReactiveSimulation:
         gradient, = torch.autograd.grad(total, positions)
 
         return -gradient.detach(), total.detach()
+
+    def relax(self, steps=300, maximum_force=25.0,
+              step_size=0.002):
+        # Nudges every atom downhill, with each one limited to a
+        # small move per step. Capping per atom rather than
+        # globally matters: scaling by the single largest force
+        # would reduce every other force to nothing whenever one
+        # pair is badly overlapped, and that pair would never
+        # separate.
+
+        for _ in range(steps):
+            if self.needs_rebuild():
+                self.build_neighbours()
+
+            forces, _ = self.compute_forces()
+
+            magnitudes = torch.linalg.norm(forces, dim=1)
+
+            scale = torch.clamp(
+                maximum_force
+                / torch.clamp(magnitudes, min=1e-12),
+                max=1.0,
+            )
+
+            self.positions = (
+                self.positions + forces * scale[:, None] * step_size
+            ) % self.box_size
+
+        self.reference_positions = None
+        self.build_neighbours()
+
+        self.forces, self._potential_energy = self.compute_forces()
+
+        # Velocities are redrawn afterwards, since the relaxation
+        # is not dynamics and whatever they were before means
+        # nothing now.
+
+        self.set_temperature(self.target_temperature)
+
+        self.unwrapped = self.positions.clone()
+        self.msd_reference = self.positions.clone()
 
     # --------------------------------------------------------
 
@@ -454,13 +626,19 @@ class ReactiveSimulation:
         for _ in range(int(number_of_steps)):
             acceleration = self.forces * conversion / masses
 
-            self.positions = (
-                self.positions
-                + self.velocities * dt
+            movement = self.limit_move(
+                self.velocities * dt
                 + 0.5 * acceleration * dt * dt
+            )
+
+            self.positions = (
+                self.positions + movement
             ) % self.box_size
 
-            if self.steps_taken % self.rebuild_every == 0:
+            # Checked every step but only acted on when
+            # something has moved far enough to matter.
+
+            if self.needs_rebuild():
                 self.build_neighbours()
 
             new_forces, potential = self.compute_forces()
@@ -495,7 +673,12 @@ class ReactiveSimulation:
 
         self.velocities = (
             self.velocities * decay
-            + scale * torch.randn_like(self.velocities)
+            + scale * torch.randn(
+                self.velocities.shape,
+                generator=self.torch_generator,
+                device=self.device,
+                dtype=self.dtype
+            )
         )
 
     # --------------------------------------------------------

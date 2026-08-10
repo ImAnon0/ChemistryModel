@@ -89,11 +89,50 @@ def rebuild(directory, stride=4):
                 1 for event in result["heavy_events"]
                 if event[1] == "formed"
             ),
+            # Only chemistry after the divergence point can tell
+            # two matched conditions apart.
+            "late_formed": result["late_formed"],
+            "late_broke": result["late_broke"],
+            "turnovers": result["turnovers"],
+            "largest_closed": result["largest_closed"],
+            "largest_closed_heavy": result["largest_closed_heavy"],
+            "largest_any": result.get("largest_any", 0),
+            "largest_any_heavy": result.get("largest_any_heavy", 0),
+            "most_carbon": result.get("most_carbon", 0),
+            "best_tail": result.get("best_tail", 0),
+            "best_chain": result.get("best_chain", 0),
+            "amphiphiles": result.get("amphiphiles", 0),
+            "best_amphiphile": result.get("best_amphiphile", ""),
+            "vesicle_ready": result.get("vesicle_ready", False),
+            "species_count": result["species_count"],
+            "stable": result.get("stable", True),
+            "energy_jumps": result.get("energy_jumps", 0),
+            "largest_energy_jump": result.get("largest_energy_jump", 0.0),
+            "isomers": result.get("isomers", {}),
             "final_temperature": result["temperature"]["final"],
             "final_potential": result["potential"]["final"],
         }
 
         rebuilt.append(entry)
+
+    # Entry files as well as the index, so a folder that has
+    # been reindexed can still take parallel batches afterwards.
+
+    directory = os.path.join(directory, "entries")
+
+    os.makedirs(directory, exist_ok=True)
+
+    for entry in rebuilt:
+        seed = entry.get("seed")
+
+        if seed is None or seed < 0:
+            continue
+
+        with open(
+            os.path.join(directory, f"seed_{int(seed):06d}.json"),
+            "w",
+        ) as handle:
+            json.dump(entry, handle, indent=1)
 
     with open(index_path, "w") as handle:
         json.dump(rebuilt, handle, indent=1)

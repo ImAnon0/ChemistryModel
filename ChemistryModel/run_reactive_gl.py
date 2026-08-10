@@ -20,7 +20,7 @@ from recorder import Recorder
 # Settings
 # ============================================================
 
-BOX_SIZE = 12.0
+BOX_SIZE = 19.0
 
 TEMPERATURE = 500.0
 
@@ -65,7 +65,19 @@ PLAYBACK_FPS = 12.0
 # contact with each other and can recombine into something new.
 
 CHANNEL_RADIUS = 2.2
-CHANNEL_ENERGY = 45.0
+
+# Channel temperature in kelvin. A real lightning channel runs at
+# 20,000 to 30,000 K, so this is a measured quantity rather than
+# a number picked to make something happen.
+
+CHANNEL_TEMPERATURE = 25000.0
+
+# Fraction of the bonds inside the channel broken outright. This
+# stands in for electron-impact dissociation, which is how a real
+# spark actually breaks things and which a model without
+# electrons cannot produce by heating alone.
+
+CHANNEL_DISSOCIATION = 0.6
 
 
 from mixtures import STARTS
@@ -129,6 +141,18 @@ class Viewer(QtWidgets.QWidget):
         self.replaying = False
         self.playing_back = False
         self.record_every_steps = RECORD_EVERY_STEPS
+        self.channel_temperature = CHANNEL_TEMPERATURE
+        self.channel_dissociation = CHANNEL_DISSOCIATION
+        self.atom_scale = 1.0
+
+        # Where the box is being squeezed or stretched to. The
+        # change is applied a fraction at a time rather than all
+        # at once, because scaling every coordinate also scales
+        # the bonds, and a sudden jump would leave every molecule
+        # badly stretched at the moment of the change.
+
+        self.target_box = float(BOX_SIZE)
+        self.box_rate = 0.002
         self.playback_fps = PLAYBACK_FPS
         self.last_advance = time.perf_counter()
 
@@ -246,6 +270,40 @@ class Viewer(QtWidgets.QWidget):
         left.addWidget(self.pause_button)
 
         left.addWidget(self.button("Lightning strike", self.on_spark))
+
+        self.channel_label = QtWidgets.QLabel(
+            f"channel {CHANNEL_TEMPERATURE:.0f} K"
+        )
+        left.addWidget(self.channel_label)
+
+        self.channel_slider = QtWidgets.QSlider(
+            QtCore.Qt.Orientation.Horizontal
+        )
+        self.channel_slider.setRange(5, 60)
+        self.channel_slider.setValue(
+            int(CHANNEL_TEMPERATURE / 1000)
+        )
+        self.channel_slider.valueChanged.connect(
+            self.on_channel_temperature
+        )
+        left.addWidget(self.channel_slider)
+
+        self.dissociation_label = QtWidgets.QLabel(
+            f"bonds broken in channel  {CHANNEL_DISSOCIATION:.0%}"
+        )
+        left.addWidget(self.dissociation_label)
+
+        self.dissociation_slider = QtWidgets.QSlider(
+            QtCore.Qt.Orientation.Horizontal
+        )
+        self.dissociation_slider.setRange(0, 100)
+        self.dissociation_slider.setValue(
+            int(CHANNEL_DISSOCIATION * 100)
+        )
+        self.dissociation_slider.valueChanged.connect(
+            self.on_channel_dissociation
+        )
+        left.addWidget(self.dissociation_slider)
 
         row = QtWidgets.QHBoxLayout()
         row.addWidget(self.button("Heat x1.5", self.on_heat))
@@ -414,6 +472,28 @@ class Viewer(QtWidgets.QWidget):
 
         right.addWidget(self.temperature_slider)
 
+        self.scale_label = QtWidgets.QLabel("atom size  1.0x")
+        right.addWidget(self.scale_label)
+
+        self.scale_slider = QtWidgets.QSlider(
+            QtCore.Qt.Orientation.Horizontal
+        )
+        self.scale_slider.setRange(3, 30)
+        self.scale_slider.setValue(10)
+        self.scale_slider.valueChanged.connect(self.on_atom_scale)
+        right.addWidget(self.scale_slider)
+
+        self.box_label = QtWidgets.QLabel(f"box {BOX_SIZE:.1f} A")
+        right.addWidget(self.box_label)
+
+        self.box_slider = QtWidgets.QSlider(
+            QtCore.Qt.Orientation.Horizontal
+        )
+        self.box_slider.setRange(60, 600)
+        self.box_slider.setValue(int(BOX_SIZE * 10))
+        self.box_slider.valueChanged.connect(self.on_box_size)
+        right.addWidget(self.box_slider)
+
         self.steps_label = QtWidgets.QLabel(
             f"steps per frame  {STEPS_PER_FRAME}"
             f"  ({STEPS_PER_FRAME * TIME_STEP:.1f} fs)"
@@ -490,9 +570,15 @@ class Viewer(QtWidgets.QWidget):
         ], dtype=np.float32)
 
     def atom_sizes(self):
+        symbols = (
+            self.recorder.symbols
+            if self.replaying and len(self.recorder) > 0
+            else self.simulation.symbols
+        )
+
         return np.array([
-            ELEMENT_SIZE[symbol]
-            for symbol in self.simulation.symbols
+            ELEMENT_SIZE[symbol] * self.atom_scale
+            for symbol in symbols
         ], dtype=np.float32)
 
     def update_bonds(self):
@@ -564,12 +650,126 @@ class Viewer(QtWidgets.QWidget):
             f"target temperature  {int(value)} K"
         )
 
+    def on_atom_scale(self, value):
+        # Purely cosmetic. Atoms are drawn in world units so they
+        # keep their true size relative to the cell, which is
+        # correct but leaves them small in a large box.
+
+        self.atom_scale = int(value) / 10.0
+
+        self.scale_label.setText(
+            f"atom size  {self.atom_scale:.1f}x"
+        )
+
+        self.scatter.setData(
+            pos=self.positions_for_drawing(),
+            color=self.atom_colours(),
+            size=self.atom_sizes(),
+            pxMode=False,
+        )
+
+    def on_box_size(self, value):
+        self.target_box = float(value) / 10.0
+
+        self.update_box_label()
+
+    def update_box_label(self):
+        count = self.simulation.atom_count
+
+        density = count / (self.box_size ** 3)
+
+        moving = (
+            "  ->  {:.1f}".format(self.target_box)
+            if abs(self.target_box - self.box_size) > 0.05
+            else ""
+        )
+
+        self.box_label.setText(
+            f"box {self.box_size:.1f} A{moving}"
+            f"   {density:.3f} atoms/A^3"
+        )
+
+    def resize_box(self):
+        # Nudge the box toward its target and scale every
+        # coordinate with it.
+        #
+        # This is how a barostat works: squeeze the cell and the
+        # contents come along. Doing it in small steps lets the
+        # bonds relax between changes, so nothing is left stretched
+        # or crushed. Compressing raises the density, which makes
+        # collisions more frequent and drives reactions; expanding
+        # does the opposite.
+
+        difference = self.target_box - self.box_size
+
+        if abs(difference) < 0.01:
+            return
+
+        step = np.clip(
+            difference,
+            -self.box_rate * self.box_size,
+            self.box_rate * self.box_size,
+        )
+
+        new_size = self.box_size + step
+
+        factor = new_size / self.box_size
+
+        self.simulation.positions = (
+            self.simulation.positions * factor
+        )
+
+        self.simulation.box_size = float(new_size)
+
+        self.box_size = float(new_size)
+
+        # The camera pulls back with the cell, otherwise the
+        # contents appear to shrink into the distance as the box
+        # grows around them. Atoms keep their true size, since
+        # they are drawn in world units and an atom does not
+        # change size when the box does.
+
+        self.view.opts["distance"] *= factor
+
+        half = self.box_size / 2.0
+
+        self.view.opts["center"] = pg.Vector(half, half, half)
+
+        # The neighbour table and the forces both depend on the
+        # cell, so both have to be rebuilt after a change.
+
+        self.simulation.reference_positions = None
+        self.simulation.build_neighbours()
+
+        self.simulation.forces, self.simulation._potential_energy = (
+            self.simulation.compute_forces()
+        )
+
+        self.add_box_outline()
+
+        self.update_box_label()
+
     def on_steps(self, value):
         self.steps_per_frame = int(value)
 
         self.steps_label.setText(
             f"steps per frame  {self.steps_per_frame}"
             f"  ({self.steps_per_frame * TIME_STEP:.1f} fs)"
+        )
+
+    def on_channel_temperature(self, value):
+        self.channel_temperature = float(value) * 1000.0
+
+        self.channel_label.setText(
+            f"channel {self.channel_temperature:.0f} K"
+        )
+
+    def on_channel_dissociation(self, value):
+        self.channel_dissociation = int(value) / 100.0
+
+        self.dissociation_label.setText(
+            f"bonds broken in channel  "
+            f"{self.channel_dissociation:.0%}"
         )
 
     def on_heat(self):
@@ -585,107 +785,37 @@ class Viewer(QtWidgets.QWidget):
         self.temperature_slider.setValue(int(target))
 
     def on_spark(self):
-        # A cylindrical discharge channel through the box.
+        # A discharge channel: a hot column plus direct
+        # dissociation of bonds inside it.
         #
-        # A random line is drawn across the cell, and every atom
-        # within CHANNEL_RADIUS of it is heated, hardest at the
-        # centre and tapering to nothing at the edge. Directions
-        # are random per atom, so this deposits heat rather than
-        # momentum: the channel does not blow the contents of the
-        # box in one direction.
+        # Heat alone barely breaks anything, because random
+        # thermal velocities put most of their energy into a pair
+        # moving off together rather than apart. Real sparks
+        # dissociate by electron impact instead, which puts energy
+        # straight into the bond, so that is modelled explicitly.
 
-        import torch
+        import discharge
 
-        positions = self.simulation.positions_numpy
+        report = discharge.apply_to(
+            self.simulation,
+            np.random.default_rng(),
+            radius=CHANNEL_RADIUS,
+            temperature=self.channel_temperature,
+            dissociation=self.channel_dissociation,
+        )
 
-        generator = np.random.default_rng()
-
-        # A point the channel passes through, and its direction.
-
-        origin = generator.uniform(0.0, self.box_size, size=3)
-
-        axis = generator.normal(size=3)
-        axis /= np.linalg.norm(axis)
-
-        offsets = positions - origin
-        offsets -= self.box_size * np.round(offsets / self.box_size)
-
-        # Distance from each atom to the line: the part of the
-        # offset perpendicular to the axis.
-
-        along = offsets @ axis
-
-        perpendicular = offsets - along[:, None] * axis
-
-        distance = np.linalg.norm(perpendicular, axis=1)
-
-        inside = distance < CHANNEL_RADIUS
-
-        struck = int(np.count_nonzero(inside))
-
-        if struck == 0:
+        if report["struck"] == 0:
             print("channel missed everything")
             return
 
-        # Cosine taper from the centre of the channel outward.
-
-        weight = np.zeros(len(positions))
-
-        weight[inside] = 0.5 * (
-            1.0 + np.cos(
-                np.pi * distance[inside] / CHANNEL_RADIUS
-            )
-        )
-
-        total_weight = weight.sum()
-
-        if total_weight <= 0.0:
-            return
-
-        share = CHANNEL_ENERGY * weight / total_weight
-
-        masses = self.simulation.masses.detach().cpu().numpy()
-
-        # Energy into speed: E = 1/2 m v^2, with the 103.642
-        # factor converting amu (A/fs)^2 into eV.
-
-        speeds = np.sqrt(
-            np.maximum(2.0 * share / (masses * 103.642), 0.0)
-        )
-
-        directions = generator.normal(size=positions.shape)
-
-        norms = np.linalg.norm(directions, axis=1, keepdims=True)
-
-        directions /= np.maximum(norms, 1e-12)
-
-        kick = torch.tensor(
-            directions * speeds[:, None],
-            device=self.simulation.device,
-            dtype=self.simulation.dtype
-        )
-
-        self.simulation.velocities += kick
-
-        # Whatever momentum the kick added, take back out, or the
-        # whole box slowly drifts after repeated strikes.
-
-        total_momentum = torch.sum(
-            self.simulation.masses[:, None] * self.simulation.velocities,
-            dim=0
-        )
-
-        self.simulation.velocities -= (
-            total_momentum / torch.sum(self.simulation.masses)
-        )
-
         print(
-            f"lightning: channel through {struck} atoms, "
-            f"{CHANNEL_ENERGY:.0f} eV deposited"
+            f"lightning at {self.channel_temperature:.0f} K: "
+            f"{report['struck']} atoms in the channel, "
+            f"{report['bonds_in_channel']} bonds caught, "
+            f"{report['dissociated']} broken, "
+            f"{report['deposited']:.1f} eV deposited"
         )
 
-    # --------------------------------------------------------
-    # Finding and inspecting molecules
 
     def current_positions(self):
         if self.replaying and len(self.recorder) > 0:
@@ -781,10 +911,6 @@ class Viewer(QtWidgets.QWidget):
 
         chosen = positions[members] % self.box_size
 
-        # Unwrap around the first atom, so a molecule sitting
-        # across the periodic boundary does not average out to
-        # somewhere in the middle of the box.
-
         anchor = chosen[0]
 
         offsets = chosen - anchor
@@ -800,14 +926,9 @@ class Viewer(QtWidgets.QWidget):
         self.view.setCameraPosition(distance=max(extent * 4.0, 5.0))
         self.view.update()
 
-        # Count bonds per atom and compare against what each
-        # element should have. Fewer means a radical, which is
-        # real chemistry; more means an over-coordinated clump.
-
-        # Bond order, not neighbour count. A double bond is
-        # one partner but two bonds, so counting partners would
-        # report the carbon in CO2 as a radical when it is
-        # perfectly satisfied.
+        # Bond order, not neighbour count. A double bond is one
+        # partner but two bonds, so counting partners would report
+        # the carbon in CO2 as a radical when it is satisfied.
 
         import analysis
         import reactive
@@ -871,6 +992,16 @@ class Viewer(QtWidgets.QWidget):
 
         self.refresh_colours()
 
+    def positions_for_drawing(self):
+        if self.replaying and len(self.recorder) > 0:
+            index = min(
+                self.scrubber.value(), len(self.recorder) - 1
+            )
+
+            return self.recorder.positions[index] % self.box_size
+
+        return self.simulation.positions_numpy % self.box_size
+
     def refresh_colours(self):
         colours = self.atom_colours()
 
@@ -921,9 +1052,6 @@ class Viewer(QtWidgets.QWidget):
         )
 
     def on_playback_speed(self, value):
-        # Slider is integer tenths of a frame per second, so the
-        # slowest setting is one frame every ten seconds.
-
         self.playback_fps = int(value) / 10.0
 
         if self.playback_fps < 1.0:
@@ -1024,12 +1152,8 @@ class Viewer(QtWidgets.QWidget):
         )
 
     def continue_from_here(self):
-        # Rebuild the simulation from whichever frame is on
-        # screen and carry on from there. Useful when a run has
-        # settled and you want to push it further, or when
-        # something interesting appears partway through and you
-        # would rather explore forward from that point than from
-        # the start.
+        # Rebuild the simulation from whichever frame is on screen
+        # and carry on from there.
 
         if len(self.recorder) == 0:
             print("nothing recorded to continue from")
@@ -1079,10 +1203,6 @@ class Viewer(QtWidgets.QWidget):
         self.simulation.forces, self.simulation._potential_energy = (
             self.simulation.compute_forces()
         )
-
-        # Everything after the resume point is discarded, so the
-        # recording stays a single consistent timeline rather
-        # than branching.
 
         self.recorder.positions = self.recorder.positions[:index + 1]
         self.recorder.velocities = (
@@ -1197,13 +1317,26 @@ class Viewer(QtWidgets.QWidget):
         self.rebuild()
 
     def rebuild(self):
+        # The new box is built at whatever size the slider is
+        # showing, rather than the constant at the top of the
+        # file. Set the size first, then load: the two settings
+        # belong together, and having Load quietly override the
+        # slider is how a box ends up four times denser than
+        # intended.
+
+        requested = self.box_slider.value() / 10.0
+
         self.simulation = make_simulation(
             self.start_name,
+            box=requested,
             temperature=self.simulation.target_temperature,
             seed=self.seed
         )
 
         self.box_size = float(self.simulation.box_size)
+        self.target_box = self.box_size
+
+        self.update_box_label()
 
         self.time_history.clear()
         self.energy_history.clear()
@@ -1265,6 +1398,8 @@ class Viewer(QtWidgets.QWidget):
             return
 
         if not self.paused:
+            self.resize_box()
+
             # The frame's worth of stepping is broken into chunks
             # so the recorder can sample partway through. Copying
             # 82 positions off the GPU costs about a kilobyte and
@@ -1295,7 +1430,8 @@ class Viewer(QtWidgets.QWidget):
                         velocities=(
                             self.simulation.velocities
                             .detach().cpu().numpy()
-                        )
+                        ),
+                        box_size=self.simulation.box_size,
                     )
 
                     captured = True
