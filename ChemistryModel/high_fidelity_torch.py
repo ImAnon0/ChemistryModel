@@ -40,8 +40,8 @@ import reactive as R
 from batched_torch import BatchedReactiveSimulation
 
 
-HF_MODEL_NAME = "reactive_v1+h_transfer_competition_v3"
-HF_MODEL_REVISION = 3
+HF_MODEL_NAME = "reactive_v1+h_transfer_competition_v5"
+HF_MODEL_REVISION = 5
 
 # A transfer correction needs both a heavy-atom donor contact and a second
 # partner contact. There is deliberately no hard taper threshold: the energy
@@ -87,6 +87,51 @@ H_TRANSFER_GATE_FULL = 0.50
 # value has to serve C-H and H-H at once, and their depths differ by enough
 # that a single number may not suit both. Measure before assuming.
 H_TRANSFER_SATO = 0.0
+
+# The state coupling is scaled by a geometric overlap that peaks when both
+# contacts are strong -- which is exactly the shared-hydrogen configuration
+# the correction exists to forbid. Measured at mixing 0.63, the avoided-
+# crossing stabilisation is 2.13 eV at the three-centre trap and 0.60 eV at
+# the transition state: inverted, and enough to turn what should be a saddle
+# into a bound minimum.
+#
+# In LEPS the coupling varies slowly across the surface. A roughly constant
+# coupling at a state crossing rounds the corner and leaves a barrier; a
+# coupling that peaks at the crossing digs a well there instead.
+#
+# This constant blends the peaked overlap toward a flat engagement function
+# that saturates once the weaker contact is bonded, rather than continuing to
+# grow as both bonds strengthen:
+#
+#     0.0  exactly V4 (peaked overlap)
+#     1.0  flat once the weaker contact passes the usual 0.35 bond threshold
+#
+# Both forms still vanish when either contact fades, so isolated reactants
+# and products recover the base potential exactly either way.
+H_TRANSFER_COUPLING_FLATTEN = 0.0
+
+# Ceiling, in eV, on how far the avoided crossing may pull the mixed state
+# below the lower of the two valence states.
+#
+# The three-centre trap and the collision barrier both sit where every cutoff
+# taper is saturated, so no knob keyed on geometry can tell them apart: sato
+# and the coupling flatten both move them together, which is what the knob
+# map showed. What does separate them is the crossing stabilisation itself,
+# measured at mixing 0.63:
+#
+#     three-centre trap      2.13 eV
+#     collision barrier top  1.70 eV
+#     transition state       0.60 eV
+#
+# A ceiling therefore bites hardest exactly where the well is deepest, leaves
+# the transition state untouched while it stays above 0.6, and keys on the
+# diabatic gap rather than on any distance.
+#
+# None disables the ceiling and reproduces V4 exactly. The softening below
+# keeps the value and its slope continuous, since a hard clamp would put a
+# force discontinuity along the whole contour where the cap begins to bind.
+H_TRANSFER_LOWERING_CAP = None
+H_TRANSFER_LOWERING_CAP_SOFTNESS = 0.25
 
 
 class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
@@ -287,9 +332,25 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
             4.0 * donor_taper * competitor_taper
             / torch.clamp(contact_sum * contact_sum, min=1e-12)
         )
-        overlap = torch.sqrt(
+        peaked_overlap = torch.sqrt(
             torch.clamp(donor_taper * competitor_taper, min=1e-12)
         ) * balance
+
+        # Flat alternative: engaged or not, keyed on the weaker of the two
+        # contacts, so the coupling stops growing once both are bonded. Same
+        # 0.35 threshold and same cubic smoothstep used elsewhere, so it is
+        # continuous in value and slope and still reaches zero whenever
+        # either contact does.
+        weaker = torch.minimum(donor_taper, competitor_taper)
+        flat_fraction = torch.clamp(weaker / 0.35, 0.0, 1.0)
+        flat_overlap = (
+            flat_fraction * flat_fraction * (3.0 - 2.0 * flat_fraction)
+        )
+
+        overlap = (
+            (1.0 - float(H_TRANSFER_COUPLING_FLATTEN)) * peaked_overlap
+            + float(H_TRANSFER_COUPLING_FLATTEN) * flat_overlap
+        )
 
         coupling = (
             float(H_TRANSFER_STATE_MIXING_FRACTION)
@@ -298,11 +359,27 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         )
 
         half_difference = 0.5 * (donor_state - partner_state)
+
+        # How far below the lower valence state the avoided crossing pulls.
+        lowering = torch.sqrt(
+            half_difference * half_difference + coupling * coupling + 1e-12
+        ) - torch.abs(half_difference)
+
+        if H_TRANSFER_LOWERING_CAP is not None:
+            # Softplus rather than a hard clamp: the cap binds over a finite
+            # window instead of switching on along a contour, so the force
+            # stays continuous where it starts to take effect. Softness is in
+            # the same units as the cap.
+            ceiling = float(H_TRANSFER_LOWERING_CAP)
+            softness = max(float(H_TRANSFER_LOWERING_CAP_SOFTNESS), 1e-6)
+            lowering = ceiling - softness * torch.nn.functional.softplus(
+                (ceiling - lowering) / softness
+            )
+
         mixed_state = (
             0.5 * (donor_state + partner_state)
-            - torch.sqrt(
-                half_difference * half_difference + coupling * coupling + 1e-12
-            )
+            - torch.abs(half_difference)
+            - lowering
         )
 
         # Remove exactly the local picture already present in the base energy:

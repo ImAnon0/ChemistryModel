@@ -43,6 +43,10 @@ from high_fidelity_torch import (
     HF_MODEL_NAME, HF_MODEL_REVISION,
     H_TRANSFER_STATE_MIXING_FRACTION,
     H_TRANSFER_GATE_START, H_TRANSFER_GATE_FULL,
+    H_TRANSFER_SATO,
+    H_TRANSFER_COUPLING_FLATTEN,
+    H_TRANSFER_LOWERING_CAP,
+    H_TRANSFER_LOWERING_CAP_SOFTNESS,
 )
 
 STANDARD_PHYSICS_MODEL = "reactive_v1"
@@ -50,6 +54,28 @@ HIGH_FIDELITY_PHYSICS_MODEL = HF_MODEL_NAME
 HIGH_FIDELITY_H_TRANSFER_MIXING = H_TRANSFER_STATE_MIXING_FRACTION
 HIGH_FIDELITY_H_TRANSFER_GATE_START = H_TRANSFER_GATE_START
 HIGH_FIDELITY_H_TRANSFER_GATE_FULL = H_TRANSFER_GATE_FULL
+
+
+def high_fidelity_parameters():
+    """Everything that defines the correction, read from the physics module.
+
+    Duplicating these as literals is what let a run report V3 while actually
+    integrating V4. Reading them here means the recorded parameters cannot
+    drift from the physics that produced the run.
+    """
+    return {
+        "h_transfer_state_mixing_fraction": H_TRANSFER_STATE_MIXING_FRACTION,
+        "h_transfer_gate_start": H_TRANSFER_GATE_START,
+        "h_transfer_gate_full": H_TRANSFER_GATE_FULL,
+        "h_transfer_sato": H_TRANSFER_SATO,
+        "h_transfer_coupling_flatten": H_TRANSFER_COUPLING_FLATTEN,
+        "h_transfer_lowering_cap": H_TRANSFER_LOWERING_CAP,
+        "h_transfer_lowering_cap_softness": (
+            H_TRANSFER_LOWERING_CAP_SOFTNESS
+            if H_TRANSFER_LOWERING_CAP is not None else None
+        ),
+        "h_transfer_model_revision": HF_MODEL_REVISION,
+    }
 
 
 def heartbeat_path(folder):
@@ -1209,12 +1235,7 @@ def summarise(recorder, molecule, partner, seed, options, wall_seconds,
             else STANDARD_PHYSICS_MODEL
         ),
         "physics_parameters": (
-            {
-                "h_transfer_state_mixing_fraction": HIGH_FIDELITY_H_TRANSFER_MIXING,
-                "h_transfer_gate_start": HIGH_FIDELITY_H_TRANSFER_GATE_START,
-                "h_transfer_gate_full": HIGH_FIDELITY_H_TRANSFER_GATE_FULL,
-                "h_transfer_model_revision": 2,
-            }
+            high_fidelity_parameters()
             if str(options.physics) == "high_fidelity"
             else {}
         ),
@@ -1508,12 +1529,7 @@ def write_experiment(folder, molecule, partner, options, requested_seeds):
             else STANDARD_PHYSICS_MODEL
         ),
         "physics_parameters": (
-            {
-                "h_transfer_state_mixing_fraction": HIGH_FIDELITY_H_TRANSFER_MIXING,
-                "h_transfer_gate_start": HIGH_FIDELITY_H_TRANSFER_GATE_START,
-                "h_transfer_gate_full": HIGH_FIDELITY_H_TRANSFER_GATE_FULL,
-                "h_transfer_model_revision": 2,
-            }
+            high_fidelity_parameters()
             if str(options.physics) == "high_fidelity"
             else {}
         ),

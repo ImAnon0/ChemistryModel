@@ -96,7 +96,8 @@ def formaldehyde_geometry(donor_length, transfer_length, spectators=None):
     return SYMBOLS, np.array([carbon, oxygen, donor_h, other_h, incoming])
 
 
-def build(physics="high_fidelity", mixing=None, sato=None):
+def build(physics="high_fidelity", mixing=None, sato=None,
+          flatten=None, cap=None):
     cls = (
         HighFidelityBatchedReactiveSimulation if physics == "high_fidelity"
         else BatchedReactiveSimulation
@@ -118,6 +119,26 @@ def build(physics="high_fidelity", mixing=None, sato=None):
                 "apply the v5 patch first"
             )
         high_fidelity_torch.H_TRANSFER_SATO = float(sato)
+
+    if flatten is not None:
+        if not hasattr(high_fidelity_torch, "H_TRANSFER_COUPLING_FLATTEN"):
+            raise SystemExit(
+                "this build of high_fidelity_torch has no "
+                "H_TRANSFER_COUPLING_FLATTEN; apply the v5 patch first"
+            )
+        high_fidelity_torch.H_TRANSFER_COUPLING_FLATTEN = float(flatten)
+
+    if cap is not None:
+        if not hasattr(high_fidelity_torch, "H_TRANSFER_LOWERING_CAP"):
+            raise SystemExit(
+                "this build of high_fidelity_torch has no "
+                "H_TRANSFER_LOWERING_CAP; apply the v5 patch first"
+            )
+        # A negative value means "no ceiling", so one sweep can include the
+        # uncapped case alongside the capped ones.
+        high_fidelity_torch.H_TRANSFER_LOWERING_CAP = (
+            None if float(cap) < 0 else float(cap)
+        )
 
     symbols, positions = formaldehyde_geometry(1.09, 1.60)
     return cls(
@@ -326,7 +347,7 @@ def ridge_positions(sim, donor_lengths, transfer_lengths):
 
 
 def fixed_donor_slice(physics, donor_lengths, transfer_lengths, relax=False,
-                      mixing=None, sato=None):
+                      mixing=None, sato=None, flatten=None, cap=None):
     """Barrier along r(H-H) with the donor bond held at each fixed length.
 
     The full two dimensional scan asks the thermal question: what is the
@@ -346,7 +367,8 @@ def fixed_donor_slice(physics, donor_lengths, transfer_lengths, relax=False,
     The remaining rows show how much pre-stretch would be needed to bring the
     barrier within reach, which is the thing a slower encounter buys you.
     """
-    sim = build(physics, mixing=mixing, sato=sato)
+    sim = build(physics, mixing=mixing, sato=sato, flatten=flatten,
+                cap=cap)
 
     print(f"physics: {getattr(sim, 'physics_model_name', 'reactive base')}")
     if mixing is not None:
@@ -393,6 +415,29 @@ def fixed_donor_slice(physics, donor_lengths, transfer_lengths, relax=False,
 TRAP_DONOR = 1.39
 TRAP_TRANSFER = 0.92
 IMPACT_DONOR = 1.08
+
+# Reference transition state for H + H2CO -> H2 + HCO, from Siai, Oueslati
+# and Kerkeni (2016), Chem. Phys. 474, 44-51: CCSD(T)//MP2 geometry with a
+# near collinear C-H-H arrangement.
+REFERENCE_DONOR = 1.293
+REFERENCE_TRANSFER = 1.008
+
+# Computed saddle heights for the same reaction, in eV:
+#   CBS/DLPNO-CCSD(T)        5.85 kcal/mol = 0.254
+#   CCSD(T)/cc-pVTZ//MP2     6.69 kcal/mol = 0.290
+#   CCSD(T)-F12a/cc-pVTZ-F12 6.68 kcal/mol = 0.290
+#
+# Experimental Arrhenius activation energies for this reaction are lower,
+# around 0.17 eV, but they are not the saddle height: they fold in quantum
+# tunnelling, which lets the reaction proceed below the classical barrier.
+# This model is classical, so the computed saddle is the right comparison
+# and the experimental number is not. Fitting to 0.17 bakes a quantum effect
+# into a classical potential.
+REFERENCE_BARRIER = (0.254, 0.290)
+
+# Reaction energy from Active Thermochemical Tables dissociation energies,
+# D0(H2CO-H) = 3.760 eV and D0(H-H) = 4.478 eV.
+REFERENCE_REACTION = -0.718
 
 
 def trap_depth(sim, transfer_lengths):
@@ -443,7 +488,171 @@ def impact_barrier(sim, transfer_lengths, donor_length=IMPACT_DONOR):
     return energy - profile[entrance[1]]
 
 
-def knob_map(physics, transfer_lengths, mixings, satos):
+def locate_saddle(sim, donor_lengths, transfer_lengths, relax=False):
+    """Find the saddle on the grid rather than assuming where it sits.
+
+    Earlier versions checked curvature at a hardcoded point, the geometry a
+    trapped trajectory happened to hold.  That was the right check in the
+    wrong place: once the topology changes the saddle moves, so the location
+    has to be measured too, not carried over from the configuration that was
+    being diagnosed.
+
+    Returns (donor, transfer, height above the reactant minimum, grid), or
+    None if the two basins cannot be separated on this window.
+    """
+    grid = surface(sim, donor_lengths, transfer_lengths, relax=relax)
+
+    reactant, product = basin_seeds(grid, donor_lengths, transfer_lengths)
+    if reactant is None:
+        return None
+
+    cell, energy = flood_saddle(grid, reactant, product)
+    if cell is None:
+        return None
+
+    return (
+        float(donor_lengths[cell[0]]),
+        float(transfer_lengths[cell[1]]),
+        float(energy - grid[reactant]),
+        grid,
+    )
+
+
+def saddle_character(sim, donor=TRAP_DONOR, transfer=TRAP_TRANSFER,
+                     step=0.02):
+    """Is the three-centre point a saddle, a minimum, or neither?
+
+    A transition state is a first-order saddle: curvature positive along
+    every direction but one, negative along the reaction coordinate.  The two
+    scan axes are not the normal modes, so this diagonalises the 2x2 Hessian
+    in (r_donor, r_transfer) and reports its eigenvalues.  Signs are what
+    matter, not magnitudes:
+
+        one negative, one positive  -> a genuine transition state
+        both positive               -> a minimum, i.e. the trap
+        both negative               -> a local maximum
+
+    Second differences on a 0.02 A stencil.  Fine enough to resolve the sign
+    on a surface this smooth, coarse enough not to be swamped by float noise.
+    """
+    def energy(a, b):
+        return energy_at(sim, a, b)
+
+    centre = energy(donor, transfer)
+
+    dd = (energy(donor + step, transfer) - 2.0 * centre
+          + energy(donor - step, transfer)) / (step * step)
+    tt = (energy(donor, transfer + step) - 2.0 * centre
+          + energy(donor, transfer - step)) / (step * step)
+    dt = (
+        energy(donor + step, transfer + step)
+        - energy(donor + step, transfer - step)
+        - energy(donor - step, transfer + step)
+        + energy(donor - step, transfer - step)
+    ) / (4.0 * step * step)
+
+    hessian = np.array([[dd, dt], [dt, tt]])
+    eigenvalues = np.linalg.eigvalsh(hessian)
+
+    negative = int(np.sum(eigenvalues < 0))
+    if negative == 1:
+        verdict = "transition state"
+    elif negative == 0:
+        verdict = "MINIMUM (trap)"
+    else:
+        verdict = "local maximum"
+
+    return eigenvalues, verdict, centre
+
+
+def saddle_report(physics, donor_lengths, transfer_lengths, caps,
+                  mixing=None, relax=False):
+    """Locate the saddle at each cap, then check it against the reference.
+
+    Three things have to be right at once, and only the first is a fit:
+
+        height    near the computed classical barrier, 0.25 to 0.29 eV
+        geometry  near r(C-H) 1.293 A, r(H-H) 1.008 A
+        character one negative curvature, one positive
+
+    Height alone can be matched by any monotonic knob, so on its own it says
+    very little.  Geometry and character are free predictions: nothing in the
+    fit targets them, so agreement there is evidence the mechanism is right
+    rather than evidence the constant was chosen well.
+    """
+    low, high = REFERENCE_BARRIER
+
+    print("reference transition state (Siai, Oueslati, Kerkeni 2016):")
+    print("  r(C-H) %.3f A, r(H-H) %.3f A, barrier %.3f-%.3f eV"
+          % (REFERENCE_DONOR, REFERENCE_TRANSFER, low, high))
+    print("heights are above the reactant minimum on the full grid\n")
+
+    print(f"{'cap':>7} {'r(C-H)':>9} {'r(H-H)':>9} {'height':>10} "
+          f"{'offset':>9}  character")
+
+    for cap in caps:
+        sim = build(physics, mixing=mixing, cap=cap)
+
+        found = locate_saddle(sim, donor_lengths, transfer_lengths, relax=relax)
+        label = "none" if cap < 0 else f"{cap:.2f}"
+
+        if found is None:
+            print(f"{label:>7}   no route between the basins on this window")
+            continue
+
+        donor, transfer, height, _ = found
+
+        # Curvature at the located saddle, not at any assumed point.
+        eigenvalues, verdict, _ = saddle_character(
+            sim, donor=donor, transfer=transfer
+        )
+
+        # Distance from the reference geometry, in the scan plane.
+        offset = float(np.hypot(donor - REFERENCE_DONOR,
+                                transfer - REFERENCE_TRANSFER))
+
+        flag = "  <-- in range" if low <= height <= high else ""
+        print(f"{label:>7} {donor:8.3f}A {transfer:8.3f}A {height:+8.3f} eV "
+              f"{offset:8.3f}A  {verdict}{flag}")
+
+    print("\noffset is the distance from the reference geometry in the")
+    print("(r_CH, r_HH) plane; the grid step sets the floor on how small")
+    print("it can be, so read it as a scale rather than a precise number.")
+
+
+def cap_sweep(physics, transfer_lengths, mixings, caps):
+    """Barrier and trap depth across the crossing-stabilisation ceiling.
+
+    Unlike sato and the coupling flatten, this keys on the diabatic gap
+    rather than on any distance, so it can distinguish two configurations
+    that look identical to every cutoff taper.  That is the whole point: the
+    trap and the collision barrier both sit where the tapers are saturated.
+    """
+    print("barrier at r(C-H) = %.2f A (what a fast collision meets)" %
+          IMPACT_DONOR)
+    print("trap = three-centre energy relative to separated products;")
+    print("       negative means bound, so a trajectory can never leave\n")
+
+    header = "".join(f"{m:>17.2f}" for m in mixings)
+    print(f"{'cap':>7}{header}      <- mixing")
+
+    for cap in caps:
+        cells = []
+        for mixing in mixings:
+            sim = build(physics, mixing=mixing, cap=cap)
+            barrier = impact_barrier(sim, transfer_lengths)
+            trap = trap_depth(sim, transfer_lengths)
+            shown = "  none" if barrier is None else f"{barrier:6.3f}"
+            cells.append(f"{shown} /{trap:+7.3f}")
+
+        label = "none" if cap < 0 else f"{cap:.2f}"
+        print(f"{label:>7}" + "".join(f"{cell:>17}" for cell in cells))
+
+    print("\neach cell is  barrier eV / trap eV")
+    print("wanted: trap >= 0 with the smallest barrier you can get")
+
+
+def knob_map(physics, transfer_lengths, mixings, satos, flatten=0.0):
     """Barrier and trap depth together, across both parameters.
 
     These are the two quantities that have to be satisfied at once, and under
@@ -458,6 +667,7 @@ def knob_map(physics, transfer_lengths, mixings, satos):
     """
     print("barrier at r(C-H) = %.2f A (what a fast collision meets)" %
           IMPACT_DONOR)
+    print("coupling flatten = %.2f" % flatten)
     print("trap = three-centre energy relative to separated products;")
     print("       negative means bound, so a trajectory can never leave\n")
 
@@ -467,7 +677,8 @@ def knob_map(physics, transfer_lengths, mixings, satos):
     for sato in satos:
         cells = []
         for mixing in mixings:
-            sim = build(physics, mixing=mixing, sato=sato)
+            sim = build(physics, mixing=mixing, sato=sato,
+                        flatten=flatten)
             barrier = impact_barrier(sim, transfer_lengths)
             trap = trap_depth(sim, transfer_lengths)
 
@@ -536,7 +747,8 @@ def sweep(physics, donor_lengths, transfer_lengths, values, relax=False):
 
 def report(physics, donor_lengths, transfer_lengths, relax=False, plot=None,
            mixing=None, sato=None):
-    sim = build(physics, mixing=mixing, sato=sato)
+    sim = build(physics, mixing=mixing, sato=sato, flatten=flatten,
+                cap=cap)
 
     print(f"physics: {getattr(sim, 'physics_model_name', 'reactive base')}")
     print(f"grid: {len(donor_lengths)} x {len(transfer_lengths)} points")
@@ -641,6 +853,31 @@ def main():
         help="override H_TRANSFER_SATO for this run (needs the v5 patch)",
     )
     parser.add_argument(
+        "--flatten", type=float, default=None,
+        help=(
+            "override H_TRANSFER_COUPLING_FLATTEN for this run; applies to "
+            "--knob-map as well (needs the v5 patch)"
+        ),
+    )
+    parser.add_argument(
+        "--cap", type=float, default=None,
+        help=(
+            "override H_TRANSFER_LOWERING_CAP for this run; negative means "
+            "no ceiling (needs the v5 patch)"
+        ),
+    )
+    parser.add_argument(
+        "--saddle-check", action="store_true",
+        help=(
+            "report curvature and height at the three-centre point across "
+            "the cap, to see whether it becomes a proper transition state"
+        ),
+    )
+    parser.add_argument(
+        "--cap-sweep", action="store_true",
+        help="measure barrier and trap across the crossing-stabilisation cap",
+    )
+    parser.add_argument(
         "--knob-map", action="store_true",
         help=(
             "measure the impact barrier and the three-centre trap depth "
@@ -674,11 +911,28 @@ def main():
         options.transfer_min, options.transfer_max, transfer_step
     )
 
+    if options.saddle_check:
+        saddle_report(
+            options.physics, donor_lengths, transfer_lengths,
+            caps=[-1.0, 1.45, 1.36, 1.32, 1.29, 1.20],
+            mixing=options.mixing, relax=options.relax,
+        )
+        return
+
+    if options.cap_sweep:
+        cap_sweep(
+            options.physics, transfer_lengths,
+            mixings=[0.45, 0.63, 0.80],
+            caps=[-1.0, 2.00, 1.70, 1.45, 1.20, 1.00],
+        )
+        return
+
     if options.knob_map:
         knob_map(
             options.physics, transfer_lengths,
             mixings=[0.45, 0.63, 0.80],
             satos=[0.0, 0.25, 0.50, 0.75, 1.00],
+            flatten=(options.flatten or 0.0),
         )
         return
 
@@ -686,6 +940,7 @@ def main():
         fixed_donor_slice(
             options.physics, donor_lengths, transfer_lengths,
             relax=options.relax, mixing=options.mixing, sato=options.sato,
+            flatten=options.flatten, cap=options.cap,
         )
         return
 
@@ -705,6 +960,8 @@ def main():
         plot=options.plot,
         mixing=options.mixing,
         sato=options.sato,
+        flatten=options.flatten,
+        cap=options.cap,
     )
 
 

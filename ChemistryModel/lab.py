@@ -15,6 +15,7 @@ import mixtures
 import running
 import molecule_library as molecule_store
 import molecule_scanner
+from high_fidelity_torch import HF_MODEL_REVISION
 import characterisation_results as character_results
 
 
@@ -107,19 +108,6 @@ def entry_seeds(folder):
                 seeds.add(int(entry["seed"]))
 
     return seeds
-
-
-def read_runner_log_tail(path, maximum_lines=6):
-    if not path or not os.path.exists(path):
-        return []
-
-    try:
-        with open(path, encoding="utf-8", errors="replace") as handle:
-            lines = [line.rstrip() for line in handle.readlines() if line.strip()]
-    except OSError:
-        return []
-
-    return lines[-max(1, int(maximum_lines)):]
 
 
 def find_batches(root):
@@ -260,8 +248,6 @@ class Job:
         self.finished = None
         self.completed = 0
         self.headlines = []
-        self.log_path = None
-        self.exit_code = None
 
     def as_dict(self):
         return {
@@ -273,8 +259,6 @@ class Job:
             "pid": self.pid,
             "seeds": self.seeds,
             "runner": self.runner,
-            "log_path": self.log_path,
-            "exit_code": self.exit_code,
         }
 
     @classmethod
@@ -288,8 +272,6 @@ class Job:
 
         job.state = stored.get("state", "queued")
         job.pid = stored.get("pid")
-        job.log_path = stored.get("log_path")
-        job.exit_code = stored.get("exit_code")
 
         return job
 
@@ -299,16 +281,6 @@ class Job:
         # particular job by seed.
 
         done = entry_seeds(self.out)
-
-        # A characterisation repeat is only complete when both its metadata
-        # entry and trajectory exist.  This prevents an entry written during
-        # finalisation from making the Lab advance the queue before the NPZ
-        # is safely on disk.
-        if self.runner == "characterisation_runner.py":
-            done = {
-                seed for seed in done
-                if os.path.exists(os.path.join(self.out, f"run_s{int(seed):04d}.npz"))
-            }
 
         if self.seeds:
             mine = [seed for seed in self.seeds if seed in done]
@@ -326,13 +298,7 @@ class Job:
                 beat["steps_done"] / beat["steps_total"], 1.0
             )
 
-            phase = str(beat.get("phase") or "simulation")
-            if phase == "saving_results":
-                saved = int(beat.get("results_done", 0) or 0)
-                total = int(beat.get("results_total", 0) or 0)
-                self.run_seed = f"saving {saved}/{total}"
-            else:
-                self.run_seed = beat.get("seed")
+            self.run_seed = beat.get("seed")
             self.inflight_runs = max(
                 1, int(beat.get("boxes_in_group", 1) or 1)
             )
@@ -397,9 +363,6 @@ class Lab(QtWidgets.QWidget):
         self.jobs = []
         self.queue_paused = False
         self.concurrency = DEFAULT_CONCURRENCY
-        # Give Windows/CUDA a moment to release the previous characterisation
-        # process before another one claims the GPU.
-        self.characterisation_not_before = 0.0
 
         self.setWindowTitle("Chemistry lab")
         self.resize(1500, 900)
@@ -1738,7 +1701,10 @@ class Lab(QtWidgets.QWidget):
                                approach=None, start_gap=None,
                                impact_target="com", physics_mode="standard"):
         physics_suffix = (
-            "_hf_htransfer_v4" if str(physics_mode) == "high_fidelity" else ""
+            (
+                f"_hf_htransfer_v{HF_MODEL_REVISION}"
+                if str(physics_mode) == "high_fidelity" else ""
+            )
         )
 
         if test == "with_partner":
@@ -2468,79 +2434,17 @@ class Lab(QtWidgets.QWidget):
         if "--out" not in job.arguments:
             command += ["--out", job.out]
 
-        # Never throw runner errors away.  Characterisation jobs are long
-        # enough that a traceback after six minutes needs to survive for us
-        # to inspect instead of appearing as a mysterious cancelled batch.
-        job.log_path = os.path.join(job.out, ".lab_runner.log")
-        with open(job.log_path, "a", encoding="utf-8", buffering=1) as log:
-            log.write("\n" + "=" * 72 + "\n")
-            log.write(time.strftime("%Y-%m-%d %H:%M:%S") + "\n")
-            log.write(" ".join(str(part) for part in command) + "\n")
-            log.flush()
-            job.process = subprocess.Popen(
-                command,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-            )
+        job.process = subprocess.Popen(
+            command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
+        )
 
         job.pid = job.process.pid
         job.reattached = False
-        job.exit_code = None
 
         job.state = "running"
         job.started = time.time()
-        self.save_queue()
-
-    def _refresh_characterisation_after_job(self):
-        if not hasattr(self, "character_molecule"):
-            return
-
-        molecule_id = self.character_molecule.currentData()
-        if molecule_id:
-            self.reload_characterisation_results(molecule_id)
-
-    def _finish_local_job(self, job, code):
-        # Refresh *after* the child has exited.  The previous order refreshed
-        # first and then polled, which allowed a race where the final entries
-        # landed between those two operations and the Lab permanently showed
-        # 0/8 (or another stale count) for an actually finished job.
-        job.exit_code = int(code)
-        job.refresh()
-        job.finished = time.time()
-
-        is_characterisation = job.runner == "characterisation_runner.py"
-        output_complete = (
-            not is_characterisation
-            or job.completed >= job.runs
-        )
-
-        if code == 0 and output_complete:
-            job.state = "done"
-        else:
-            job.state = "failed"
-
-            tail = read_runner_log_tail(job.log_path)
-            if code == 0 and not output_complete:
-                tail.append(
-                    f"runner exited cleanly but only {job.completed}/{job.runs} "
-                    "characterisation outputs are complete"
-                )
-            if tail:
-                job.headlines = ["ERROR: " + line for line in tail[-4:]]
-
-            # Do not cascade a characterisation failure into the next queued
-            # GPU experiment.  Leave it queued and make the user explicitly
-            # resume after the failure has been inspected.
-            if is_characterisation:
-                self.queue_paused = True
-                if hasattr(self, "pause_button"):
-                    self.pause_button.setText("Resume queue")
-
-        if is_characterisation:
-            self.characterisation_not_before = time.time() + 2.0
-            self._refresh_characterisation_after_job()
-
-        self.save_queue()
 
     def tick(self):
         for job in self.jobs:
@@ -2553,28 +2457,31 @@ class Lab(QtWidgets.QWidget):
                 code = job.process.poll()
 
                 if code is not None:
-                    self._finish_local_job(job, code)
+                    job.finished = time.time()
+
+                    job.state = "done" if code == 0 else "failed"
 
             elif job.reattached:
-                # Started by an earlier session, so there is no handle to
-                # poll.  The lock file it wrote says whether it is still alive.
+                # Started by an earlier session, so there is no
+                # handle to poll. The lock file it wrote says
+                # whether it is still alive.
+
                 state, lock = running.state_of(job.out, job.pid)
 
                 if state != "running":
                     job.finished = time.time()
-                    job.refresh()
+
                     job.state = (
                         "done" if job.completed >= job.runs
                         else "stopped"
                     )
-                    if job.runner == "characterisation_runner.py":
-                        self.characterisation_not_before = time.time() + 2.0
-                        self._refresh_characterisation_after_job()
-                    self.save_queue()
 
         if not self.queue_paused:
-            # Named 'active' rather than 'running': a local called running
-            # would shadow the module of that name for the whole function.
+            # Named 'active' rather than 'running': a local called
+            # running would shadow the module of that name for the
+            # whole function, and the reattach check above would
+            # fail with it.
+
             active = sum(
                 1 for job in self.jobs if job.state == "running"
             )
@@ -2591,11 +2498,15 @@ class Lab(QtWidgets.QWidget):
                 if job.state != "queued":
                     continue
 
-                if job.runner == "characterisation_runner.py":
-                    if characterisation_active:
-                        continue
-                    if time.time() < self.characterisation_not_before:
-                        continue
+                # Characterisation has its own hard GPU rule: one process,
+                # one group of at most eight boxes, then the next group. Do
+                # not allow two queued characterisation jobs to overlap even
+                # when the general Lab concurrency is larger than one.
+                if (
+                    job.runner == "characterisation_runner.py"
+                    and characterisation_active
+                ):
+                    continue
 
                 self.start_job(job)
                 active += 1
