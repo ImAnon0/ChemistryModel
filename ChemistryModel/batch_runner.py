@@ -269,6 +269,12 @@ def run_one(mixture, seed, options, progress=None,
 
     symbols = list(simulation.symbols)
 
+    # The simulation keeps fixed array slots for speed, but an open
+    # box can put a brand-new atom into an old slot. IDs preserve
+    # that identity change even when H is replaced by H.
+    atom_ids = np.arange(len(symbols), dtype=np.uint32)
+    next_atom_id = len(symbols)
+
     next_save = (
         options.save_every_ps * 1000.0
         if options.save_every_ps > 0 else float("inf")
@@ -304,10 +310,25 @@ def run_one(mixture, seed, options, progress=None,
                 simulation.velocities.detach().cpu().numpy()
             ),
             box_size=simulation.box_size,
+            symbols=symbols,
+            atom_ids=atom_ids,
         )
 
         if opening.active:
             symbols = opening.apply(simulation, symbols)
+
+            if opening.last_replaced_slots:
+                slots = np.asarray(
+                    opening.last_replaced_slots, dtype=int
+                )
+                count = len(slots)
+
+                atom_ids[slots] = np.arange(
+                    next_atom_id,
+                    next_atom_id + count,
+                    dtype=np.uint32,
+                )
+                next_atom_id += count
 
         if (
             options.expand_to
@@ -565,6 +586,26 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
         for box in range(len(seeds))
     ]
 
+    atom_id_lists = [
+        np.arange(len(symbols), dtype=np.uint32)
+        for symbols in symbol_lists
+    ]
+    next_atom_ids = [
+        len(symbols) for symbols in symbol_lists
+    ]
+
+    # Grouped runs used to ignore --save-every-ps and only write
+    # their recorders after the whole group finished. Keep the same
+    # checkpoint behaviour as single-box runs so a 20 ps group can
+    # leave usable 5/10/15 ps progress on disk.
+    next_save = (
+        options.save_every_ps * 1000.0
+        if options.save_every_ps > 0 else float("inf")
+    )
+
+    if options.save_every_ps > 0:
+        import analysis
+
     while steps_done < total_steps:
         simulation.target_temperature = temperature_at(
             DEFAULT_SCHEDULE, simulation.elapsed_femtoseconds
@@ -599,12 +640,31 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
                 float(temperatures[box]),
                 velocities=simulation.velocities_for(box),
                 box_size=simulation.box_size,
+                symbols=symbol_lists[box],
+                atom_ids=atom_id_lists[box],
             )
 
         if openings and openings[0].active:
             symbol_lists = apply_openings_to_group(
                 simulation, openings, symbol_lists
             )
+
+            for box, opening in enumerate(openings):
+                if not opening.last_replaced_slots:
+                    continue
+
+                slots = np.asarray(
+                    opening.last_replaced_slots, dtype=int
+                )
+                count = len(slots)
+                start_id = next_atom_ids[box]
+
+                atom_id_lists[box][slots] = np.arange(
+                    start_id,
+                    start_id + count,
+                    dtype=np.uint32,
+                )
+                next_atom_ids[box] += count
 
         if (
             options.expand_to
@@ -636,6 +696,55 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
 
             strikes_done += 1
             next_strike += options.strike_interval_fs
+
+        # Checkpoint every recorder in the group at the requested
+        # interval. The final state is written by run_grouped()
+        # immediately after this function returns, so there is no
+        # need to do a duplicate checkpoint at the exact end.
+        if (
+            folder is not None
+            and options.save_every_ps > 0
+            and simulation.elapsed_femtoseconds >= next_save
+            and steps_done < total_steps
+        ):
+            elapsed_wall = time.time() - started
+            each = elapsed_wall / max(len(seeds), 1)
+
+            for box, seed in enumerate(seeds):
+                recorder = recorders[box]
+
+                path = os.path.join(
+                    folder, f"run_s{seed:04d}.npz"
+                )
+                recorder.save(path)
+
+                entry = summarise_run(
+                    recorder, simulation, seed, each, strikes_done,
+                    options, analysis,
+                )
+                entry["finished"] = False
+
+                write_entry(folder, entry)
+
+            rebuild_index(folder)
+
+            if progress is not None:
+                progress.clear()
+
+            saved_ps = min(
+                recorder.times[-1] for recorder in recorders
+            ) / 1000.0
+
+            print(
+                f"  group {seeds[0]}-{seeds[-1]}: "
+                f"{saved_ps:g} ps saved so far"
+            )
+
+            # Normally one interval is crossed at a time. A while
+            # loop also handles unusually large capture chunks
+            # without writing several identical checkpoints.
+            while next_save <= simulation.elapsed_femtoseconds:
+                next_save += options.save_every_ps * 1000.0
 
         # One box going bad spoils the forces for the whole group,
         # since they share a tensor. Better to stop and say which.
@@ -783,6 +892,7 @@ def run_grouped(planned, mixture, options, progress):
                 recorder, simulation, seed, each, strikes,
                 options, analysis,
             )
+            entry["finished"] = True
 
             write_entry(options.out, entry)
 
@@ -897,6 +1007,9 @@ def continue_one(path, options, progress=None):
 
     last = len(recorder) - 1
 
+    current_symbols = recorder.symbols_at(last)
+    current_atom_ids = recorder.atom_ids_at(last).copy()
+
     if not recorder.has_velocities:
         raise SystemExit(
             f"{path} has no velocities stored, so it cannot be "
@@ -905,7 +1018,7 @@ def continue_one(path, options, progress=None):
         )
 
     simulation = ReactiveSimulation(
-        symbols=recorder.symbols,
+        symbols=current_symbols,
         positions=recorder.positions[last].astype(float),
         box_size=recorder.box_at(last),
         time_step=options.time_step,
@@ -977,6 +1090,8 @@ def continue_one(path, options, progress=None):
                 simulation.velocities.detach().cpu().numpy()
             ),
             box_size=simulation.box_size,
+            symbols=current_symbols,
+            atom_ids=current_atom_ids,
         )
 
         if (
@@ -1111,13 +1226,32 @@ def existing_seeds(folder):
 
     if os.path.isdir(directory):
         for name in os.listdir(directory):
-            if name.startswith("seed_") and name.endswith(".json"):
-                try:
-                    seeds.add(int(name[5:-5]))
-                except ValueError:
-                    continue
+            if not (name.startswith("seed_") and name.endswith(".json")):
+                continue
+
+            path = os.path.join(directory, name)
+
+            try:
+                with open(path) as handle:
+                    entry = json.load(handle)
+            except (json.JSONDecodeError, OSError):
+                continue
+
+            # Periodic checkpoints deliberately write an entry so
+            # the partial run can be inspected. They are not a
+            # completed seed and must not make a restarted batch
+            # skip that seed. Older entries have no flag and are
+            # treated as finished for backward compatibility.
+            if entry.get("finished", True) is False:
+                continue
+
+            if entry.get("seed") is not None:
+                seeds.add(int(entry["seed"]))
 
     for entry in read_existing_index(folder):
+        if entry.get("finished", True) is False:
+            continue
+
         if entry.get("seed") is not None:
             seeds.add(int(entry["seed"]))
 

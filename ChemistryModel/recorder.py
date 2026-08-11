@@ -24,7 +24,16 @@ class Recorder:
         self.box_size = float(box_size)
         self.maximum_frames = int(maximum_frames)
 
-        self.types = R.types_from_symbols(self.symbols)
+        self.types = np.asarray(
+            R.types_from_symbols(self.symbols), dtype=np.uint8
+        )
+
+        # Array slots stay fixed, but an open box can replace the
+        # atom occupying a slot. Atom IDs distinguish a replacement
+        # even when the incoming element happens to be the same.
+        self.atom_ids = np.arange(
+            len(self.symbols), dtype=np.uint32
+        )
 
         # How many captures are skipped between stored frames.
         # Starts at one and doubles whenever the buffer fills.
@@ -35,6 +44,14 @@ class Recorder:
 
         self.positions = []
         self.velocities = []
+
+        # Open-box chemistry can change which element occupies a
+        # slot. Keep both the element type and atom identity for
+        # every stored frame so later analysis can reconstruct the
+        # actual chemistry rather than assuming the starting atoms
+        # remained forever.
+        self.frame_types = []
+        self.frame_atom_ids = []
 
         # The cell can change during a run, since the viewer can
         # squeeze or stretch it. Storing only the size it started
@@ -57,7 +74,8 @@ class Recorder:
         return len(self.positions) == 0
 
     def capture(self, positions, time, potential, kinetic,
-                temperature, velocities=None, box_size=None):
+                temperature, velocities=None, box_size=None,
+                symbols=None, types=None, atom_ids=None):
         # Frames arrive at a fixed rate but are only kept every
         # `stride` of them.
 
@@ -68,9 +86,47 @@ class Recorder:
 
         self.since_last = 0
 
-        self.positions.append(
-            np.asarray(positions, dtype=np.float32).copy()
-        )
+        frame_positions = np.asarray(
+            positions, dtype=np.float32
+        ).copy()
+
+        self.positions.append(frame_positions)
+
+        if types is None:
+            if symbols is None:
+                frame_types = self.types
+            else:
+                frame_types = R.types_from_symbols(symbols)
+        else:
+            frame_types = types
+
+        frame_types = np.asarray(
+            frame_types, dtype=np.uint8
+        ).copy()
+
+        if len(frame_types) != len(frame_positions):
+            raise ValueError(
+                "Recorder.capture got a different number of "
+                "atom types and positions."
+            )
+
+        if atom_ids is None:
+            frame_atom_ids = self.atom_ids
+        else:
+            frame_atom_ids = atom_ids
+
+        frame_atom_ids = np.asarray(
+            frame_atom_ids, dtype=np.uint32
+        ).copy()
+
+        if len(frame_atom_ids) != len(frame_positions):
+            raise ValueError(
+                "Recorder.capture got a different number of "
+                "atom IDs and positions."
+            )
+
+        self.frame_types.append(frame_types)
+        self.frame_atom_ids.append(frame_atom_ids)
 
         # Velocities are kept so a run can be picked up again
         # exactly where it stopped. Without them a resumed run has
@@ -108,6 +164,8 @@ class Recorder:
 
         self.positions = self.positions[::2]
         self.velocities = self.velocities[::2]
+        self.frame_types = self.frame_types[::2]
+        self.frame_atom_ids = self.frame_atom_ids[::2]
         self.box_sizes = self.box_sizes[::2]
         self.times = self.times[::2]
         self.potential = self.potential[::2]
@@ -142,6 +200,8 @@ class Recorder:
 
         self.positions.clear()
         self.velocities.clear()
+        self.frame_types.clear()
+        self.frame_atom_ids.clear()
         self.box_sizes.clear()
         self.times.clear()
         self.potential.clear()
@@ -150,6 +210,41 @@ class Recorder:
 
     # --------------------------------------------------------
 
+    def types_at(self, index):
+        # Legacy recordings have no per-frame type history. That is
+        # exact for sealed boxes, where atom identities never
+        # change, and the best possible fallback for old files.
+        if index < len(self.frame_types):
+            return np.asarray(
+                self.frame_types[index], dtype=np.uint8
+            )
+
+        return self.types
+
+    def atom_ids_at(self, index):
+        # For a legacy sealed run, array slot is a valid permanent
+        # identity. New open-box runs store the real identity
+        # history explicitly.
+        if index < len(self.frame_atom_ids):
+            return np.asarray(
+                self.frame_atom_ids[index], dtype=np.uint32
+            )
+
+        return self.atom_ids
+
+    def symbols_at(self, index):
+        return [
+            str(R.ELEMENTS[int(atom_type)])
+            for atom_type in self.types_at(index)
+        ]
+
+    @property
+    def has_atom_history(self):
+        return (
+            len(self.frame_types) == len(self.positions) > 0
+            and len(self.frame_atom_ids) == len(self.positions)
+        )
+
     def bonds_at(self, index, threshold=0.35):
         # Bonds are not stored. They are recomputed from the
         # coordinates, which keeps the file small and means a
@@ -157,6 +252,7 @@ class Recorder:
         # too.
 
         positions = self.positions[index]
+        types = self.types_at(index)
 
         box = self.box_at(index)
 
@@ -172,10 +268,10 @@ class Recorder:
 
             distances = np.linalg.norm(offsets, axis=1)
 
-            partners = self.types[i + 1:]
+            partners = types[i + 1:]
 
-            inner = R.CUTOFF_INNER[self.types[i], partners]
-            outer = R.CUTOFF_OUTER[self.types[i], partners]
+            inner = R.CUTOFF_INNER[types[i], partners]
+            outer = R.CUTOFF_OUTER[types[i], partners]
 
             taper = R.smooth_cutoff(distances, inner, outer)
 
@@ -192,6 +288,7 @@ class Recorder:
         from scipy.sparse.csgraph import connected_components
 
         first, second = self.bonds_at(index)
+        types = self.types_at(index)
 
         count = len(self.positions[index])
 
@@ -213,7 +310,7 @@ class Recorder:
             counts = {}
 
             for member in members:
-                symbol = R.ELEMENTS[self.types[member]]
+                symbol = R.ELEMENTS[types[member]]
                 counts[symbol] = counts.get(symbol, 0) + 1
 
             name = "".join(
@@ -264,6 +361,16 @@ class Recorder:
                 self.box_sizes, dtype=np.float32
             )
 
+        if len(self.frame_types) == len(self.positions):
+            extra["frame_types"] = np.array(
+                self.frame_types, dtype=np.uint8
+            )
+
+        if len(self.frame_atom_ids) == len(self.positions):
+            extra["frame_atom_ids"] = np.array(
+                self.frame_atom_ids, dtype=np.uint32
+            )
+
         np.savez_compressed(
             path,
             symbols=np.array(self.symbols),
@@ -291,6 +398,18 @@ class Recorder:
         recorder.positions = [
             frame for frame in data["positions"]
         ]
+
+        if "frame_types" in data.files:
+            recorder.frame_types = [
+                np.asarray(frame, dtype=np.uint8)
+                for frame in data["frame_types"]
+            ]
+
+        if "frame_atom_ids" in data.files:
+            recorder.frame_atom_ids = [
+                np.asarray(frame, dtype=np.uint32)
+                for frame in data["frame_atom_ids"]
+            ]
 
         if "box_sizes" in data.files:
             recorder.box_sizes = [
@@ -331,7 +450,9 @@ class Recorder:
                     f"T {self.temperature[index]:.1f} K\n"
                 )
 
-                for symbol, point in zip(self.symbols, frame):
+                for symbol, point in zip(
+                    self.symbols_at(index), frame
+                ):
                     handle.write(
                         f"{symbol} {point[0]:.5f} "
                         f"{point[1]:.5f} {point[2]:.5f}\n"

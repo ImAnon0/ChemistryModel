@@ -51,21 +51,34 @@ BREAKING_TIME = 100.0
 class BondTracker:
 
     def __init__(self, types, formation_time=FORMATION_TIME,
-                 breaking_time=BREAKING_TIME, threshold=0.35):
-        self.types = types
+                 breaking_time=BREAKING_TIME, threshold=0.35,
+                 atom_ids=None):
+        self.types = np.asarray(types, dtype=int).copy()
         self.formation_time = formation_time
         self.breaking_time = breaking_time
         self.threshold = threshold
 
-        count = len(types)
+        count = len(self.types)
+
+        if atom_ids is None:
+            self.atom_ids = np.arange(count, dtype=np.uint32)
+        else:
+            self.atom_ids = np.asarray(
+                atom_ids, dtype=np.uint32
+            ).copy()
+
+        if len(self.atom_ids) != count:
+            raise ValueError(
+                "BondTracker types and atom IDs differ in length."
+            )
 
         self.first, self.second = np.triu_indices(count, k=1)
 
         self.inner = R.CUTOFF_INNER[
-            types[self.first], types[self.second]
+            self.types[self.first], self.types[self.second]
         ]
         self.outer = R.CUTOFF_OUTER[
-            types[self.first], types[self.second]
+            self.types[self.first], self.types[self.second]
         ]
 
         # How long each pair has been continuously in range, and
@@ -84,8 +97,66 @@ class BondTracker:
         # moment it crossed the persistence threshold.
 
         self.formed_at = np.zeros(len(self.first))
+        self.arrived_at = np.zeros(len(self.first))
 
         self.events = []
+
+    def set_atoms(self, types=None, atom_ids=None):
+        # Array slots are reused in an open box. Persistence belongs
+        # to the atom that occupied a slot, not to the slot itself.
+        # Reset only pairs touching an atom that was replaced.
+        new_types = (
+            self.types
+            if types is None
+            else np.asarray(types, dtype=int)
+        )
+
+        new_ids = (
+            self.atom_ids
+            if atom_ids is None
+            else np.asarray(atom_ids, dtype=np.uint32)
+        )
+
+        if len(new_types) != len(self.types):
+            raise ValueError("BondTracker atom count changed.")
+
+        if len(new_ids) != len(self.atom_ids):
+            raise ValueError("BondTracker atom ID count changed.")
+
+        type_changes = new_types != self.types
+        id_changes = new_ids != self.atom_ids
+
+        changed_atoms = type_changes | id_changes
+
+        affected = (
+            changed_atoms[self.first]
+            | changed_atoms[self.second]
+        )
+
+        if np.any(affected):
+            self.bonded[affected] = False
+            self.in_range_for[affected] = 0.0
+            self.out_of_range_for[affected] = np.inf
+            self.formed_at[affected] = 0.0
+            self.arrived_at[affected] = 0.0
+
+        types_changed = bool(np.any(type_changes))
+
+        self.types = new_types.copy()
+        self.atom_ids = new_ids.copy()
+
+        # Cutoffs only need rebuilding when an element changed.
+        # Identity-only replacements such as H -> H still reset
+        # persistence above, but keep the same distance cutoffs.
+        if types_changed:
+            self.inner = R.CUTOFF_INNER[
+                self.types[self.first], self.types[self.second]
+            ]
+            self.outer = R.CUTOFF_OUTER[
+                self.types[self.first], self.types[self.second]
+            ]
+
+        return affected
 
     def in_range(self, positions, box_size):
         offsets = positions[self.second] - positions[self.first]
@@ -97,9 +168,14 @@ class BondTracker:
 
         return taper > self.threshold
 
-    def update(self, positions, box_size, time):
+    def update(self, positions, box_size, time,
+               types=None, atom_ids=None):
         # Advance the tracker by one frame and return the pairs
         # currently counted as bonded.
+
+        affected = self.set_atoms(
+            types=types, atom_ids=atom_ids
+        )
 
         if self.last_time is None:
             elapsed = 0.0
@@ -145,13 +221,19 @@ class BondTracker:
         # can be dated from when it started rather than from when
         # it was confirmed.
 
-        self.arrived_at = getattr(
-            self, "arrived_at", np.zeros(len(self.first))
-        )
-
         self.arrived_at = np.where(
             arriving, float(time), self.arrived_at
         )
+
+        # A replacement happened between the previous stored frame
+        # and this one. The new atom cannot inherit that elapsed
+        # time toward forming a bond.
+        if np.any(affected):
+            self.in_range_for[affected] = 0.0
+            self.out_of_range_for[affected] = np.where(
+                close[affected], 0.0, np.inf
+            )
+            self.arrived_at[affected & close] = float(time)
 
         forming = (
             (~self.bonded)

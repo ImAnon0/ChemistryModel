@@ -24,7 +24,7 @@ import os
 # lists, for instance, which the browser recomputes anyway.
 
 
-CACHE_VERSION = 3
+CACHE_VERSION = 4
 
 FOLDER = ".analysis_cache"
 

@@ -111,26 +111,23 @@ def bond_counts(positions, types, box_size, threshold=0.35):
 
 def analyse(recorder, stride=1, threshold=0.35, late_fs=2500.0,
             structures=True, persistent=True):
-    symbols = recorder.symbols
-    types = recorder.types
+    if len(recorder) == 0:
+        raise ValueError("cannot analyse an empty recording")
 
-    # The last frame's cell, used for the final-state analysis.
-    # Individual frames use their own, since the box can change
-    # during a run.
-
-    box = recorder.box_at(len(recorder) - 1)
-
-    count = len(symbols)
+    count = len(recorder.positions[0])
 
     first, second = pair_indices(count)
-    inner, outer = cutoffs_for(types, first, second)
 
     times = np.array(recorder.times)
+
+    initial_types = recorder.types_at(0)
+    initial_ids = recorder.atom_ids_at(0)
 
     seen = {}
     heavy_events = []
 
     previous_heavy = set()
+    previous_symbols_by_id = {}
     examined = 0
 
     # Bonds are judged by how long a pair stays within range
@@ -140,7 +137,11 @@ def analyse(recorder, stride=1, threshold=0.35, late_fs=2500.0,
     # structures of two hundred atoms that do not exist.
 
     tracker = (
-        bonding.BondTracker(types, threshold=threshold)
+        bonding.BondTracker(
+            initial_types,
+            threshold=threshold,
+            atom_ids=initial_ids,
+        )
         if persistent else None
     )
 
@@ -163,19 +164,40 @@ def analyse(recorder, stride=1, threshold=0.35, late_fs=2500.0,
 
     keyed = {}
 
-    for index in range(0, len(recorder), stride):
+    indices = list(range(0, len(recorder), stride))
+
+    # The final-state section below uses the tracker's current
+    # bonds, so make sure the actual final frame is always fed
+    # through it even when stride does not land there.
+    final_index = len(recorder) - 1
+
+    if indices[-1] != final_index:
+        indices.append(final_index)
+
+    for index in indices:
         positions = recorder.positions[index]
+        frame_types = recorder.types_at(index)
+        frame_symbols = recorder.symbols_at(index)
+        frame_ids = recorder.atom_ids_at(index)
 
         frame_box = recorder.box_at(index)
 
         if tracker is not None:
             bond_first, bond_second = tracker.update(
-                positions, frame_box, float(times[index])
+                positions,
+                frame_box,
+                float(times[index]),
+                types=frame_types,
+                atom_ids=frame_ids,
             )
         else:
+            frame_inner, frame_outer = cutoffs_for(
+                frame_types, first, second
+            )
+
             bond_first, bond_second = bonds_in_frame(
                 positions, frame_box, first, second,
-                inner, outer, threshold
+                frame_inner, frame_outer, threshold
             )
 
         if float(times[index]) < census_from:
@@ -187,7 +209,7 @@ def analyse(recorder, stride=1, threshold=0.35, late_fs=2500.0,
 
         if structures:
             table, _, _ = F.bond_table(
-                positions, types, frame_box, threshold
+                positions, frame_types, frame_box, threshold
             )
 
         present = {}
@@ -196,9 +218,11 @@ def analyse(recorder, stride=1, threshold=0.35, late_fs=2500.0,
             members = np.where(labels == label)[0]
 
             if structures:
-                name = registry.register(symbols, members, table)
+                name = registry.register(
+                    frame_symbols, members, table
+                )
             else:
-                name = formula_for(symbols, members)
+                name = formula_for(frame_symbols, members)
 
             present[name] = present.get(name, 0) + 1
 
@@ -219,36 +243,76 @@ def analyse(recorder, stride=1, threshold=0.35, late_fs=2500.0,
 
         # Bonds between heavy atoms build structure. Hydrogen
         # comes and goes constantly and would drown the log.
+        #
+        # Pair identity follows the real atoms, not reusable array
+        # slots. When a product leaves the open box, its internal
+        # bonds disappear because the atoms left the system; that
+        # is transport, not chemical bond breaking.
+
+        symbols_by_id = {
+            int(frame_ids[slot]): frame_symbols[slot]
+            for slot in range(count)
+        }
 
         heavy_now = set()
 
         for a, b in zip(bond_first, bond_second):
-            if symbols[a] in HEAVY and symbols[b] in HEAVY:
-                heavy_now.add((int(a), int(b)))
+            if (
+                frame_symbols[a] in HEAVY
+                and frame_symbols[b] in HEAVY
+            ):
+                id_a = int(frame_ids[a])
+                id_b = int(frame_ids[b])
+
+                heavy_now.add(
+                    (min(id_a, id_b), max(id_a, id_b))
+                )
 
         for pair in sorted(heavy_now - previous_heavy):
             heavy_events.append((
                 float(times[index]), "formed",
-                symbols[pair[0]], pair[0],
-                symbols[pair[1]], pair[1]
+                symbols_by_id[pair[0]], pair[0],
+                symbols_by_id[pair[1]], pair[1]
             ))
 
         for pair in sorted(previous_heavy - heavy_now):
+            # A missing ID means the atom itself left the reaction
+            # zone. Do not misreport that as bond dissociation.
+            if (
+                pair[0] not in symbols_by_id
+                or pair[1] not in symbols_by_id
+            ):
+                continue
+
             heavy_events.append((
                 float(times[index]), "broke",
-                symbols[pair[0]], pair[0],
-                symbols[pair[1]], pair[1]
+                previous_symbols_by_id.get(
+                    pair[0], symbols_by_id[pair[0]]
+                ),
+                pair[0],
+                previous_symbols_by_id.get(
+                    pair[1], symbols_by_id[pair[1]]
+                ),
+                pair[1]
             ))
 
         previous_heavy = heavy_now
+        previous_symbols_by_id = symbols_by_id
 
     # ---- the final frame, in detail ----
 
-    positions = recorder.positions[len(recorder) - 1]
+    positions = recorder.positions[final_index]
+    symbols = recorder.symbols_at(final_index)
+    types = recorder.types_at(final_index)
+    box = recorder.box_at(final_index)
 
     if tracker is not None:
+        # final_index was deliberately included above, so the
+        # tracker is aligned with this exact frame.
         bond_first, bond_second = tracker.confirmed_now()
     else:
+        inner, outer = cutoffs_for(types, first, second)
+
         bond_first, bond_second = bonds_in_frame(
             positions, box, first, second, inner, outer, threshold
         )

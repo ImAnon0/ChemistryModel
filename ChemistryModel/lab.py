@@ -78,24 +78,22 @@ def read_heartbeat(folder, pid):
 
 
 def entry_seeds(folder):
+    # Which seeds have finished, read from the entry files rather
+    # than the index. Entries appear the moment a run completes
+    # and cannot be clobbered by another process, so they are the
+    # honest source for progress.
+
     seeds = set()
 
     directory = os.path.join(folder, "entries")
 
     if os.path.isdir(directory):
         for name in os.listdir(directory):
-
             if name.startswith("seed_") and name.endswith(".json"):
                 try:
-                    seed = int(name[5:-5])
+                    seeds.add(int(name[5:-5]))
                 except ValueError:
                     continue
-
-                # ✅ MUST be inside the same block
-                npz_path = os.path.join(folder, f"run_s{seed:04d}.npz")
-
-                if os.path.exists(npz_path):
-                    seeds.add(seed)
 
     if not seeds:
         for entry in read_index(folder):
@@ -103,6 +101,7 @@ def entry_seeds(folder):
                 seeds.add(int(entry["seed"]))
 
     return seeds
+
 
 def find_batches(root):
     found = []
@@ -491,33 +490,16 @@ class Lab(QtWidgets.QWidget):
         self.capture_every = self.choice([10, 20, 40, 80, 200], 40, 0)
         left.addRow("capture every N steps", self.capture_every)
 
-        self.group = self.choice([1, 2, 4, 6, 8, 12], 8, 0)
-        left.addRow("boxes at once", self.group)
-
-        self.group_note = QtWidgets.QLabel("")
-        self.group_note.setStyleSheet("color: #666;")
-        left.addRow("", self.group_note)
-
-        self.save_every = self.choice([0, 2, 5, 10, 20], 0, 1)
-        left.addRow("save every N ps", self.save_every)
-
-        self.save_note = QtWidgets.QLabel("")
-        self.save_note.setStyleSheet("color: #666;")
-        left.addRow("", self.save_note)
-
-        for widget in (self.group, self.save_every):
-            widget.valueChanged.connect(self.refresh_existing)
-
-        self.parallel = QtWidgets.QCheckBox(
-            "split across the running slots"
+        self.grouped = QtWidgets.QCheckBox(
+            "advance runs together on the GPU"
         )
-        self.parallel.setToolTip(
-            "Break the runs into as many jobs as can run at once, "
-            "each taking its own seeds, all writing to the same "
-            "folder."
+        self.grouped.setToolTip(
+            "Use batch_runner.py's --group mode. The selected runs "
+            "are advanced together inside one process instead of "
+            "launching separate parallel jobs."
         )
-        self.parallel.stateChanged.connect(self.refresh_existing)
-        left.addRow("in parallel", self.parallel)
+        self.grouped.stateChanged.connect(self.refresh_existing)
+        left.addRow("group runs", self.grouped)
 
         self.folder_name = QtWidgets.QLineEdit()
         self.folder_name.setPlaceholderText(
@@ -526,8 +508,8 @@ class Lab(QtWidgets.QWidget):
         left.addRow("output folder", self.folder_name)
 
         for widget in (
-            self.box_size, self.picoseconds, self.cool_temperature,
-            self.strikes, self.expand_to,
+            self.box_size, self.picoseconds, self.seeds,
+            self.cool_temperature, self.strikes, self.expand_to,
         ):
             widget.valueChanged.connect(self.refresh_existing)
 
@@ -633,6 +615,7 @@ class Lab(QtWidgets.QWidget):
             self.mixture_box, self.box_size, self.seeds,
             self.first_seed, self.hot_temperature, self.hot_until,
             self.expand_to, self.expand_at, self.capture_every,
+            self.grouped,
         ):
             widget.setEnabled(not continuing)
 
@@ -724,39 +707,6 @@ class Lab(QtWidgets.QWidget):
             self.describe_continuation()
             return
 
-        boxes = int(self.group.value())
-
-        if boxes > 1:
-            # Measured on a 4060 Ti: one box leaves the card
-            # mostly idle, and eight at once cost about twice as
-            # much as one rather than eight times.
-
-            gain = {1: 1.0, 2: 1.8, 4: 2.7, 6: 3.3, 8: 3.8,
-                    12: 4.0}.get(boxes, 3.8)
-
-            self.group_note.setText(
-                f"{boxes} boxes share one set of kernels, "
-                f"about {gain:.1f} times the throughput"
-            )
-        else:
-            self.group_note.setText(
-                "one box at a time leaves most of the card idle"
-            )
-
-        every = self.save_every.value()
-
-        if every > 0:
-            times = int(self.picoseconds.value() / every)
-
-            self.save_note.setText(
-                f"readable {times} times before it finishes; "
-                f"each save costs a few seconds"
-            )
-        else:
-            self.save_note.setText(
-                "written only when the run finishes"
-            )
-
         label, path, index = matching_folder(
             self.root, self.conditions()
         )
@@ -779,14 +729,14 @@ class Lab(QtWidgets.QWidget):
                 f"Next runs will take seeds "
                 f"{self.planned_seeds_text(path)}\n"
                 f"and write to the same folder."
-                + self.parallel_note()
+                + self.group_note()
             )
         else:
             self.existing_note.setText(
                 "No runs exist under these conditions yet.\n\n"
                 "A new folder will be created, named from the\n"
                 "settings unless you give one."
-                + self.parallel_note()
+                + self.group_note()
             )
 
         self.preview.setPlainText(" ".join(self.build_arguments()))
@@ -862,50 +812,25 @@ class Lab(QtWidgets.QWidget):
 
         return text
 
-    def planned_seeds(self, out, wanted):
-        start, taken = self.next_free_seed(out)
+    def group_size(self):
+        # The checkbox means "group this batch": however many runs
+        # were requested are advanced together in the grouped path.
+        return max(1, int(self.seeds.value()))
 
-        planned = []
-
-        cursor = start
-
-        while len(planned) < wanted:
-            if cursor not in taken:
-                planned.append(cursor)
-
-            cursor += 1
-
-        return planned
-
-    def parallel_note(self):
-        if not self.parallel.isChecked():
+    def group_note(self):
+        if not self.grouped.isChecked():
             return ""
 
         wanted = int(self.seeds.value())
+        size = self.group_size()
+        groups = (wanted + size - 1) // size
 
-        parts = max(1, min(self.concurrency, wanted))
-
-        planned = self.planned_seeds(self.target_folder(), wanted)
-
-        blocks = [planned[part::parts] for part in range(parts)]
-
-        lines = [
-            f"\n\nSplit into {parts} jobs, all writing to the "
-            "same folder:"
-        ]
-
-        for part, block in enumerate(blocks, start=1):
-            if not block:
-                continue
-
-            shown = ", ".join(str(value) for value in block[:6])
-
-            if len(block) > 6:
-                shown += ", ..."
-
-            lines.append(f"  part {part}: seeds {shown}")
-
-        return "\n".join(lines)
+        return (
+            f"\n\nGrouped GPU mode: up to {size} runs are advanced "
+            f"together in one process ({groups} group"
+            + ("s" if groups != 1 else "")
+            + ")."
+        )
 
     def build_arguments(self):
         if self.mode_box.currentIndex() == 1:
@@ -923,15 +848,8 @@ class Lab(QtWidgets.QWidget):
             f"{self.cool_temperature.value():g}",
         ]
 
-        if self.group.value() > 1:
-            arguments += [
-                "--group", str(int(self.group.value()))
-            ]
-
-        if self.save_every.value() > 0:
-            arguments += [
-                "--save-every-ps", f"{self.save_every.value():g}"
-            ]
+        if self.grouped.isChecked():
+            arguments += ["--group", str(self.group_size())]
 
         seed_text = self.first_seed.currentText().strip()
 
@@ -1025,39 +943,6 @@ class Lab(QtWidgets.QWidget):
                 self.root, self.folder_name.text().strip()
             )
 
-        boxes = int(self.group.value())
-
-        if boxes > 1:
-            # Measured on a 4060 Ti: one box leaves the card
-            # mostly idle, and eight at once cost about twice as
-            # much as one rather than eight times.
-
-            gain = {1: 1.0, 2: 1.8, 4: 2.7, 6: 3.3, 8: 3.8,
-                    12: 4.0}.get(boxes, 3.8)
-
-            self.group_note.setText(
-                f"{boxes} boxes share one set of kernels, "
-                f"about {gain:.1f} times the throughput"
-            )
-        else:
-            self.group_note.setText(
-                "one box at a time leaves most of the card idle"
-            )
-
-        every = self.save_every.value()
-
-        if every > 0:
-            times = int(self.picoseconds.value() / every)
-
-            self.save_note.setText(
-                f"readable {times} times before it finishes; "
-                f"each save costs a few seconds"
-            )
-        else:
-            self.save_note.setText(
-                "written only when the run finishes"
-            )
-
         label, path, index = matching_folder(
             self.root, self.conditions()
         )
@@ -1133,13 +1018,6 @@ class Lab(QtWidgets.QWidget):
     def on_queue(self):
         out = self.target_folder()
 
-        if (
-            self.parallel.isChecked()
-            and self.mode_box.currentIndex() == 0
-        ):
-            self.queue_in_parts(out)
-            return
-
         if self.mode_box.currentIndex() == 1:
             source = read_index(
                 os.path.join(self.root, self.source_box.currentText())
@@ -1185,84 +1063,6 @@ class Lab(QtWidgets.QWidget):
         self.draw_jobs()
 
         self.tabs.setCurrentIndex(1)
-
-    def queue_in_parts(self, out):
-        # One condition, several processes, one folder.
-        #
-        # Each part is given its own block of seeds so nothing is
-        # repeated, and the runs write separate entry files rather
-        # than a shared index, so they cannot overwrite each
-        # other's results.
-
-        wanted = int(self.seeds.value())
-
-        parts = max(1, min(self.concurrency, wanted))
-
-        # Work out which seeds will actually be used, then deal
-        # them out one at a time.
-        #
-        # Giving each part a starting seed and a count only works
-        # while the free seeds run consecutively. With gaps left
-        # by earlier runs, a part told to start at 704 finds it
-        # taken and quietly runs 705 instead, while still
-        # believing 704 belongs to it - and then reports another
-        # part's finished run as its own progress.
-
-        planned = self.planned_seeds(out, wanted)
-
-        blocks = [planned[part::parts] for part in range(parts)]
-
-        for part, block in enumerate(blocks):
-            if not block:
-                continue
-
-            arguments = self.build_arguments()
-
-            arguments = self.replaced(
-                arguments, "--seeds", str(len(block))
-            )
-            arguments = self.replaced(
-                arguments,
-                "--seed-list",
-                ",".join(str(value) for value in block),
-            )
-
-            # An explicit list says which seeds to run, so a
-            # starting seed alongside it would only confuse
-            # matters.
-
-            if "--first-seed" in arguments:
-                position = arguments.index("--first-seed")
-
-                del arguments[position:position + 2]
-
-            if "--out" not in arguments:
-                arguments += ["--out", out]
-
-            job = Job(
-                name=f"{os.path.basename(out)}  part {part + 1}",
-                arguments=arguments,
-                out=out,
-                runs=len(block),
-                seeds=block,
-            )
-
-            self.jobs.append(job)
-
-        self.save_queue()
-        self.draw_jobs()
-
-        self.tabs.setCurrentIndex(1)
-
-    def replaced(self, arguments, flag, value):
-        arguments = list(arguments)
-
-        if flag in arguments:
-            arguments[arguments.index(flag) + 1] = value
-        else:
-            arguments += [flag, value]
-
-        return arguments
 
     # --------------------------------------------------------
     # Batches tab
@@ -1423,8 +1223,8 @@ class Lab(QtWidgets.QWidget):
 
         job.process = subprocess.Popen(
             command,
-            stdout=None,
-            stderr=None
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.STDOUT,
         )
 
         job.pid = job.process.pid
@@ -1682,18 +1482,10 @@ class Lab(QtWidgets.QWidget):
         for entry in read_index(path):
             mark = " " if entry.get("stable", True) else "!"
 
-            # A run saved partway through is worth reading but
-            # should not be mistaken for a finished one.
-
-            partial = (
-                f"  [{entry.get('picoseconds', 0):g} ps so far]"
-                if entry.get("finished") is False else ""
-            )
-
             self.results_list.addItem(
                 f"{mark} {entry.get('number', 0):03d}  "
                 f"seed {entry.get('seed', '?'):<5} "
-                f"{entry.get('headline', '')}{partial}"
+                f"{entry.get('headline', '')}"
             )
 
             self.results_paths.append(
@@ -1787,11 +1579,6 @@ class Lab(QtWidgets.QWidget):
             if entry.get("stable") is False
         ]
 
-        unfinished = [
-            entry for entry in index
-            if entry.get("finished") is False
-        ]
-
         usable = len(index) - len(unstable)
 
         lines = []
@@ -1811,12 +1598,6 @@ class Lab(QtWidgets.QWidget):
         )
 
         lines.append(f"  seeds {min(seeds)} to {max(seeds)}")
-
-        if unfinished:
-            lines.append(
-                f"  {len(unfinished)} still running, saved partway"
-            )
-
         lines.append("")
 
         lines.append("  how these were run")
@@ -2171,8 +1952,7 @@ class Lab(QtWidgets.QWidget):
             "first_strike": self.first_strike.value(),
             "strike_interval": self.strike_interval.value(),
             "capture_every": self.capture_every.value(),
-            "group": self.group.value(),
-            "save_every": self.save_every.value(),
+            "grouped": self.grouped.isChecked(),
             "folder_name": self.folder_name.text(),
         }
 
@@ -2199,8 +1979,6 @@ class Lab(QtWidgets.QWidget):
             (self.first_strike, "first_strike"),
             (self.strike_interval, "strike_interval"),
             (self.capture_every, "capture_every"),
-            (self.group, "group"),
-            (self.save_every, "save_every"),
         ]
 
         for widget, key in pairs:
@@ -2211,6 +1989,7 @@ class Lab(QtWidgets.QWidget):
             str(stored.get("first_seed", "continue automatically"))
         )
 
+        self.grouped.setChecked(bool(stored.get("grouped", False)))
         self.folder_name.setText(stored.get("folder_name", ""))
 
         self.refresh_existing()

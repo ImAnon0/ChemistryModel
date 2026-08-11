@@ -163,6 +163,11 @@ class OpenBox:
         self.trapped = []
         self.replaced = 0
 
+        # Slots replaced by the most recent choose/apply call. The
+        # batch runner uses this to give each incoming atom a fresh
+        # identity, including H -> H replacements.
+        self.last_replaced_slots = []
+
         self.last_time = 0.0
 
     @property
@@ -273,6 +278,8 @@ class OpenBox:
         # each decide and then be updated together, which rebuilds
         # the neighbour table once instead of once per box.
 
+        self.last_replaced_slots = []
+
         elapsed_ps = (now - self.last_time) / 1000.0
 
         if elapsed_ps <= 0:
@@ -367,6 +374,7 @@ class OpenBox:
         )
 
         self.replaced += len(leaving)
+        self.last_replaced_slots = list(leaving)
 
         return leaving, arriving, places
 
