@@ -97,7 +97,7 @@ def formaldehyde_geometry(donor_length, transfer_length, spectators=None):
 
 
 def build(physics="high_fidelity", mixing=None, sato=None,
-          flatten=None, cap=None):
+          flatten=None, cap=None, ch_depth=None):
     cls = (
         HighFidelityBatchedReactiveSimulation if physics == "high_fidelity"
         else BatchedReactiveSimulation
@@ -139,6 +139,41 @@ def build(physics="high_fidelity", mixing=None, sato=None,
         high_fidelity_torch.H_TRANSFER_LOWERING_CAP = (
             None if float(cap) < 0 else float(cap)
         )
+
+    if ch_depth is not None:
+        # Diagnostic only. The C-H entry is a single generic depth shared by
+        # every carbon, so an aldehydic value here is wrong for methane and
+        # everything else. The point is to ask whether the spurious minimum
+        # is a separate defect or just this number showing up as a structure,
+        # not to propose it as a fix.
+        #
+        # The simulation copies the tables at construction, so this is set
+        # before the object is built and restored immediately afterwards,
+        # leaving the module untouched for anything else in the process.
+        import reactive as R
+
+        hydrogen = int(R.ELEMENT_INDEX["H"])
+        carbon = int(R.ELEMENT_INDEX["C"])
+        saved = (
+            R.BOND_DEPTH[carbon, hydrogen],
+            R.BOND_DEPTH[hydrogen, carbon],
+        )
+        R.BOND_DEPTH[carbon, hydrogen] = float(ch_depth)
+        R.BOND_DEPTH[hydrogen, carbon] = float(ch_depth)
+
+        symbols, positions = formaldehyde_geometry(1.09, 1.60)
+        try:
+            return cls(
+                boxes=[(symbols, positions + CENTRE)],
+                box_size=BOX,
+                random_seed=0,
+                relax_on_start=False,
+                device="cpu",
+                dtype=torch.float64,
+            )
+        finally:
+            R.BOND_DEPTH[carbon, hydrogen] = saved[0]
+            R.BOND_DEPTH[hydrogen, carbon] = saved[1]
 
     symbols, positions = formaldehyde_geometry(1.09, 1.60)
     return cls(
@@ -566,7 +601,7 @@ def saddle_character(sim, donor=TRAP_DONOR, transfer=TRAP_TRANSFER,
 
 
 def saddle_report(physics, donor_lengths, transfer_lengths, caps,
-                  mixing=None, relax=False):
+                  mixing=None, relax=False, ch_depth=None):
     """Locate the saddle at each cap, then check it against the reference.
 
     Three things have to be right at once, and only the first is a fit:
@@ -591,7 +626,7 @@ def saddle_report(physics, donor_lengths, transfer_lengths, caps,
           f"{'offset':>9}  character")
 
     for cap in caps:
-        sim = build(physics, mixing=mixing, cap=cap)
+        sim = build(physics, mixing=mixing, cap=cap, ch_depth=ch_depth)
 
         found = locate_saddle(sim, donor_lengths, transfer_lengths, relax=relax)
         label = "none" if cap < 0 else f"{cap:.2f}"
@@ -618,6 +653,123 @@ def saddle_report(physics, donor_lengths, transfer_lengths, caps,
     print("\noffset is the distance from the reference geometry in the")
     print("(r_CH, r_HH) plane; the grid step sets the floor on how small")
     print("it can be, so read it as a scale rather than a precise number.")
+
+
+def locate_trap(grid, donor_lengths, transfer_lengths, saddle_cell,
+                product_cell):
+    """Find the spurious minimum on the product side of the saddle, if any.
+
+    A well between the saddle and the products is not part of the reaction:
+    it is an intermediate the model invented, and a trajectory that falls in
+    has no reason to leave.  Rather than assume where it sits, this looks for
+    a genuine local minimum in the region the reaction path passes through
+    after the col, excluding the product basin itself.
+    """
+    rows, columns = grid.shape
+    best = None
+
+    for row in range(1, rows - 1):
+        for column in range(1, columns - 1):
+            # Past the col in the donor coordinate, before the products.
+            if row <= saddle_cell[0] or row >= product_cell[0]:
+                continue
+
+            centre = grid[row, column]
+            neighbourhood = grid[row - 1:row + 2, column - 1:column + 2]
+
+            if centre > neighbourhood.min():
+                continue
+
+            if best is None or centre < best[2]:
+                best = (row, column, float(centre))
+
+    if best is None:
+        return None
+
+    row, column, energy = best
+    return (
+        float(donor_lengths[row]),
+        float(transfer_lengths[column]),
+        energy,
+        (row, column),
+    )
+
+
+def escape_report(physics, donor_lengths, transfer_lengths, mixing=None,
+                  cap=None, relax=False, ch_depth=None):
+    """How deep is the trap, and how hard is it to get out?
+
+    The reaction has a real col.  What follows it is the problem: a bound
+    minimum that captures roughly as often as the transfer completes.  Two
+    numbers decide how much this matters.
+
+        depth    how far the trap sits below the products it should become
+        escape   the barrier a trapped trajectory has to climb to leave
+
+    Depth alone is misleading.  A well 0.7 eV deep with a 0.05 eV lip is a
+    speed bump: thermal motion drains it and a longer run would show the
+    products forming late.  The same well behind a 0.6 eV lip is a dead end
+    at any temperature this model runs at.  The escape barrier is the number
+    that says which of those you have, and it is the one to fix against.
+    """
+    sim = build(physics, mixing=mixing, cap=cap, ch_depth=ch_depth)
+
+    grid = surface(sim, donor_lengths, transfer_lengths, relax=relax)
+    reactant, product = basin_seeds(grid, donor_lengths, transfer_lengths)
+    if reactant is None:
+        print("could not identify both basins - widen the scan window")
+        return
+
+    saddle_cell, saddle_energy = flood_saddle(grid, reactant, product)
+    if saddle_cell is None:
+        print("no connected route between the basins on this grid")
+        return
+
+    print("reactant  r(C-H) %.3f A, r(H-H) %.3f A"
+          % (donor_lengths[reactant[0]], transfer_lengths[reactant[1]]))
+    print("saddle    r(C-H) %.3f A, r(H-H) %.3f A, %+.3f eV above reactant"
+          % (donor_lengths[saddle_cell[0]], transfer_lengths[saddle_cell[1]],
+             saddle_energy - grid[reactant]))
+    print("product   r(C-H) %.3f A, r(H-H) %.3f A, %+.3f eV\n"
+          % (donor_lengths[product[0]], transfer_lengths[product[1]],
+             grid[product] - grid[reactant]))
+
+    found = locate_trap(grid, donor_lengths, transfer_lengths,
+                        saddle_cell, product)
+    if found is None:
+        print("no spurious minimum between the saddle and the products")
+        return
+
+    donor, transfer, energy, cell = found
+
+    print("TRAP")
+    print("  r(C-H)            %.3f A" % donor)
+    print("  r(H-H)            %.3f A" % transfer)
+    print("  depth below products  %+.3f eV" % (energy - grid[product]))
+    print("  height above reactant %+.3f eV" % (energy - grid[reactant]))
+
+    # Escape barrier: flood from the trap to the products and read the level
+    # at which they join.  Same construction as the reaction saddle, so it is
+    # the true easiest way out rather than a guess at the exit direction.
+    exit_cell, exit_energy = flood_saddle(grid, cell, product)
+    if exit_cell is None:
+        print("  escape barrier    no route out to the products at all")
+        return
+
+    print("  escape barrier    %+.3f eV, over r(C-H) %.3f A, r(H-H) %.3f A"
+          % (exit_energy - energy,
+             donor_lengths[exit_cell[0]], transfer_lengths[exit_cell[1]]))
+
+    barrier = exit_energy - energy
+    thermal = 8.617e-5 * 250.0
+    print("\n  kT at 250 K is %.4f eV, so the escape barrier is %.0f kT."
+          % (thermal, barrier / thermal))
+    if barrier < 10 * thermal:
+        print("  shallow enough that thermal motion should drain it; a longer")
+        print("  run would show the products forming late rather than never")
+    else:
+        print("  deep enough to hold a trajectory for the whole run at this")
+        print("  temperature, so this is a dead end rather than a delay")
 
 
 def cap_sweep(physics, transfer_lengths, mixings, caps):
@@ -867,6 +1019,20 @@ def main():
         ),
     )
     parser.add_argument(
+        "--ch-depth", type=float, default=None,
+        help=(
+            "override the C-H bond depth in eV for this run only; "
+            "3.760 is the aldehydic value against the table's generic 4.291"
+        ),
+    )
+    parser.add_argument(
+        "--escape", action="store_true",
+        help=(
+            "locate the spurious minimum past the saddle and measure how "
+            "hard it is to escape from"
+        ),
+    )
+    parser.add_argument(
         "--saddle-check", action="store_true",
         help=(
             "report curvature and height at the three-centre point across "
@@ -911,11 +1077,20 @@ def main():
         options.transfer_min, options.transfer_max, transfer_step
     )
 
+    if options.escape:
+        escape_report(
+            options.physics, donor_lengths, transfer_lengths,
+            mixing=options.mixing, cap=options.cap, relax=options.relax,
+            ch_depth=options.ch_depth,
+        )
+        return
+
     if options.saddle_check:
         saddle_report(
             options.physics, donor_lengths, transfer_lengths,
             caps=[-1.0, 1.45, 1.36, 1.32, 1.29, 1.20],
             mixing=options.mixing, relax=options.relax,
+            ch_depth=options.ch_depth,
         )
         return
 
@@ -962,6 +1137,7 @@ def main():
         sato=options.sato,
         flatten=options.flatten,
         cap=options.cap,
+        ch_depth=options.ch_depth,
     )
 
 

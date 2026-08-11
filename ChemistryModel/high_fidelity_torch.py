@@ -386,8 +386,25 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         # two complete Morse bonds plus this H atom's over-coordination term.
         # The coefficient itself is not retuned; the invalid two-bond state is
         # replaced by the one-valence mixed state instead.
+        # Only the share of the over-coordination penalty that the two
+        # selected contacts are responsible for. The penalty is computed from
+        # the total coordination over every neighbour, but the correction
+        # replaces exactly two of them, so subtracting all of it handed any
+        # third contact a free unpenalised bond and opened a bound
+        # three-centre well. Removing the difference between the full penalty
+        # and the penalty that would remain without these two contacts leaves
+        # a third partner's restraint intact.
         excess = torch.clamp(coordination - valence, min=0.0)
-        base_h_over = self.over_penalty * excess ** 2
+        # What the hydrogen still carries once these two contacts are handed
+        # to the mixed state: one valence's worth from that state, plus every
+        # unselected contact. So the residual excess over valence is just the
+        # unselected coordination, and subtracting valence again here would
+        # wrongly cancel it. With only two contacts this is zero and the
+        # expression reduces to the old one exactly.
+        excess_rest = torch.clamp(
+            coordination - donor_taper - competitor_taper, min=0.0
+        )
+        base_h_over = self.over_penalty * (excess ** 2 - excess_rest ** 2)
 
         local_base = donor_morse + competitor_morse + base_h_over
         delta = mixed_state - local_base
@@ -397,8 +414,22 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         # valence surface smoothly around the same 0.35 taper used by the
         # bond detector. This fixes V2's premature entrance repulsion without
         # changing its treatment of the actual transfer region.
+        # Keyed on the weaker of the two contacts, not on the competitor
+        # alone. Which neighbour is called donor and which competitor comes
+        # from an argmax, and those labels swap as the hydrogen crosses over.
+        # Everything else here is symmetric under that swap; reading
+        # competitor_taper by itself was not, so an unsaturated gate put a
+        # step in the energy exactly at the crossing. Measured at 0.055 eV
+        # over 0.0002 A for an O...H...C pair 2.95 A apart, which is ordinary
+        # hydrogen bond geometry.
+        #
+        # When the donor is the stronger contact, as it usually is, the
+        # minimum is the competitor and this is identical to the old
+        # behaviour. It differs only where the two cross, which is the only
+        # place the old form was wrong.
+        weaker_contact = torch.minimum(donor_taper, competitor_taper)
         gate_fraction = torch.clamp(
-            (competitor_taper - float(H_TRANSFER_GATE_START))
+            (weaker_contact - float(H_TRANSFER_GATE_START))
             / float(H_TRANSFER_GATE_FULL - H_TRANSFER_GATE_START),
             0.0,
             1.0,
