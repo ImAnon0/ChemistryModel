@@ -481,7 +481,14 @@ class ReactiveSimulation:
             # committed to, and only for bonds that are themselves single:
             # a double bond's depth already comes from the double table and
             # should not be discounted twice.
-            partner_commitment = commitment[neighbours]
+            # Both ends of a pair must agree, because the bond energy is
+            # assembled from a half-contribution in each atom's row. Keying
+            # on the partner alone softens only the half seen from the
+            # hydrogen, and the carbon's half keeps the generic depth --
+            # giving exactly half the intended effect.
+            partner_commitment = torch.maximum(
+                commitment[:, None], commitment[neighbours]
+            )
             single_character = torch.clamp(1.0 - lower, 0.0, 1.0)
 
             softening = 1.0 - (

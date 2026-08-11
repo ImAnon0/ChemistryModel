@@ -132,7 +132,7 @@ OUTER_ELECTRON_ARRAY = np.array(
 # 0.0 disables it and reproduces the older behaviour exactly. It touches
 # every molecule holding a double or triple bond, so measure the effect
 # before raising it: the formaldehyde abstraction should reach -0.718 eV.
-ENVIRONMENT_SOFTENING = 0.0
+ENVIRONMENT_SOFTENING = 0.124
 
 OVER_COORDINATION_PENALTY = 7.778
 
