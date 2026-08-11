@@ -491,6 +491,23 @@ class Lab(QtWidgets.QWidget):
         self.capture_every = self.choice([10, 20, 40, 80, 200], 40, 0)
         left.addRow("capture every N steps", self.capture_every)
 
+        self.group = self.choice([1, 2, 4, 6, 8, 12], 8, 0)
+        left.addRow("boxes at once", self.group)
+
+        self.group_note = QtWidgets.QLabel("")
+        self.group_note.setStyleSheet("color: #666;")
+        left.addRow("", self.group_note)
+
+        self.save_every = self.choice([0, 2, 5, 10, 20], 0, 1)
+        left.addRow("save every N ps", self.save_every)
+
+        self.save_note = QtWidgets.QLabel("")
+        self.save_note.setStyleSheet("color: #666;")
+        left.addRow("", self.save_note)
+
+        for widget in (self.group, self.save_every):
+            widget.valueChanged.connect(self.refresh_existing)
+
         self.parallel = QtWidgets.QCheckBox(
             "split across the running slots"
         )
@@ -707,6 +724,39 @@ class Lab(QtWidgets.QWidget):
             self.describe_continuation()
             return
 
+        boxes = int(self.group.value())
+
+        if boxes > 1:
+            # Measured on a 4060 Ti: one box leaves the card
+            # mostly idle, and eight at once cost about twice as
+            # much as one rather than eight times.
+
+            gain = {1: 1.0, 2: 1.8, 4: 2.7, 6: 3.3, 8: 3.8,
+                    12: 4.0}.get(boxes, 3.8)
+
+            self.group_note.setText(
+                f"{boxes} boxes share one set of kernels, "
+                f"about {gain:.1f} times the throughput"
+            )
+        else:
+            self.group_note.setText(
+                "one box at a time leaves most of the card idle"
+            )
+
+        every = self.save_every.value()
+
+        if every > 0:
+            times = int(self.picoseconds.value() / every)
+
+            self.save_note.setText(
+                f"readable {times} times before it finishes; "
+                f"each save costs a few seconds"
+            )
+        else:
+            self.save_note.setText(
+                "written only when the run finishes"
+            )
+
         label, path, index = matching_folder(
             self.root, self.conditions()
         )
@@ -812,6 +862,21 @@ class Lab(QtWidgets.QWidget):
 
         return text
 
+    def planned_seeds(self, out, wanted):
+        start, taken = self.next_free_seed(out)
+
+        planned = []
+
+        cursor = start
+
+        while len(planned) < wanted:
+            if cursor not in taken:
+                planned.append(cursor)
+
+            cursor += 1
+
+        return planned
+
     def parallel_note(self):
         if not self.parallel.isChecked():
             return ""
@@ -820,20 +885,27 @@ class Lab(QtWidgets.QWidget):
 
         parts = max(1, min(self.concurrency, wanted))
 
-        share = wanted // parts
-        extra = wanted % parts
+        planned = self.planned_seeds(self.target_folder(), wanted)
 
-        counts = [
-            share + (1 if part < extra else 0)
-            for part in range(parts)
+        blocks = [planned[part::parts] for part in range(parts)]
+
+        lines = [
+            f"\n\nSplit into {parts} jobs, all writing to the "
+            "same folder:"
         ]
 
-        return (
-            f"\n\nSplit into {parts} jobs of "
-            + ", ".join(str(count) for count in counts)
-            + " runs, each with its own seeds,\nall writing to "
-            "the same folder."
-        )
+        for part, block in enumerate(blocks, start=1):
+            if not block:
+                continue
+
+            shown = ", ".join(str(value) for value in block[:6])
+
+            if len(block) > 6:
+                shown += ", ..."
+
+            lines.append(f"  part {part}: seeds {shown}")
+
+        return "\n".join(lines)
 
     def build_arguments(self):
         if self.mode_box.currentIndex() == 1:
@@ -850,6 +922,16 @@ class Lab(QtWidgets.QWidget):
             "--cool-temperature",
             f"{self.cool_temperature.value():g}",
         ]
+
+        if self.group.value() > 1:
+            arguments += [
+                "--group", str(int(self.group.value()))
+            ]
+
+        if self.save_every.value() > 0:
+            arguments += [
+                "--save-every-ps", f"{self.save_every.value():g}"
+            ]
 
         seed_text = self.first_seed.currentText().strip()
 
@@ -941,6 +1023,39 @@ class Lab(QtWidgets.QWidget):
         if self.folder_name.text().strip():
             return os.path.join(
                 self.root, self.folder_name.text().strip()
+            )
+
+        boxes = int(self.group.value())
+
+        if boxes > 1:
+            # Measured on a 4060 Ti: one box leaves the card
+            # mostly idle, and eight at once cost about twice as
+            # much as one rather than eight times.
+
+            gain = {1: 1.0, 2: 1.8, 4: 2.7, 6: 3.3, 8: 3.8,
+                    12: 4.0}.get(boxes, 3.8)
+
+            self.group_note.setText(
+                f"{boxes} boxes share one set of kernels, "
+                f"about {gain:.1f} times the throughput"
+            )
+        else:
+            self.group_note.setText(
+                "one box at a time leaves most of the card idle"
+            )
+
+        every = self.save_every.value()
+
+        if every > 0:
+            times = int(self.picoseconds.value() / every)
+
+            self.save_note.setText(
+                f"readable {times} times before it finishes; "
+                f"each save costs a few seconds"
+            )
+        else:
+            self.save_note.setText(
+                "written only when the run finishes"
             )
 
         label, path, index = matching_folder(
@@ -1083,30 +1198,43 @@ class Lab(QtWidgets.QWidget):
 
         parts = max(1, min(self.concurrency, wanted))
 
-        start, seeds = self.next_free_seed(out)
+        # Work out which seeds will actually be used, then deal
+        # them out one at a time.
+        #
+        # Giving each part a starting seed and a count only works
+        # while the free seeds run consecutively. With gaps left
+        # by earlier runs, a part told to start at 704 finds it
+        # taken and quietly runs 705 instead, while still
+        # believing 704 belongs to it - and then reports another
+        # part's finished run as its own progress.
 
-        existing = len(seeds)
+        planned = self.planned_seeds(out, wanted)
 
-        share = wanted // parts
-        extra = wanted % parts
+        blocks = [planned[part::parts] for part in range(parts)]
 
-        cursor = start
-
-        for part in range(parts):
-            count = share + (1 if part < extra else 0)
-
-            if count <= 0:
+        for part, block in enumerate(blocks):
+            if not block:
                 continue
 
             arguments = self.build_arguments()
 
-            # Replace whatever seed count and starting seed the
-            # form produced with this part's own block.
-
-            arguments = self.replaced(arguments, "--seeds", str(count))
             arguments = self.replaced(
-                arguments, "--first-seed", str(cursor)
+                arguments, "--seeds", str(len(block))
             )
+            arguments = self.replaced(
+                arguments,
+                "--seed-list",
+                ",".join(str(value) for value in block),
+            )
+
+            # An explicit list says which seeds to run, so a
+            # starting seed alongside it would only confuse
+            # matters.
+
+            if "--first-seed" in arguments:
+                position = arguments.index("--first-seed")
+
+                del arguments[position:position + 2]
 
             if "--out" not in arguments:
                 arguments += ["--out", out]
@@ -1115,13 +1243,11 @@ class Lab(QtWidgets.QWidget):
                 name=f"{os.path.basename(out)}  part {part + 1}",
                 arguments=arguments,
                 out=out,
-                runs=count,
-                seeds=range(cursor, cursor + count),
+                runs=len(block),
+                seeds=block,
             )
 
             self.jobs.append(job)
-
-            cursor += count
 
         self.save_queue()
         self.draw_jobs()
@@ -1556,10 +1682,18 @@ class Lab(QtWidgets.QWidget):
         for entry in read_index(path):
             mark = " " if entry.get("stable", True) else "!"
 
+            # A run saved partway through is worth reading but
+            # should not be mistaken for a finished one.
+
+            partial = (
+                f"  [{entry.get('picoseconds', 0):g} ps so far]"
+                if entry.get("finished") is False else ""
+            )
+
             self.results_list.addItem(
                 f"{mark} {entry.get('number', 0):03d}  "
                 f"seed {entry.get('seed', '?'):<5} "
-                f"{entry.get('headline', '')}"
+                f"{entry.get('headline', '')}{partial}"
             )
 
             self.results_paths.append(
@@ -1653,6 +1787,11 @@ class Lab(QtWidgets.QWidget):
             if entry.get("stable") is False
         ]
 
+        unfinished = [
+            entry for entry in index
+            if entry.get("finished") is False
+        ]
+
         usable = len(index) - len(unstable)
 
         lines = []
@@ -1672,6 +1811,12 @@ class Lab(QtWidgets.QWidget):
         )
 
         lines.append(f"  seeds {min(seeds)} to {max(seeds)}")
+
+        if unfinished:
+            lines.append(
+                f"  {len(unfinished)} still running, saved partway"
+            )
+
         lines.append("")
 
         lines.append("  how these were run")
@@ -2026,6 +2171,8 @@ class Lab(QtWidgets.QWidget):
             "first_strike": self.first_strike.value(),
             "strike_interval": self.strike_interval.value(),
             "capture_every": self.capture_every.value(),
+            "group": self.group.value(),
+            "save_every": self.save_every.value(),
             "folder_name": self.folder_name.text(),
         }
 
@@ -2052,6 +2199,8 @@ class Lab(QtWidgets.QWidget):
             (self.first_strike, "first_strike"),
             (self.strike_interval, "strike_interval"),
             (self.capture_every, "capture_every"),
+            (self.group, "group"),
+            (self.save_every, "save_every"),
         ]
 
         for widget, key in pairs:

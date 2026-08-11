@@ -345,8 +345,16 @@ class ReactiveSimulation:
     # --------------------------------------------------------
 
     def energy(self, positions):
+        return torch.sum(self.energy_per_atom(positions))
+
+    def energy_per_atom(self, positions):
         # Mirrors reactive.potential_energy term for term, in the
         # padded neighbour-table form.
+        #
+        # Kept per atom rather than summed, so that several
+        # independent boxes held in one tensor can each be given
+        # their own total. Summing it reproduces the old result
+        # exactly: every term here was already a sum over atoms.
 
         neighbours = self.neighbours
         mask = self.neighbour_mask.to(self.dtype)
@@ -448,7 +456,9 @@ class ReactiveSimulation:
 
         pair_energy = taper * (repulsive - attractive)
 
-        bond_total = 0.5 * torch.sum(pair_energy)
+        # Halved because each bond is counted from both ends.
+
+        bond_per_atom = 0.5 * torch.sum(pair_energy, dim=1)
 
         # ---- over-coordination penalty ----
         #
@@ -459,7 +469,7 @@ class ReactiveSimulation:
 
         excess = torch.clamp(coordination - valence, min=0.0)
 
-        over_total = self.over_penalty * torch.sum(excess ** 2)
+        over_per_atom = self.over_penalty * excess ** 2
 
         # ---- angles, from electron domain counting ----
 
@@ -524,7 +534,82 @@ class ReactiveSimulation:
             * (angle - rest[:, None, None]) ** 2
         )
 
-        return bond_total + over_total + torch.sum(angle_energy)
+        angle_per_atom = torch.sum(angle_energy, dim=(1, 2))
+
+        return bond_per_atom + over_per_atom + angle_per_atom
+
+    def replace_atoms(self, slots, symbols, positions):
+        # Swap the atoms in these slots for different ones.
+        #
+        # Replacing rather than adding and removing keeps the box
+        # the same size, which matters because every recording is
+        # a fixed-shape array and every tool downstream assumes
+        # the atom list does not change length. It is also the
+        # more honest picture: the box stands for a region of a
+        # much larger system at steady density, with material
+        # passing through rather than piling up.
+
+        import numpy as np
+
+        if not len(slots):
+            return
+
+        index = torch.tensor(
+            np.asarray(slots, dtype=np.int64),
+            device=self.device,
+            dtype=torch.long,
+        )
+
+        new_types = R.types_from_symbols(symbols)
+        new_masses = R.masses_from_symbols(symbols)
+
+        self.positions[index] = torch.tensor(
+            np.asarray(positions, dtype=float) % self.box_size,
+            device=self.device,
+            dtype=self.dtype,
+        )
+
+        # Arriving already at the temperature the box is held at,
+        # rather than as a cold lump that would have to be warmed
+        # by everything around it.
+
+        scale = np.sqrt(
+            8.617333e-5 * self.target_temperature
+            / (new_masses * 103.642)
+        )
+
+        drawn = (
+            self.random_generator.normal(size=(len(symbols), 3))
+            * scale[:, None]
+        )
+
+        self.velocities[index] = torch.tensor(
+            drawn, device=self.device, dtype=self.dtype
+        )
+
+        self.masses[index] = torch.tensor(
+            new_masses, device=self.device, dtype=self.dtype
+        )
+
+        self.types[index] = torch.tensor(
+            new_types, device=self.device, dtype=torch.long
+        )
+
+        self.types_numpy = self.types_numpy.copy()
+        self.types_numpy[np.asarray(slots)] = new_types
+
+        self.symbols = list(self.symbols)
+
+        for slot, symbol in zip(slots, symbols):
+            self.symbols[slot] = symbol
+
+        # Everything about where these atoms were is now wrong.
+
+        self.reference_positions = None
+
+        self.build_neighbours()
+
+        self.forces, self._potential_energy = self.compute_forces()
 
     def limit_move(self, movement):
         # Trims any atom that would travel further than the limit

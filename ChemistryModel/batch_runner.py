@@ -8,6 +8,7 @@ import sys
 
 import numpy as np
 
+import build_box
 import discharge
 import running
 
@@ -214,7 +215,7 @@ def resize_toward(simulation, target, rate=0.002):
 
 
 def run_one(mixture, seed, options, progress=None,
-            folder=None):
+            folder=None, on_progress_save=None):
     from recorder import Recorder
 
     simulation = build_simulation(
@@ -251,6 +252,28 @@ def run_one(mixture, seed, options, progress=None,
 
     steps_done = 0
 
+    # Everything that makes the box open rather than sealed:
+    # hydrogen leaving, fresh gas arriving, products condensing
+    # out of reach. Applied between chunks, since each changes
+    # how many atoms there are.
+
+    from open_box import OpenBox
+
+    opening = OpenBox(
+        escape_per_ps=options.escape_per_ps,
+        feed=getattr(options, "feed_ratio", None),
+        trap_per_ps=options.trap_per_ps,
+        trap_minimum_heavy=options.trap_minimum_heavy,
+        seed=seed + 31337,
+    )
+
+    symbols = list(simulation.symbols)
+
+    next_save = (
+        options.save_every_ps * 1000.0
+        if options.save_every_ps > 0 else float("inf")
+    )
+
     while steps_done < total_steps:
         simulation.target_temperature = temperature_at(
             DEFAULT_SCHEDULE, simulation.elapsed_femtoseconds
@@ -282,6 +305,9 @@ def run_one(mixture, seed, options, progress=None,
             ),
             box_size=simulation.box_size,
         )
+
+        if opening.active:
+            symbols = opening.apply(simulation, symbols)
 
         if (
             options.expand_to
@@ -316,11 +342,466 @@ def run_one(mixture, seed, options, progress=None,
             strikes_done += 1
             next_strike += options.strike_interval_fs
 
+        # Written out along the way rather than only at the
+        # end. The file is a complete run of however far it has
+        # got, so a long one can be read while the rest is still
+        # computing, and a crash costs the last few picoseconds
+        # instead of all of them.
+
+        if (
+            on_progress_save is not None
+            and options.save_every_ps > 0
+            and simulation.elapsed_femtoseconds
+            >= next_save
+        ):
+            on_progress_save(
+                recorder, simulation, time.time() - started,
+                strikes_done,
+            )
+
+            next_save += options.save_every_ps * 1000.0
+
         if not np.isfinite(simulation.potential_energy):
             print(f"  seed {seed}: went unstable, stopping early")
             break
 
+    if options.verbose:
+        for line in opening.report():
+            print(f"    {line}")
+
     return recorder, simulation, time.time() - started, strikes_done
+
+
+def apply_openings_to_group(simulation, openings, symbol_lists):
+    # Each box decides for itself what leaves and what arrives,
+    # then the whole group is updated in one go: a single call
+    # rebuilds the neighbour table and the forces, and doing that
+    # once for the lot rather than once per box is most of the
+    # point of grouping them.
+
+    import numpy as np
+
+    all_slots = []
+    all_symbols = []
+    all_places = []
+
+    for box, opening in enumerate(openings):
+        start = box * simulation.per_box
+        stop = start + simulation.per_box
+
+        positions = simulation.positions_numpy[start:stop]
+
+        symbols = symbol_lists[box]
+
+        leaving, arriving, places = opening.choose(
+            positions, symbols, simulation.box_size,
+            simulation.elapsed_femtoseconds,
+        )
+
+        if not leaving:
+            continue
+
+        for slot, symbol in zip(leaving, arriving):
+            symbols[slot] = symbol
+
+        all_slots.extend(start + slot for slot in leaving)
+        all_symbols.extend(arriving)
+        all_places.extend(places)
+
+    if all_slots:
+        simulation.replace_atoms(
+            all_slots, all_symbols, np.array(all_places)
+        )
+
+    return symbol_lists
+
+
+def strike_group(simulation, generators, options):
+    # A discharge is a column through one box, so a group of them
+    # needs one per box rather than one across the lot. Each box
+    # is handed its own slice of the positions and velocities and
+    # struck independently, with its own random channel.
+
+    import torch
+
+    positions = simulation.positions_numpy
+    velocities = simulation.velocities.detach().cpu().numpy()
+    masses = simulation.masses.detach().cpu().numpy()
+    types = simulation.types_numpy
+
+    updated = velocities.copy()
+
+    reports = []
+
+    for box in range(simulation.box_count):
+        start = box * simulation.per_box
+        stop = start + simulation.per_box
+
+        changed, report = discharge.strike(
+            positions[start:stop],
+            velocities[start:stop],
+            masses[start:stop],
+            types[start:stop],
+            simulation.box_size,
+            generators[box],
+            radius=options.strike_radius,
+            temperature=options.strike_temperature,
+            dissociation=options.strike_dissociation,
+        )
+
+        updated[start:stop] = changed
+
+        reports.append(report)
+
+    simulation.velocities = torch.tensor(
+        updated,
+        device=simulation.device,
+        dtype=simulation.dtype,
+    )
+
+    return reports
+
+
+def build_group(mixture, seeds, options):
+    # One box per seed, all the same composition and size.
+
+    kind, contents = mixture
+
+    boxes = []
+
+    for seed in seeds:
+        if kind == "molecules":
+            symbols, positions = build_box.build(
+                contents, options.box, random_seed=seed
+            )
+        else:
+            symbols, positions = build_box.loose_atoms(
+                contents,
+                options.box,
+                minimum_separation=1.25,
+                random_seed=seed,
+            )
+
+        boxes.append((symbols, positions))
+
+    return boxes
+
+
+def run_group(mixture, seeds, options, progress=None, folder=None):
+    # Several boxes advanced together in one process.
+    #
+    # A box of three hundred atoms leaves the card mostly idle, so
+    # eight of them cost about twice one rather than eight times.
+    # Everything else is as it would be running them one at a
+    # time: each keeps its own cell, its own starting positions,
+    # its own recording and its own discharges.
+
+    from recorder import Recorder
+
+    from batched_torch import BatchedReactiveSimulation
+
+    boxes = build_group(mixture, seeds, options)
+
+    simulation = BatchedReactiveSimulation(
+        boxes=boxes,
+        box_size=options.box,
+        time_step=options.time_step,
+        target_temperature=DEFAULT_SCHEDULE[0][1],
+        friction=options.friction,
+        device=options.device,
+        random_seed=seeds[0],
+    )
+
+    recorders = [
+        Recorder(
+            simulation.symbols_for(box),
+            simulation.box_size,
+            maximum_frames=options.max_frames,
+        )
+        for box in range(len(seeds))
+    ]
+
+    generators = [
+        np.random.default_rng(seed + 9001) for seed in seeds
+    ]
+
+    total_steps = int(
+        options.picoseconds * 1000.0 / options.time_step
+    )
+
+    chunk = options.capture_every
+
+    next_strike = (
+        options.first_strike_fs if options.strikes > 0 else None
+    )
+
+    strikes_done = 0
+
+    started = time.time()
+
+    steps_done = 0
+
+    stopped_early = False
+
+    # Each box needs its own flow: hydrogen leaving one is
+    # nothing to do with another, and a trap catches whatever
+    # that particular box has made.
+
+    from open_box import OpenBox
+
+    openings = [
+        OpenBox(
+            escape_per_ps=options.escape_per_ps,
+            feed=getattr(options, "feed_ratio", None),
+            trap_per_ps=options.trap_per_ps,
+            trap_minimum_heavy=options.trap_minimum_heavy,
+            seed=seed + 31337,
+        )
+        for seed in seeds
+    ]
+
+    symbol_lists = [
+        list(simulation.symbols_for(box))
+        for box in range(len(seeds))
+    ]
+
+    while steps_done < total_steps:
+        simulation.target_temperature = temperature_at(
+            DEFAULT_SCHEDULE, simulation.elapsed_femtoseconds
+        )
+
+        this_chunk = min(chunk, total_steps - steps_done)
+
+        simulation.step(this_chunk)
+
+        steps_done += this_chunk
+
+        if steps_done % (chunk * 20) == 0:
+            if progress is not None:
+                progress.show(steps_done)
+
+            if folder is not None:
+                write_heartbeat(
+                    folder, seeds[0], steps_done,
+                    total_steps, started,
+                )
+
+        potentials = simulation.potential_per_box
+        kinetics = simulation.kinetic_per_box
+        temperatures = simulation.temperature_per_box
+
+        for box, recorder in enumerate(recorders):
+            recorder.capture(
+                simulation.positions_for(box),
+                simulation.elapsed_femtoseconds,
+                float(potentials[box]),
+                float(kinetics[box]),
+                float(temperatures[box]),
+                velocities=simulation.velocities_for(box),
+                box_size=simulation.box_size,
+            )
+
+        if openings and openings[0].active:
+            symbol_lists = apply_openings_to_group(
+                simulation, openings, symbol_lists
+            )
+
+        if (
+            options.expand_to
+            and simulation.elapsed_femtoseconds
+            >= options.expand_at_fs
+        ):
+            resize_toward(
+                simulation, options.expand_to, options.expand_rate
+            )
+
+        if (
+            next_strike is not None
+            and simulation.elapsed_femtoseconds >= next_strike
+            and strikes_done < options.strikes
+        ):
+            reports = strike_group(simulation, generators, options)
+
+            if options.verbose:
+                broken = sum(
+                    report["dissociated"] for report in reports
+                )
+
+                print(
+                    f"    strike at "
+                    f"{simulation.elapsed_femtoseconds:.0f} fs: "
+                    f"{broken} bonds broken across "
+                    f"{len(reports)} boxes"
+                )
+
+            strikes_done += 1
+            next_strike += options.strike_interval_fs
+
+        # One box going bad spoils the forces for the whole group,
+        # since they share a tensor. Better to stop and say which.
+
+        if not np.all(np.isfinite(potentials)):
+            bad = [
+                seeds[box]
+                for box in range(len(seeds))
+                if not np.isfinite(potentials[box])
+            ]
+
+            print(
+                f"  seeds {bad}: went unstable, stopping the "
+                f"whole group early"
+            )
+
+            stopped_early = True
+
+            break
+
+    return (
+        recorders,
+        simulation,
+        time.time() - started,
+        strikes_done,
+        stopped_early,
+    )
+
+
+def summarise_run(recorder, simulation, seed, seconds, strikes,
+                  options, analysis):
+    # Everything written about one finished run, whether it was
+    # computed alone or alongside others.
+
+    result = analysis.analyse(
+        recorder, stride=options.stride, structures=False
+    )
+
+    return {
+        "number": 0,
+        "file": f"run_s{seed:04d}.npz",
+        "mixture": options.mixture,
+        "seed": seed,
+        "box": round(float(simulation.box_size), 2),
+        "atoms": len(recorder.symbols),
+        "picoseconds": round(
+            (recorder.times[-1] - recorder.times[0]) / 1000.0, 3
+        ),
+        "strikes": strikes,
+        "strike_temperature": options.strike_temperature,
+        "strike_dissociation": options.strike_dissociation,
+        "expand_to": options.expand_to,
+        "expand_at_fs": options.expand_at_fs,
+        "final_box": round(float(simulation.box_size), 2),
+        "hot_until_fs": options.hot_until_fs,
+        "hot_temperature": options.hot_temperature,
+        "cool_temperature": options.cool_temperature,
+        "frames": len(recorder),
+        "wall_seconds": round(seconds, 1),
+        "headline": analysis.headline(result),
+        "final_species": sorted({
+            item["formula"] for item in result["final"]
+            if item["heavy"] >= 2
+        }),
+        "closed_shell": sorted({
+            item["formula"] for item in result["final"]
+            if item["heavy"] >= 2 and item["closed_shell"]
+        }),
+        "species_seen": sorted(result["seen"]),
+        "heavy_bonds_formed": sum(
+            1 for event in result["heavy_events"]
+            if event[1] == "formed"
+        ),
+        "late_formed": result["late_formed"],
+        "late_broke": result["late_broke"],
+        "turnovers": result["turnovers"],
+        "largest_closed": result["largest_closed"],
+        "largest_closed_heavy": result["largest_closed_heavy"],
+        "largest_any": result.get("largest_any", 0),
+        "largest_any_heavy": result.get("largest_any_heavy", 0),
+        "most_carbon": result.get("most_carbon", 0),
+        "best_tail": result.get("best_tail", 0),
+        "best_chain": result.get("best_chain", 0),
+        "amphiphiles": result.get("amphiphiles", 0),
+        "species_count": result["species_count"],
+        "stable": result.get("stable", True),
+        "energy_jumps": result.get("energy_jumps", 0),
+        "largest_energy_jump": result.get(
+            "largest_energy_jump", 0.0
+        ),
+        "final_temperature": result["temperature"]["final"],
+        "final_potential": result["potential"]["final"],
+    }
+
+
+def run_grouped(planned, mixture, options, progress):
+    import analysis
+
+    groups = [
+        planned[start:start + options.group]
+        for start in range(0, len(planned), options.group)
+    ]
+
+    # The progress bar counts whatever it is told a run is, and
+    # in this mode a run is a whole group. Left as the number of
+    # seeds it would think there were eight times as many still
+    # to do, and quote a finishing time eight times too far away.
+
+    progress.total_runs = len(groups)
+
+    print(
+        f"running {options.group} boxes at a time, "
+        f"{len(groups)} group"
+        + ("s" if len(groups) != 1 else "")
+        + f", {len(planned)} runs in all"
+    )
+    print()
+
+    for group in groups:
+        progress.start_run()
+
+        outcome = run_group(
+            mixture, group, options, progress, options.out
+        )
+
+        recorders, simulation, seconds, strikes, stopped = outcome
+
+        progress.finish_run()
+        progress.clear()
+
+        # The time is shared, so each run is charged its share.
+
+        each = seconds / max(len(group), 1)
+
+        for index, seed in enumerate(group):
+            recorder = recorders[index]
+
+            path = os.path.join(
+                options.out, f"run_s{seed:04d}.npz"
+            )
+
+            recorder.save(path)
+
+            entry = summarise_run(
+                recorder, simulation, seed, each, strikes,
+                options, analysis,
+            )
+
+            write_entry(options.out, entry)
+
+            print(
+                f"seed {seed:<5d} {each:6.1f} s  "
+                f"{len(recorder):5d} frames  "
+                f"-> {entry['headline']}"
+            )
+
+        rebuild_index(options.out)
+
+        print()
+
+        if stopped:
+            print(
+                "  stopped early, so the rest of this group is "
+                "shorter than asked for"
+            )
+            print()
 
 
 def continuation_state(source_path, target_path):
@@ -986,6 +1467,14 @@ def main():
     parser.add_argument("--mixture", default="H rich loose")
     parser.add_argument("--seeds", type=int, default=10)
     parser.add_argument(
+        "--seed-list", default=None,
+        help=(
+            "exactly which seeds to run, comma separated. Used "
+            "when several processes share a folder and the free "
+            "seeds are not contiguous"
+        )
+    )
+    parser.add_argument(
         "--first-seed", type=int, default=None,
         help=(
             "where to start the seed sequence; by default it "
@@ -1035,6 +1524,50 @@ def main():
             "--ps picoseconds, rather than starting fresh ones"
         )
     )
+    parser.add_argument(
+        "--escape-per-ps", type=float, default=0.0,
+        help=(
+            "how many hydrogen molecules leave the box each "
+            "picosecond. H2 is light enough to escape the planet, "
+            "which is why the early atmosphere grew less reducing"
+        )
+    )
+    parser.add_argument(
+        "--feed", default=None,
+        help=(
+            "what arrives to replace whatever leaves, as "
+            "C:2,H:5,N:1,O:1. Defaults to the starting mixture, "
+            "which is what a volcano venting the same rock over "
+            "and over would give"
+        )
+    )
+    parser.add_argument(
+        "--trap-per-ps", type=float, default=0.0,
+        help=(
+            "how many formed molecules are taken out of reach "
+            "each picosecond, as Miller's cold trap did"
+        )
+    )
+    parser.add_argument(
+        "--trap-minimum-heavy", type=int, default=3,
+        help="smallest molecule the trap will catch"
+    )
+    parser.add_argument(
+        "--save-every-ps", type=float, default=0.0,
+        help=(
+            "write the recording and its index entry this often "
+            "rather than only at the end, so a long run can be "
+            "read while the rest of it is still computing"
+        )
+    )
+    parser.add_argument(
+        "--group", type=int, default=1,
+        help=(
+            "how many boxes to advance together in one process. "
+            "A single box leaves the card mostly idle, so eight "
+            "at once cost about twice one rather than eight times"
+        )
+    )
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument(
         "--out", default=None,
@@ -1074,6 +1607,28 @@ def main():
         )
 
     mixture = STARTS[options.mixture]
+
+    # What replaces whatever leaves. Left alone, it matches the
+    # mixture the box started from, so the composition is held
+    # steady rather than drifting as material passes through.
+
+    options.feed_ratio = None
+
+    if options.feed:
+        options.feed_ratio = {}
+
+        for piece in options.feed.split(","):
+            if ":" not in piece:
+                continue
+
+            name, share = piece.split(":", 1)
+
+            try:
+                options.feed_ratio[name.strip()] = float(share)
+            except ValueError:
+                continue
+    elif mixture[0] == "atoms":
+        options.feed_ratio = dict(mixture[1])
 
     global DEFAULT_SCHEDULE
 
@@ -1165,21 +1720,50 @@ def main():
         label=options.mixture,
     )
 
-    planned = []
+    if options.seed_list:
+        # An explicit list wins over anything worked out here.
+        # Splitting a batch across processes leaves each part with
+        # seeds that need not be contiguous, and guessing them
+        # from a starting point plus a count gets it wrong the
+        # moment there is a gap.
 
-    seed = options.first_seed
+        planned = []
 
-    while len(planned) < options.seeds:
-        if seed not in used:
-            planned.append(seed)
+        for piece in options.seed_list.split(","):
+            piece = piece.strip()
 
-        seed += 1
+            if not piece:
+                continue
 
-    skipped = [
-        value for value in
-        range(options.first_seed, planned[-1] + 1)
-        if value in used
-    ]
+            try:
+                value = int(piece)
+            except ValueError:
+                continue
+
+            if value not in used:
+                planned.append(value)
+    else:
+        planned = []
+
+        seed = options.first_seed
+
+        while len(planned) < options.seeds:
+            if seed not in used:
+                planned.append(seed)
+
+            seed += 1
+
+    if not planned:
+        print("every requested seed is already here, nothing to do")
+
+        running.remove_lock(options.out)
+
+        return
+
+    skipped = sorted(
+        value for value in used
+        if min(planned) <= value <= max(planned)
+    )
 
     if skipped:
         print(
@@ -1208,11 +1792,46 @@ def main():
 def run_all(planned, mixture, options, index, index_path, progress):
     import analysis
 
+    if options.group > 1:
+        run_grouped(planned, mixture, options, progress)
+        return
+
     for seed in planned:
         progress.start_run()
 
+        def save_progress(recorder, simulation, seconds, strikes,
+                          seed=seed):
+            # The same writing that happens at the end, done
+            # early. Whatever is on disk is a complete run of
+            # however far it has got.
+
+            path = os.path.join(
+                options.out, f"run_s{seed:04d}.npz"
+            )
+
+            recorder.save(path)
+
+            entry = summarise_run(
+                recorder, simulation, seed, seconds, strikes,
+                options, analysis,
+            )
+
+            entry["finished"] = False
+
+            write_entry(options.out, entry)
+
+            rebuild_index(options.out)
+
+            progress.clear()
+
+            print(
+                f"  seed {seed}: "
+                f"{entry['picoseconds']:g} ps saved so far"
+            )
+
         recorder, simulation, seconds, strikes = run_one(
-            mixture, seed, options, progress, options.out
+            mixture, seed, options, progress, options.out,
+            save_progress if options.save_every_ps > 0 else None,
         )
 
         progress.finish_run()
@@ -1291,6 +1910,8 @@ def run_all(planned, mixture, options, index, index_path, progress):
             "final_temperature": result["temperature"]["final"],
             "final_potential": result["potential"]["final"],
         }
+
+        entry["finished"] = True
 
         write_entry(options.out, entry)
 
