@@ -1,0 +1,48 @@
+{
+  "id": "SP_000142",
+  "formula": "CN2H2",
+  "atoms": 5,
+  "heavy_atoms": 3,
+  "graph_fingerprint": "99b12b628b5351cb986a128fc91ad36d6601802a76143b50f33adc76cde018c4",
+  "payload": "SP_000142.npz",
+  "source": {
+    "recording": "runs\\closed_control_fixed\\run_s0902.npz",
+    "frame": 214,
+    "time_fs": 2150.0,
+    "temperature_K": 411.7239990234375,
+    "box_A": 19.0,
+    "atom_ids": [
+      47,
+      111,
+      152,
+      176,
+      185
+    ],
+    "identity_history": true,
+    "seed": 902,
+    "mixture": "carbon rich",
+    "batch": "closed_control_fixed"
+  },
+  "stats": {
+    "observations": 1786,
+    "formations": 1,
+    "appearances": 1,
+    "runs_seen": 1,
+    "longest_observed_lifetime_fs": 17850.0
+  },
+  "sources": {
+    "runs/closed_control_fixed/run_s0902.npz": {
+      "recording": "runs\\closed_control_fixed\\run_s0902.npz",
+      "seed": 902,
+      "mixture": "carbon rich",
+      "batch": "closed_control_fixed",
+      "observations": 1786,
+      "formations": 1,
+      "appearances": 1,
+      "first_fs": 2150.0,
+      "last_fs": 20000.0
+    }
+  },
+  "note": "",
+  "saved_unix": 1786425561.4411945
+}

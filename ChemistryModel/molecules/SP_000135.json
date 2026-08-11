@@ -1,0 +1,84 @@
+{
+  "id": "SP_000135",
+  "formula": "C3OH4",
+  "atoms": 8,
+  "heavy_atoms": 4,
+  "graph_fingerprint": "e58307a0818a5dffc4b70e7e4c770557b4602d03897f5fa34426db85478fca5f",
+  "payload": "SP_000135.npz",
+  "source": {
+    "recording": "runs\\closed_control_fixed\\run_s0902.npz",
+    "frame": 66,
+    "time_fs": 670.0,
+    "temperature_K": 722.5808715820312,
+    "box_A": 19.0,
+    "atom_ids": [
+      2,
+      107,
+      114,
+      178,
+      260,
+      292,
+      315,
+      326
+    ],
+    "identity_history": true,
+    "seed": 902,
+    "mixture": "carbon rich",
+    "batch": "closed_control_fixed"
+  },
+  "stats": {
+    "observations": 7824,
+    "formations": 4,
+    "appearances": 4,
+    "runs_seen": 4,
+    "longest_observed_lifetime_fs": 19770.0
+  },
+  "sources": {
+    "runs/closed_control_fixed/run_s0902.npz": {
+      "recording": "runs\\closed_control_fixed\\run_s0902.npz",
+      "seed": 902,
+      "mixture": "carbon rich",
+      "batch": "closed_control_fixed",
+      "observations": 1934,
+      "formations": 1,
+      "appearances": 1,
+      "first_fs": 670.0,
+      "last_fs": 20000.0
+    },
+    "runs/closed_control_fixed/run_s0904.npz": {
+      "recording": "runs\\closed_control_fixed\\run_s0904.npz",
+      "seed": 904,
+      "mixture": "carbon rich",
+      "batch": "closed_control_fixed",
+      "observations": 1978,
+      "formations": 1,
+      "appearances": 1,
+      "first_fs": 230.0,
+      "last_fs": 20000.0
+    },
+    "runs/open_escape_fixed/run_s0902.npz": {
+      "recording": "runs\\open_escape_fixed\\run_s0902.npz",
+      "seed": 902,
+      "mixture": "carbon rich",
+      "batch": "open_escape_fixed",
+      "observations": 1934,
+      "formations": 1,
+      "appearances": 1,
+      "first_fs": 670.0,
+      "last_fs": 20000.0
+    },
+    "runs/open_escape_fixed/run_s0904.npz": {
+      "recording": "runs\\open_escape_fixed\\run_s0904.npz",
+      "seed": 904,
+      "mixture": "carbon rich",
+      "batch": "open_escape_fixed",
+      "observations": 1978,
+      "formations": 1,
+      "appearances": 1,
+      "first_fs": 230.0,
+      "last_fs": 20000.0
+    }
+  },
+  "note": "",
+  "saved_unix": 1786425559.8938186
+}

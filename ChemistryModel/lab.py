@@ -13,6 +13,9 @@ from pyqtgraph.Qt import QtCore, QtGui, QtWidgets
 
 import mixtures
 import running
+import molecule_library as molecule_store
+import molecule_scanner
+import characterisation_results as character_results
 
 
 # ============================================================
@@ -21,9 +24,10 @@ import running
 #
 #   py lab.py
 #
-# Three tabs. Run builds a job and queues it. Batches shows what
+# Four tabs. Run builds a job and queues it. Batches shows what
 # is running, what is waiting and what has finished. Results
-# reads the reports.
+# reads the reports. Molecules captures structures discovered in
+# recorded trajectories for later controlled characterisation.
 #
 # Batches are launched as separate processes rather than run
 # inside this one. That keeps batch_runner.py usable from the
@@ -39,6 +43,8 @@ TEMPLATE_FILE = "lab_templates.json"
 POLL_MILLISECONDS = 1500
 
 DEFAULT_CONCURRENCY = 3
+GROUP_SIZE = 8
+CHARACTERISATION_ROOT = "characterisation"
 
 
 STATES = ("queued", "running", "done", "stopped", "failed")
@@ -213,11 +219,13 @@ class Choice(QtWidgets.QComboBox):
 
 class Job:
 
-    def __init__(self, name, arguments, out, runs, seeds=None):
+    def __init__(self, name, arguments, out, runs, seeds=None,
+                 runner="batch_runner.py"):
         self.name = name
         self.arguments = arguments
         self.out = out
         self.runs = runs
+        self.runner = runner
 
         # Which seeds belong to this job. Several jobs can share
         # one folder, so counting everything in that folder would
@@ -234,6 +242,7 @@ class Job:
 
         self.run_fraction = 0.0
         self.run_seed = None
+        self.inflight_runs = 1
         self.started = None
         self.finished = None
         self.completed = 0
@@ -248,6 +257,7 @@ class Job:
             "state": self.state,
             "pid": self.pid,
             "seeds": self.seeds,
+            "runner": self.runner,
         }
 
     @classmethod
@@ -256,6 +266,7 @@ class Job:
             stored["name"], stored["arguments"],
             stored["out"], stored["runs"],
             stored.get("seeds"),
+            stored.get("runner", "batch_runner.py"),
         )
 
         job.state = stored.get("state", "queued")
@@ -287,9 +298,13 @@ class Job:
             )
 
             self.run_seed = beat.get("seed")
+            self.inflight_runs = max(
+                1, int(beat.get("boxes_in_group", 1) or 1)
+            )
         else:
             self.run_fraction = 0.0
             self.run_seed = None
+            self.inflight_runs = 1
 
         index = read_index(self.out)
 
@@ -311,7 +326,9 @@ class Job:
         # minutes.
 
         return min(
-            (self.completed + self.run_fraction) / self.runs, 1.0
+            (self.completed + self.run_fraction * self.inflight_runs)
+            / self.runs,
+            1.0,
         )
 
     @property
@@ -356,6 +373,8 @@ class Lab(QtWidgets.QWidget):
         self.tabs.addTab(self.build_run_tab(), "Run")
         self.tabs.addTab(self.build_batches_tab(), "Batches")
         self.tabs.addTab(self.build_results_tab(), "Results")
+        self.tabs.addTab(self.build_molecules_tab(), "Molecules")
+        self.tabs.currentChanged.connect(self.on_tab_changed)
 
         layout.addWidget(self.tabs)
 
@@ -491,12 +510,12 @@ class Lab(QtWidgets.QWidget):
         left.addRow("capture every N steps", self.capture_every)
 
         self.grouped = QtWidgets.QCheckBox(
-            "advance runs together on the GPU"
+            "8 boxes at once, one group at a time"
         )
         self.grouped.setToolTip(
-            "Use batch_runner.py's --group mode. The selected runs "
-            "are advanced together inside one process instead of "
-            "launching separate parallel jobs."
+            "Use batch_runner.py's grouped GPU mode with the fixed lab rule: "
+            "up to 8 boxes are advanced together, and the next group starts "
+            "only after the current group has completely finished."
         )
         self.grouped.stateChanged.connect(self.refresh_existing)
         left.addRow("group runs", self.grouped)
@@ -813,9 +832,10 @@ class Lab(QtWidgets.QWidget):
         return text
 
     def group_size(self):
-        # The checkbox means "group this batch": however many runs
-        # were requested are advanced together in the grouped path.
-        return max(1, int(self.seeds.value()))
+        # Hard lab rule: one grouped process advances at most eight boxes.
+        # batch_runner.py already processes its groups sequentially, so a
+        # 26-run request becomes 8 + 8 + 8 + 2, never several groups at once.
+        return GROUP_SIZE
 
     def group_note(self):
         if not self.grouped.isChecked():
@@ -827,9 +847,9 @@ class Lab(QtWidgets.QWidget):
 
         return (
             f"\n\nGrouped GPU mode: up to {size} runs are advanced "
-            f"together in one process ({groups} group"
+            f"together; {groups} group"
             + ("s" if groups != 1 else "")
-            + ")."
+            + " will run one after another."
         )
 
     def build_arguments(self):
@@ -1065,6 +1085,1195 @@ class Lab(QtWidgets.QWidget):
         self.tabs.setCurrentIndex(1)
 
     # --------------------------------------------------------
+    # Molecules tab
+
+    def build_molecules_tab(self):
+        page = QtWidgets.QWidget()
+        outer = QtWidgets.QHBoxLayout(page)
+        outer.setContentsMargins(8, 8, 8, 8)
+
+        font = QtGui.QFont("Consolas")
+        font.setPointSize(10)
+
+        # The Molecules page is deliberately built from splitters rather than
+        # fixed nested layouts. Characterisation output grows much faster than
+        # the controls above it, so the useful amount of screen space depends
+        # on what is being inspected. Every major pane can now be resized by
+        # dragging its separator.
+
+        main_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
+        main_splitter.setChildrenCollapsible(False)
+        outer.addWidget(main_splitter)
+
+        # ----------------------------------------------------
+        # Left: selected molecule + controlled experiments
+
+        research_widget = QtWidgets.QWidget()
+        research_layout = QtWidgets.QVBoxLayout(research_widget)
+        research_layout.setContentsMargins(0, 0, 0, 0)
+
+        research_splitter = QtWidgets.QSplitter(
+            QtCore.Qt.Orientation.Vertical
+        )
+        research_splitter.setChildrenCollapsible(False)
+        research_layout.addWidget(research_splitter)
+
+        # Selected molecule / natural discovery information.
+        selected_panel = QtWidgets.QWidget()
+        selected_layout = QtWidgets.QVBoxLayout(selected_panel)
+        selected_layout.setContentsMargins(0, 0, 0, 0)
+
+        title = QtWidgets.QLabel("selected molecule")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        selected_layout.addWidget(title)
+
+        self.character_molecule = QtWidgets.QComboBox()
+        self.character_molecule.currentIndexChanged.connect(
+            self.on_character_molecule_changed
+        )
+        selected_layout.addWidget(self.character_molecule)
+
+        self.character_selected = QtWidgets.QPlainTextEdit()
+        self.character_selected.setReadOnly(True)
+        self.character_selected.setLineWrapMode(
+            QtWidgets.QPlainTextEdit.LineWrapMode.NoWrap
+        )
+        self.character_selected.setFont(font)
+        selected_layout.addWidget(self.character_selected, stretch=1)
+
+        research_splitter.addWidget(selected_panel)
+
+        # New controlled experiment controls.
+        test_panel = QtWidgets.QWidget()
+        test_layout = QtWidgets.QVBoxLayout(test_panel)
+        test_layout.setContentsMargins(0, 4, 0, 4)
+
+        new_title = QtWidgets.QLabel("new controlled test")
+        new_title.setStyleSheet("font-weight: bold;")
+        test_layout.addWidget(new_title)
+
+        form = QtWidgets.QFormLayout()
+
+        self.character_test = QtWidgets.QComboBox()
+        self.character_test.addItems([
+            "isolated",
+            "with partner",
+        ])
+        self.character_test.currentIndexChanged.connect(
+            self.on_character_test_mode
+        )
+        form.addRow("test", self.character_test)
+
+        self.character_physics = QtWidgets.QComboBox()
+        self.character_physics.addItem("standard", "standard")
+        self.character_physics.addItem(
+            "high fidelity (experimental)", "high_fidelity"
+        )
+        self.character_physics.setToolTip(
+            "Characterisation only. Standard uses the same reactive potential "
+            "as discovery. High fidelity adds experimental competitive "
+            "valence-state mixing for transferring hydrogen; normal soup runs "
+            "are not changed."
+        )
+        form.addRow("physics", self.character_physics)
+
+        self.character_partner = QtWidgets.QComboBox()
+        self.character_partner.setEnabled(False)
+        form.addRow("partner", self.character_partner)
+
+        self.character_impact_target = QtWidgets.QComboBox()
+        self.character_impact_target.addItem("random / COM", "com")
+        self.character_impact_target.addItem("carbon", "carbon")
+        self.character_impact_target.addItem("oxygen", "oxygen")
+        self.character_impact_target.addItem("hydrogen", "hydrogen")
+        self.character_impact_target.setEnabled(False)
+        self.character_impact_target.setToolTip(
+            "Choose where the incoming partner trajectory is aimed. Random / "
+            "COM preserves the existing baseline. Element choices aim the "
+            "partner through a randomly selected atom of that element. Targeted "
+            "mode now chooses a clear line-of-sight attack direction so another "
+            "atom is not deliberately sitting in the beam; reactive physics still "
+            "decides what happens."
+        )
+        form.addRow("aim at", self.character_impact_target)
+
+        self.character_approach = self.choice(
+            [0.5, 1, 1.5, 2, 3, 5], 2, 1
+        )
+        self.character_approach.setEnabled(False)
+        self.character_approach.setToolTip(
+            "Directed centre-of-mass approach speed relative to the normal "
+            "thermal RMS atomic speed already generated for that box. This "
+            "changes the collision energy without prescribing any reaction."
+        )
+        form.addRow("approach (thermal x)", self.character_approach)
+
+        self.character_start_gap = self.choice(
+            [1.5, 2, 2.5, 3, 4], 2.5, 1
+        )
+        self.character_start_gap.setEnabled(False)
+        self.character_start_gap.setToolTip(
+            "Initial surface-to-surface clearance before the two randomly "
+            "oriented reactants are aimed directly at one another."
+        )
+        form.addRow("start gap (A)", self.character_start_gap)
+
+        self.character_temperature = self.choice(
+            [100, 200, 250, 300, 500, 750, 1000, 1500, 2000], 250, 0
+        )
+        form.addRow("temperature (K)", self.character_temperature)
+
+        self.character_duration = self.choice(
+            [1, 2, 5, 10, 20, 40], 10, 1
+        )
+        form.addRow("duration (ps)", self.character_duration)
+
+        self.character_box = self.choice(
+            [10, 12, 15, 19, 24, 30], 12, 1
+        )
+        form.addRow("box (A)", self.character_box)
+
+        self.character_repeats = self.choice(
+            [1, 8, 16, 24, 32, 40, 48, 64, 80, 96, 128], 8, 0
+        )
+        form.addRow("repeats", self.character_repeats)
+
+        group_rule = QtWidgets.QLabel(
+            "1, or exact multiples of 8; one 8-box group at a time"
+        )
+        group_rule.setStyleSheet("color: #555;")
+        form.addRow("grouping", group_rule)
+
+        test_layout.addLayout(form)
+
+        row = QtWidgets.QHBoxLayout()
+        self.character_run_button = self.button(
+            "Run test", self.on_character_run
+        )
+        self.character_all_button = self.button(
+            "Test all", self.on_character_not_ready
+        )
+        self.character_run_button.setEnabled(False)
+        self.character_all_button.setEnabled(False)
+        self.character_run_button.setToolTip(
+            "Queue controlled isolated or partner-collision repeats through the "
+            "standard discovery physics or the optional characterisation-only "
+            "high-fidelity mode, using the same Recorder path. Repeat count must "
+            "be 1 or a multiple of 8. Multi-repeat groups "
+            "contain exactly eight boxes and groups run strictly one after another."
+        )
+        row.addWidget(self.character_run_button)
+        row.addWidget(self.character_all_button)
+        test_layout.addLayout(row)
+
+        research_splitter.addWidget(test_panel)
+
+        # Characterisation results. This is the pane that benefits most from
+        # extra room, so it receives the remaining height by default.
+        results_panel = QtWidgets.QWidget()
+        results_layout = QtWidgets.QVBoxLayout(results_panel)
+        results_layout.setContentsMargins(0, 4, 0, 0)
+
+        results_header = QtWidgets.QHBoxLayout()
+        results_title = QtWidgets.QLabel("characterisation results")
+        results_title.setStyleSheet("font-weight: bold;")
+        results_header.addWidget(results_title)
+        results_header.addStretch(1)
+        results_header.addWidget(
+            self.button("Refresh tests", self.on_refresh_character_results)
+        )
+        results_layout.addLayout(results_header)
+
+        self.character_experiment_list = QtWidgets.QListWidget()
+        self.character_experiment_list.setFont(font)
+        self.character_experiment_list.currentRowChanged.connect(
+            self.on_character_experiment_changed
+        )
+        results_layout.addWidget(self.character_experiment_list, stretch=2)
+
+        result_splitter = QtWidgets.QSplitter(
+            QtCore.Qt.Orientation.Horizontal
+        )
+        result_splitter.setChildrenCollapsible(False)
+
+        self.character_result_summary = QtWidgets.QPlainTextEdit()
+        self.character_result_summary.setReadOnly(True)
+        self.character_result_summary.setLineWrapMode(
+            QtWidgets.QPlainTextEdit.LineWrapMode.NoWrap
+        )
+        self.character_result_summary.setFont(font)
+        self.character_result_summary.setMinimumWidth(220)
+        result_splitter.addWidget(self.character_result_summary)
+
+        run_widget = QtWidgets.QWidget()
+        run_side = QtWidgets.QVBoxLayout(run_widget)
+        run_side.setContentsMargins(0, 0, 0, 0)
+
+        self.character_runs = QtWidgets.QTableWidget()
+        self.character_runs.setColumnCount(7)
+        self.character_runs.setHorizontalHeaderLabels([
+            "seed", "outcome", "contact fs", "closest A",
+            "stable", "final K", "final species"
+        ])
+        self.character_runs.horizontalHeader().setStretchLastSection(True)
+        self.character_runs.setSelectionBehavior(
+            QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows
+        )
+        self.character_runs.setSelectionMode(
+            QtWidgets.QAbstractItemView.SelectionMode.SingleSelection
+        )
+        self.character_runs.verticalHeader().setVisible(False)
+        self.character_runs.itemSelectionChanged.connect(
+            self.on_character_run_selection_changed
+        )
+        self.character_runs.cellDoubleClicked.connect(
+            self.on_open_character_result_viewer
+        )
+        run_side.addWidget(self.character_runs)
+
+        self.character_open_result = self.button(
+            "Open selected run in viewer",
+            self.on_open_character_result_viewer,
+        )
+        self.character_open_result.setEnabled(False)
+        run_side.addWidget(self.character_open_result)
+
+        result_splitter.addWidget(run_widget)
+        result_splitter.setStretchFactor(0, 2)
+        result_splitter.setStretchFactor(1, 5)
+        result_splitter.setSizes([330, 830])
+        results_layout.addWidget(result_splitter, stretch=5)
+
+        research_splitter.addWidget(results_panel)
+        research_splitter.setStretchFactor(0, 1)
+        research_splitter.setStretchFactor(1, 2)
+        research_splitter.setStretchFactor(2, 4)
+        research_splitter.setSizes([155, 330, 360])
+
+        main_splitter.addWidget(research_widget)
+
+        # ----------------------------------------------------
+        # Right: automatic discovery/library panel
+
+        library_widget = QtWidgets.QWidget()
+        library = QtWidgets.QVBoxLayout(library_widget)
+        library.setContentsMargins(0, 0, 0, 0)
+
+        title = QtWidgets.QLabel("molecule library")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        library.addWidget(title)
+
+        self.molecule_scan_all_button = self.button(
+            "Scan recordings", self.on_scan_recordings
+        )
+        self.molecule_scan_all_button.setToolTip(
+            "Scan only recordings/tails not already logged in the molecule "
+            "scan manifest. Legacy identity-less and unstable runs are ignored."
+        )
+        library.addWidget(self.molecule_scan_all_button)
+
+        self.molecule_export_button = self.button(
+            "Export library...", self.on_export_molecule_library
+        )
+        self.molecule_export_button.setToolTip(
+            "Create one zip containing every stored molecule geometry, species "
+            "record, formation event and the scan manifest. Source trajectories "
+            "are referenced but are not copied into the zip."
+        )
+        library.addWidget(self.molecule_export_button)
+
+        self.molecule_scan_status = QtWidgets.QLabel("")
+        self.molecule_scan_status.setWordWrap(True)
+        self.molecule_scan_status.setStyleSheet(
+            "font-family: Consolas, monospace; color: #555;"
+        )
+        library.addWidget(self.molecule_scan_status)
+
+        library_splitter = QtWidgets.QSplitter(
+            QtCore.Qt.Orientation.Vertical
+        )
+        library_splitter.setChildrenCollapsible(False)
+
+        self.molecule_library_list = QtWidgets.QListWidget()
+        self.molecule_library_list.setFont(font)
+        self.molecule_library_list.currentRowChanged.connect(
+            self.on_library_molecule_changed
+        )
+        library_splitter.addWidget(self.molecule_library_list)
+
+        self.molecule_details = QtWidgets.QPlainTextEdit()
+        self.molecule_details.setReadOnly(True)
+        self.molecule_details.setLineWrapMode(
+            QtWidgets.QPlainTextEdit.LineWrapMode.NoWrap
+        )
+        self.molecule_details.setFont(font)
+        library_splitter.addWidget(self.molecule_details)
+
+        library_splitter.setStretchFactor(0, 3)
+        library_splitter.setStretchFactor(1, 2)
+        library_splitter.setSizes([430, 300])
+        library.addWidget(library_splitter, stretch=1)
+
+        self.molecule_open_source = self.button(
+            "Open first source in viewer", self.on_molecule_open_source
+        )
+        self.molecule_open_source.setEnabled(False)
+        library.addWidget(self.molecule_open_source)
+
+        main_splitter.addWidget(library_widget)
+        main_splitter.setStretchFactor(0, 5)
+        main_splitter.setStretchFactor(1, 2)
+        main_splitter.setSizes([1180, 460])
+
+        # Remember the user's splitter positions. The defaults above make the
+        # results pane larger than before, but after the first drag the page
+        # comes back exactly as the user left it on the next Lab launch.
+        settings = QtCore.QSettings("ChemistryModel", "Lab")
+        splitters = [
+            (main_splitter, "molecules/main_splitter"),
+            (research_splitter, "molecules/research_splitter"),
+            (result_splitter, "molecules/result_splitter"),
+            (library_splitter, "molecules/library_splitter"),
+        ]
+
+        for splitter, key in splitters:
+            state = settings.value(key)
+            if state is not None:
+                splitter.restoreState(state)
+
+            splitter.splitterMoved.connect(
+                lambda position, index, s=splitter, k=key:
+                    settings.setValue(k, s.saveState())
+            )
+
+        self.library_molecules = []
+        self.character_experiments_data = []
+        self.character_run_entries = []
+        self.reload_molecule_library()
+        self.refresh_molecule_scan_status()
+
+        return page
+
+    def on_tab_changed(self, index):
+        if self.tabs.tabText(index) != "Molecules":
+            return
+
+        if not hasattr(self, "character_molecule"):
+            return
+
+        self.reload_characterisation_results(
+            self.character_molecule.currentData()
+        )
+
+    def refresh_molecule_scan_status(self):
+        try:
+            status = molecule_scanner.manifest_summary()
+            species = len(molecule_store.list_molecules())
+        except Exception as problem:
+            self.molecule_scan_status.setText(
+                f"scan history unavailable: {problem}"
+            )
+            return
+
+        self.molecule_scan_status.setText(
+            f"{species} stored species\n"
+            f"{status['scanned']} recordings scanned, "
+            f"{status['legacy']} legacy blocked, "
+            f"{status['unstable']} unstable skipped"
+            + (f", {status['errors']} errors" if status["errors"] else "")
+        )
+
+    def on_scan_recordings(self):
+        self.molecule_scan_all_button.setEnabled(False)
+        self.molecule_scan_status.setText("finding recordings...")
+        QtWidgets.QApplication.processEvents()
+
+        def progress(update):
+            stage = update.get("stage")
+
+            if stage == "recording":
+                self.molecule_scan_status.setText(
+                    f"recording {update.get('number', '?')}/"
+                    f"{update.get('total', '?')}\n"
+                    f"{update.get('recording', '')}"
+                )
+            elif stage == "frames":
+                self.molecule_scan_status.setText(
+                    f"scanning {update.get('recording', '')}\n"
+                    f"frame {update.get('frame', '?')}/"
+                    f"{update.get('frames', '?')}"
+                )
+
+            QtWidgets.QApplication.processEvents()
+
+        try:
+            summary = molecule_scanner.scan_recordings(
+                runs_root=self.root,
+                progress=progress,
+            )
+        except Exception as problem:
+            QtWidgets.QMessageBox.warning(
+                self, "Molecule scan failed", str(problem)
+            )
+            self.molecule_scan_all_button.setEnabled(True)
+            self.refresh_molecule_scan_status()
+            return
+
+        self.reload_molecule_library()
+        self.molecule_scan_all_button.setEnabled(True)
+
+        lines = [
+            f"{summary['recordings_found']} recordings found",
+            f"{summary['scanned']} scanned, "
+            f"{summary['unchanged']} already current",
+            f"{summary['frames_counted']} new frames read",
+            f"{summary['new_species']} new species, "
+            f"{summary['formation_events']} formation/reaction events",
+        ]
+
+        skipped = []
+        if summary["legacy"]:
+            skipped.append(f"{summary['legacy']} legacy")
+        if summary["unstable"]:
+            skipped.append(f"{summary['unstable']} unstable")
+        if summary["empty"]:
+            skipped.append(f"{summary['empty']} empty")
+
+        if skipped:
+            lines.append("skipped: " + ", ".join(skipped))
+
+        if summary["errors"]:
+            lines.append(f"errors: {len(summary['errors'])}")
+
+        self.molecule_scan_status.setText("\n".join(lines))
+
+        if summary["errors"]:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Scan completed with errors",
+                "\n".join(summary["errors"][:8])
+                + ("\n..." if len(summary["errors"]) > 8 else ""),
+            )
+
+    def on_export_molecule_library(self):
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        default_name = os.path.join(
+            self.root, f"molecule_library_{stamp}.zip"
+        )
+
+        path, _ = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            "Export molecule library",
+            default_name,
+            "Zip archive (*.zip)",
+        )
+
+        if not path:
+            return
+
+        self.molecule_export_button.setEnabled(False)
+        QtWidgets.QApplication.processEvents()
+
+        try:
+            result = molecule_store.export_library(path)
+        except Exception as problem:
+            QtWidgets.QMessageBox.warning(
+                self, "Molecule export failed", str(problem)
+            )
+            self.molecule_export_button.setEnabled(True)
+            return
+
+        self.molecule_export_button.setEnabled(True)
+
+        QtWidgets.QMessageBox.information(
+            self,
+            "Molecule library exported",
+            f"{result['species']} species and {result['events']} formation/reaction "
+            f"events exported to:\n\n{result['path']}",
+        )
+
+    def reload_molecule_library(self, select_id=None):
+        current_id = select_id
+
+        if current_id is None and hasattr(self, "character_molecule"):
+            current_id = self.character_molecule.currentData()
+
+        if current_id is None and hasattr(self, "molecule_library_list"):
+            row = self.molecule_library_list.currentRow()
+            if 0 <= row < len(self.library_molecules):
+                current_id = self.library_molecules[row].get("id")
+
+        self.library_molecules = molecule_store.list_molecules()
+
+        self.molecule_library_list.blockSignals(True)
+        self.molecule_library_list.clear()
+
+        selected_row = -1
+
+        for row, item in enumerate(self.library_molecules):
+            stats = item.get("stats", {})
+            self.molecule_library_list.addItem(
+                f"{item.get('id', '?')}  "
+                f"{item.get('formula', '?'):<12} "
+                f"instances {stats.get('appearances', 0):>4}  "
+                f"formed {stats.get('formations', 0):>4}"
+            )
+
+            if item.get("id") == current_id:
+                selected_row = row
+
+        self.molecule_library_list.blockSignals(False)
+
+        # Main test dropdown.
+        self.character_molecule.blockSignals(True)
+        self.character_molecule.clear()
+
+        for item in self.library_molecules:
+            self.character_molecule.addItem(
+                f"{item.get('id', '?')} - {item.get('formula', '?')}",
+                item.get("id"),
+            )
+
+        if current_id:
+            for index in range(self.character_molecule.count()):
+                if self.character_molecule.itemData(index) == current_id:
+                    self.character_molecule.setCurrentIndex(index)
+                    break
+
+        self.character_molecule.blockSignals(False)
+
+        # Partner choices keep elemental feedstock available even before it
+        # happens to exist as a stored connected species, then add every SP.
+        partner_id = self.character_partner.currentData()
+        self.character_partner.clear()
+        self.character_partner.addItem("H atom", "atom:H")
+        self.character_partner.addItem("O atom", "atom:O")
+        self.character_partner.addItem("N atom", "atom:N")
+        self.character_partner.addItem("C atom", "atom:C")
+
+        for item in self.library_molecules:
+            self.character_partner.addItem(
+                f"{item.get('id', '?')} - {item.get('formula', '?')}",
+                item.get("id"),
+            )
+
+        if partner_id:
+            for index in range(self.character_partner.count()):
+                if self.character_partner.itemData(index) == partner_id:
+                    self.character_partner.setCurrentIndex(index)
+                    break
+
+        has_species = bool(self.library_molecules)
+        self.character_molecule.setEnabled(has_species)
+
+        if selected_row >= 0:
+            self.molecule_library_list.setCurrentRow(selected_row)
+        elif self.library_molecules:
+            self.molecule_library_list.setCurrentRow(0)
+        else:
+            self.molecule_details.setPlainText(
+                "No stored molecules yet.\n\n"
+                "Press Scan recordings. Only stable recordings with verified "
+                "per-frame atom identity are allowed to contribute."
+            )
+            self.character_selected.setPlainText(
+                "Scan recordings to populate the test dropdown."
+            )
+            self.molecule_open_source.setEnabled(False)
+
+        self.on_character_molecule_changed(
+            self.character_molecule.currentIndex()
+        )
+
+    def on_character_test_mode(self, index):
+        partner_mode = index == 1
+        self.character_partner.setEnabled(partner_mode)
+        self.character_impact_target.setEnabled(partner_mode)
+        self.character_approach.setEnabled(partner_mode)
+        self.character_start_gap.setEnabled(partner_mode)
+        self.character_run_button.setEnabled(
+            self.character_molecule.currentIndex() >= 0
+        )
+
+    def characterisation_folder(self, molecule_id, test, partner_id,
+                               temperature, duration, box,
+                               approach=None, start_gap=None,
+                               impact_target="com", physics_mode="standard"):
+        physics_suffix = (
+            "_hf_htransfer_v3" if str(physics_mode) == "high_fidelity" else ""
+        )
+
+        if test == "with_partner":
+            safe_partner = str(partner_id or "unknown").replace(":", "-")
+            target_suffix = (
+                "" if str(impact_target or "com") == "com"
+                else f"_aim{str(impact_target)}_targetv2_diagv3"
+            )
+            return os.path.join(
+                CHARACTERISATION_ROOT,
+                f"{molecule_id}_with_{safe_partner}_{temperature:g}K_"
+                f"{duration:g}ps_box{box:g}_a{float(approach):g}_g{float(start_gap):g}"
+                f"{target_suffix}{physics_suffix}",
+            )
+
+        return os.path.join(
+            CHARACTERISATION_ROOT,
+            f"{molecule_id}_isolated_{temperature:g}K_"
+            f"{duration:g}ps_box{box:g}{physics_suffix}",
+        )
+
+    def characterisation_seeds(self, out, wanted):
+        taken = entry_seeds(out)
+        planned = []
+        cursor = 0
+
+        while len(planned) < wanted:
+            if cursor not in taken:
+                planned.append(cursor)
+            cursor += 1
+
+        return planned
+
+    def _character_partner_payload(self, partner_id):
+        if not partner_id:
+            raise ValueError("pick a collision partner")
+
+        if str(partner_id).startswith("atom:"):
+            symbol = str(partner_id).split(":", 1)[1]
+            return {
+                "id": partner_id,
+                "formula": symbol,
+                "symbols": [symbol],
+                "positions": np.zeros((1, 3), dtype=float),
+            }
+
+        return molecule_store.load_molecule(partner_id)
+
+    def _required_character_box(self, molecule, partner=None, start_gap=2.5):
+        first = np.asarray(molecule.get("positions", []), dtype=float)
+        if len(first):
+            first = first - np.mean(first, axis=0)
+        first_radius = (
+            float(np.max(np.linalg.norm(first, axis=1))) if len(first) else 0.0
+        )
+
+        if partner is None:
+            if len(first) > 1:
+                return float(np.max(np.ptp(first, axis=0)) + 6.0)
+            return 6.0
+
+        second = np.asarray(partner.get("positions", []), dtype=float)
+        if len(second):
+            second = second - np.mean(second, axis=0)
+        second_radius = (
+            float(np.max(np.linalg.norm(second, axis=1))) if len(second) else 0.0
+        )
+
+        centre_distance = first_radius + second_radius + float(start_gap)
+        return float(
+            centre_distance + 2.0 * max(first_radius, second_radius) + 4.0
+        )
+
+    def on_character_run(self):
+        molecule_id = self.character_molecule.currentData()
+
+        if not molecule_id:
+            return
+
+        partner_mode = self.character_test.currentIndex() == 1
+        test = "with_partner" if partner_mode else "isolated"
+        partner_id = self.character_partner.currentData() if partner_mode else None
+        physics_mode = str(self.character_physics.currentData() or "standard")
+
+        temperature = float(self.character_temperature.value())
+        duration = float(self.character_duration.value())
+        box = float(self.character_box.value())
+        repeats = max(1, int(self.character_repeats.value()))
+        approach = float(self.character_approach.value())
+        start_gap = float(self.character_start_gap.value())
+        impact_target = (
+            str(self.character_impact_target.currentData() or "com")
+            if partner_mode else "com"
+        )
+
+        if repeats != 1 and repeats % 8 != 0:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Invalid repeat count",
+                "Characterisation repeats must be exactly 1, or a multiple "
+                "of 8 (8, 16, 24, ...). Partial groups are not allowed.",
+            )
+            return
+
+        try:
+            molecule = molecule_store.load_molecule(molecule_id)
+            partner = (
+                self._character_partner_payload(partner_id)
+                if partner_mode else None
+            )
+        except Exception as problem:
+            QtWidgets.QMessageBox.warning(
+                self, "Cannot load characterisation input", str(problem)
+            )
+            return
+
+        if partner_mode and impact_target != "com":
+            target_symbol = {
+                "carbon": "C",
+                "oxygen": "O",
+                "hydrogen": "H",
+            }.get(impact_target)
+            if target_symbol not in list(molecule.get("symbols", [])):
+                QtWidgets.QMessageBox.warning(
+                    self,
+                    "No target atom",
+                    f"{molecule_id} contains no {target_symbol or impact_target} "
+                    "atom to aim at.",
+                )
+                return
+
+        required = self._required_character_box(
+            molecule, partner=partner, start_gap=start_gap
+        )
+
+        if box + 1e-9 < required:
+            description = molecule_id
+            if partner is not None:
+                description += f" + {partner.get('id', partner_id)}"
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Box too small",
+                f"{description} needs about {required:.1f} A or more for this "
+                f"test. Pick a larger box than {box:g} A.",
+            )
+            return
+
+        out = self.characterisation_folder(
+            molecule_id,
+            test,
+            partner_id,
+            temperature,
+            duration,
+            box,
+            approach=approach,
+            start_gap=start_gap,
+            impact_target=impact_target,
+            physics_mode=physics_mode,
+        )
+        planned = self.characterisation_seeds(out, repeats)
+
+        arguments = [
+            "--molecule", str(molecule_id),
+            "--test", test,
+            "--physics", physics_mode,
+            "--temperature", f"{temperature:g}",
+            "--ps", f"{duration:g}",
+            "--box", f"{box:g}",
+            "--repeats", str(repeats),
+            "--seed-list", ",".join(str(seed) for seed in planned),
+            "--out", out,
+        ]
+
+        if partner_mode:
+            arguments += [
+                "--partner", str(partner_id),
+                "--approach-factor", f"{approach:g}",
+                "--start-gap", f"{start_gap:g}",
+                "--impact-target", impact_target,
+            ]
+
+        partner_text = ""
+        if partner is not None:
+            partner_text = f" + {partner.get('formula', partner_id)}"
+        aim_text = "" if impact_target == "com" else f" aim-{impact_target}"
+        physics_text = " HF" if physics_mode == "high_fidelity" else ""
+
+        job = Job(
+            name=(
+                f"CHAR {molecule_id} {molecule.get('formula', '')}"
+                f"{partner_text}{aim_text}{physics_text} {temperature:g}K"
+            ),
+            arguments=arguments,
+            out=out,
+            runs=repeats,
+            seeds=planned,
+            runner="characterisation_runner.py",
+        )
+
+        self.jobs.append(job)
+        self.save_queue()
+        self.draw_jobs()
+        self.tabs.setCurrentIndex(1)
+
+    def on_character_molecule_changed(self, index):
+        if index < 0 or index >= self.character_molecule.count():
+            self.character_selected.setPlainText(
+                "Scan recordings to populate the test dropdown."
+            )
+            self.character_run_button.setEnabled(False)
+            self.reload_characterisation_results(None)
+            return
+
+        self.character_run_button.setEnabled(True)
+
+        molecule_id = self.character_molecule.itemData(index)
+        selected = next(
+            (item for item in self.library_molecules
+             if item.get("id") == molecule_id),
+            None,
+        )
+
+        if selected is None:
+            return
+
+        totals = self.reload_characterisation_results(molecule_id)
+        stats = selected.get("stats", {})
+
+        lines = [
+            f"{selected.get('id', '?')}  {selected.get('formula', '?')}",
+            f"atoms          {selected.get('atoms', '?')}  "
+            f"({selected.get('heavy_atoms', '?')} heavy)",
+            f"natural        {stats.get('appearances', 0)} appearance episodes; "
+            f"{stats.get('formations', 0)} formations; "
+            f"{stats.get('runs_seen', 0)} runs",
+            f"natural life   {stats.get('longest_observed_lifetime_fs', 0):.0f} fs longest observed",
+            f"controlled     {totals.get('trials', 0)} trials across "
+            f"{totals.get('experiments', 0)} settings",
+        ]
+
+        outcomes = totals.get("outcomes", {})
+        if outcomes:
+            lines.append(
+                "test outcomes   "
+                + ", ".join(f"{name} {count}" for name, count in outcomes.items())
+            )
+
+        events = molecule_store.formation_events_for_species(molecule_id, limit=3)
+        if events:
+            lines += ["", "natural formation examples"]
+            for event in events:
+                before = self._format_event_side(event.get("reactants", []))
+                after = self._format_event_side(event.get("products", []))
+                lines.append(
+                    f"  {event.get('temperature_K', 0):.0f} K  {before} -> {after}"
+                )
+
+        self.character_selected.setPlainText("\n".join(lines))
+
+        for row, item in enumerate(self.library_molecules):
+            if item.get("id") == molecule_id:
+                if self.molecule_library_list.currentRow() != row:
+                    self.molecule_library_list.setCurrentRow(row)
+                break
+
+    def on_refresh_character_results(self):
+        molecule_id = self.character_molecule.currentData()
+        totals = self.reload_characterisation_results(molecule_id)
+
+        # Rebuild the selected molecule summary too, but block the combo signal
+        # so refreshing results cannot unexpectedly bounce the library row.
+        index = self.character_molecule.currentIndex()
+        if index >= 0:
+            self.on_character_molecule_changed(index)
+
+        return totals
+
+    def reload_characterisation_results(self, molecule_id=None):
+        if not hasattr(self, "character_experiment_list"):
+            return {"experiments": 0, "trials": 0, "stable_trials": 0, "outcomes": {}}
+
+        current_folder = None
+        current_row = self.character_experiment_list.currentRow()
+        if 0 <= current_row < len(self.character_experiments_data):
+            current_folder = self.character_experiments_data[current_row].get("folder")
+
+        if not molecule_id:
+            self.character_experiments_data = []
+        else:
+            self.character_experiments_data = character_results.list_experiments(
+                molecule_id=molecule_id,
+                root=CHARACTERISATION_ROOT,
+            )
+
+        totals = character_results.aggregate(self.character_experiments_data)
+
+        self.character_experiment_list.blockSignals(True)
+        self.character_experiment_list.clear()
+        selected_row = -1
+
+        for row, experiment in enumerate(self.character_experiments_data):
+            self.character_experiment_list.addItem(
+                character_results.experiment_label(experiment)
+            )
+            if experiment.get("folder") == current_folder:
+                selected_row = row
+
+        self.character_experiment_list.blockSignals(False)
+
+        if self.character_experiments_data:
+            self.character_experiment_list.setCurrentRow(
+                selected_row if selected_row >= 0 else 0
+            )
+        else:
+            self.character_result_summary.setPlainText(
+                "No controlled tests recorded for this molecule yet."
+                if molecule_id else
+                "Select a molecule to see its controlled tests."
+            )
+            self.character_runs.setRowCount(0)
+            self.character_run_entries = []
+            self.character_open_result.setEnabled(False)
+
+        return totals
+
+    def on_character_experiment_changed(self, row):
+        if row < 0 or row >= len(self.character_experiments_data):
+            self.character_result_summary.setPlainText(
+                "No characterisation experiment selected."
+            )
+            self.character_runs.setRowCount(0)
+            self.character_run_entries = []
+            self.character_open_result.setEnabled(False)
+            return
+
+        experiment = self.character_experiments_data[row]
+        self.character_result_summary.setPlainText(
+            "\n".join(character_results.experiment_summary_lines(experiment))
+        )
+
+        entries = list(experiment.get("entries", []))
+        self.character_run_entries = entries
+        self.character_runs.setSortingEnabled(False)
+        self.character_runs.setRowCount(len(entries))
+
+        for result_row, entry in enumerate(entries):
+            data = character_results.run_row(entry)
+            contact = data.get("contact_fs")
+            if contact is None:
+                contact_text = "-"
+            else:
+                contact_text = f"{float(contact):.1f}"
+                if data.get("confirmed_contact"):
+                    contact_text += " *"
+
+            closest = data.get("closest_A")
+            closest_text = (
+                "-" if closest is None else f"{float(closest):.3f}"
+            )
+
+            values = [
+                data.get("seed", "?"),
+                data.get("outcome", "?"),
+                contact_text,
+                closest_text,
+                "yes" if data.get("stable") else "NO",
+                (
+                    f"{float(data['final_temperature']):.0f}"
+                    if data.get("final_temperature") is not None else "?"
+                ),
+                data.get("final_species", "?"),
+            ]
+
+            tooltip = data.get("contact_tooltip", "")
+            for column, value in enumerate(values):
+                item = QtWidgets.QTableWidgetItem(str(value))
+                if column in (0, 1, 6):
+                    item.setFont(QtGui.QFont("Consolas", 9))
+                if tooltip and column in (2, 3):
+                    item.setToolTip(tooltip)
+                self.character_runs.setItem(result_row, column, item)
+
+        self.character_runs.resizeColumnsToContents()
+        self.character_runs.horizontalHeader().setStretchLastSection(True)
+
+        if entries:
+            self.character_runs.selectRow(0)
+        else:
+            self.character_open_result.setEnabled(False)
+
+    def on_character_run_selection_changed(self):
+        experiment_row = self.character_experiment_list.currentRow()
+        run_row = self.character_runs.currentRow()
+
+        if (
+            experiment_row < 0
+            or experiment_row >= len(self.character_experiments_data)
+            or run_row < 0
+            or run_row >= len(self.character_run_entries)
+        ):
+            self.character_open_result.setEnabled(False)
+            return
+
+        path = character_results.recording_path(
+            self.character_experiments_data[experiment_row],
+            self.character_run_entries[run_row],
+        )
+        self.character_open_result.setEnabled(bool(path))
+
+    def on_open_character_result_viewer(self, *unused):
+        experiment_row = self.character_experiment_list.currentRow()
+        run_row = self.character_runs.currentRow()
+
+        if (
+            experiment_row < 0
+            or experiment_row >= len(self.character_experiments_data)
+            or run_row < 0
+            or run_row >= len(self.character_run_entries)
+        ):
+            return
+
+        path = character_results.recording_path(
+            self.character_experiments_data[experiment_row],
+            self.character_run_entries[run_row],
+        )
+
+        if not path:
+            return
+
+        subprocess.Popen([
+            sys.executable, "run_reactive_gl.py",
+            "--load", path,
+        ])
+
+    def on_character_not_ready(self):
+        QtWidgets.QMessageBox.information(
+            self,
+            "Test all",
+            "Run test is now wired for isolated stored molecules. Test all stays "
+            "locked until that reconstruction path has been checked on a real "
+            "species, then partner/collision sweeps can be layered on top."
+        )
+
+    def _format_event_side(self, items):
+        parts = []
+
+        for item in items:
+            name = item.get("id") or item.get("formula", "?")
+            count = int(item.get("count", 1))
+            parts.append(name + (f" x{count}" if count > 1 else ""))
+
+        return " + ".join(parts) if parts else "?"
+
+    def on_library_molecule_changed(self, row):
+        if row < 0 or row >= len(self.library_molecules):
+            self.molecule_details.setPlainText("")
+            self.molecule_open_source.setEnabled(False)
+            return
+
+        item = self.library_molecules[row]
+        source = item.get("source", {})
+        stats = item.get("stats", {})
+        sources = item.get("sources", {})
+
+        lines = [
+            f"{item.get('id', '?')}  {item.get('formula', '?')}",
+            "=" * 52,
+            f"atoms                  {item.get('atoms', '?')}",
+            f"heavy atoms            {item.get('heavy_atoms', '?')}",
+            f"appearance episodes    {stats.get('appearances', 0)}",
+            f"formation products     {stats.get('formations', 0)}",
+            f"molecule-frame samples {stats.get('observations', 0)}",
+            f"recordings seen in     {stats.get('runs_seen', 0)}",
+            f"longest observed life  {stats.get('longest_observed_lifetime_fs', 0):.0f} fs",
+            "",
+            "first stored geometry",
+            "-" * 52,
+            f"recording              {source.get('recording', '?')}",
+            f"seed                   {source.get('seed', '?')}",
+            f"mixture                {source.get('mixture', '?')}",
+            f"time                   {source.get('time_fs', '?')} fs",
+            f"temperature            {source.get('temperature_K', '?')} K",
+        ]
+
+        if sources:
+            lines += ["", "recording sightings", "-" * 52]
+
+            ordered = sorted(
+                sources.values(),
+                key=lambda value: (
+                    str(value.get("batch", "")),
+                    value.get("seed") if value.get("seed") is not None else -1,
+                )
+            )
+
+            for seen in ordered[:8]:
+                lines.append(
+                    f"seed {str(seen.get('seed', '?')):<6} "
+                    f"instances {seen.get('appearances', 0):>4}  "
+                    f"formed {seen.get('formations', 0):>4}  "
+                    f"{seen.get('batch', '')}"
+                )
+
+            if len(ordered) > 8:
+                lines.append(f"... and {len(ordered) - 8} more recordings")
+
+        events = molecule_store.formation_events_for_species(
+            item.get("id"), limit=6
+        )
+
+        if events:
+            lines += ["", "recent formation examples", "-" * 52]
+
+            for event in events:
+                before = self._format_event_side(event.get("reactants", []))
+                after = self._format_event_side(event.get("products", []))
+                lines.append(
+                    f"{event.get('time_fs', 0):>8.0f} fs  "
+                    f"{event.get('temperature_K', 0):>6.0f} K  "
+                    f"{before} -> {after}"
+                )
+
+                formed = event.get("formed_bonds", [])
+                broken = event.get("broken_bonds", [])
+                if formed or broken:
+                    lines.append(
+                        f"           bonds +{len(formed)} / -{len(broken)}  "
+                        f"local {event.get('local_environment_elements', {})}"
+                    )
+
+        lines += [
+            "",
+            "identity note",
+            "-" * 52,
+            "SP identity currently uses the confirmed element-labelled bond",
+            "graph. Bond order/charge/radical/stereo are not yet part of it.",
+        ]
+
+        self.molecule_details.setPlainText("\n".join(lines))
+
+        recording = source.get("recording")
+        self.molecule_open_source.setEnabled(
+            bool(recording and os.path.exists(recording))
+        )
+
+        molecule_id = item.get("id")
+        for index in range(self.character_molecule.count()):
+            if self.character_molecule.itemData(index) == molecule_id:
+                if self.character_molecule.currentIndex() != index:
+                    self.character_molecule.blockSignals(True)
+                    self.character_molecule.setCurrentIndex(index)
+                    self.character_molecule.blockSignals(False)
+                    self.on_character_molecule_changed(index)
+                break
+
+    def on_molecule_open_source(self):
+        row = self.molecule_library_list.currentRow()
+
+        if row < 0 or row >= len(self.library_molecules):
+            return
+
+        source = self.library_molecules[row].get("source", {})
+        path = source.get("recording")
+
+        if not path or not os.path.exists(path):
+            return
+
+        subprocess.Popen([
+            sys.executable, "run_reactive_gl.py",
+            "--load", os.path.abspath(path),
+        ])
+
+    # --------------------------------------------------------
     # Batches tab
 
     def build_batches_tab(self):
@@ -1215,7 +2424,7 @@ class Lab(QtWidgets.QWidget):
         os.makedirs(job.out, exist_ok=True)
 
         command = [
-            sys.executable, "batch_runner.py"
+            sys.executable, job.runner
         ] + job.arguments
 
         if "--out" not in job.arguments:
@@ -1272,14 +2481,34 @@ class Lab(QtWidgets.QWidget):
             active = sum(
                 1 for job in self.jobs if job.state == "running"
             )
+            characterisation_active = any(
+                job.state == "running"
+                and job.runner == "characterisation_runner.py"
+                for job in self.jobs
+            )
 
             for job in self.jobs:
                 if active >= self.concurrency:
                     break
 
-                if job.state == "queued":
-                    self.start_job(job)
-                    active += 1
+                if job.state != "queued":
+                    continue
+
+                # Characterisation has its own hard GPU rule: one process,
+                # one group of at most eight boxes, then the next group. Do
+                # not allow two queued characterisation jobs to overlap even
+                # when the general Lab concurrency is larger than one.
+                if (
+                    job.runner == "characterisation_runner.py"
+                    and characterisation_active
+                ):
+                    continue
+
+                self.start_job(job)
+                active += 1
+
+                if job.runner == "characterisation_runner.py":
+                    characterisation_active = True
 
         self.draw_jobs()
 

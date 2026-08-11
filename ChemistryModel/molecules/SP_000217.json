@@ -1,0 +1,59 @@
+{
+  "id": "SP_000217",
+  "formula": "C4O",
+  "atoms": 5,
+  "heavy_atoms": 5,
+  "graph_fingerprint": "c20ca6637b91f44a6cdaa1cf88c173574a487363c8f855767bffda0ce02c1f92",
+  "payload": "SP_000217.npz",
+  "source": {
+    "recording": "runs\\closed_control_fixed\\run_s0907.npz",
+    "frame": 11,
+    "time_fs": 120.0,
+    "temperature_K": 2749.446044921875,
+    "box_A": 19.0,
+    "atom_ids": [
+      22,
+      87,
+      98,
+      241,
+      328
+    ],
+    "identity_history": true,
+    "seed": 907,
+    "mixture": "carbon rich",
+    "batch": "closed_control_fixed"
+  },
+  "stats": {
+    "observations": 40,
+    "formations": 0,
+    "appearances": 2,
+    "runs_seen": 2,
+    "longest_observed_lifetime_fs": 190.0
+  },
+  "sources": {
+    "runs/closed_control_fixed/run_s0907.npz": {
+      "recording": "runs\\closed_control_fixed\\run_s0907.npz",
+      "seed": 907,
+      "mixture": "carbon rich",
+      "batch": "closed_control_fixed",
+      "observations": 20,
+      "formations": 0,
+      "appearances": 1,
+      "first_fs": 120.0,
+      "last_fs": 310.0
+    },
+    "runs/open_escape_fixed/run_s0907.npz": {
+      "recording": "runs\\open_escape_fixed\\run_s0907.npz",
+      "seed": 907,
+      "mixture": "carbon rich",
+      "batch": "open_escape_fixed",
+      "observations": 20,
+      "formations": 0,
+      "appearances": 1,
+      "first_fs": 120.0,
+      "last_fs": 310.0
+    }
+  },
+  "note": "",
+  "saved_unix": 1786425627.0638454
+}

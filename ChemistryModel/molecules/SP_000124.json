@@ -1,0 +1,81 @@
+{
+  "id": "SP_000124",
+  "formula": "C2NH2",
+  "atoms": 5,
+  "heavy_atoms": 3,
+  "graph_fingerprint": "f9dc76425fb149f841f634837d6911607f3d2594fa8263fb08570398ca8b5632",
+  "payload": "SP_000124.npz",
+  "source": {
+    "recording": "runs\\closed_control_fixed\\run_s0902.npz",
+    "frame": 18,
+    "time_fs": 190.0,
+    "temperature_K": 2883.127685546875,
+    "box_A": 19.0,
+    "atom_ids": [
+      25,
+      89,
+      227,
+      294,
+      302
+    ],
+    "identity_history": true,
+    "seed": 902,
+    "mixture": "carbon rich",
+    "batch": "closed_control_fixed"
+  },
+  "stats": {
+    "observations": 162,
+    "formations": 4,
+    "appearances": 4,
+    "runs_seen": 4,
+    "longest_observed_lifetime_fs": 920.0
+  },
+  "sources": {
+    "runs/closed_control_fixed/run_s0902.npz": {
+      "recording": "runs\\closed_control_fixed\\run_s0902.npz",
+      "seed": 902,
+      "mixture": "carbon rich",
+      "batch": "closed_control_fixed",
+      "observations": 14,
+      "formations": 1,
+      "appearances": 1,
+      "first_fs": 190.0,
+      "last_fs": 320.0
+    },
+    "runs/closed_control_fixed/run_s0905.npz": {
+      "recording": "runs\\closed_control_fixed\\run_s0905.npz",
+      "seed": 905,
+      "mixture": "carbon rich",
+      "batch": "closed_control_fixed",
+      "observations": 41,
+      "formations": 1,
+      "appearances": 1,
+      "first_fs": 230.0,
+      "last_fs": 630.0
+    },
+    "runs/open_escape_fixed/run_s0902.npz": {
+      "recording": "runs\\open_escape_fixed\\run_s0902.npz",
+      "seed": 902,
+      "mixture": "carbon rich",
+      "batch": "open_escape_fixed",
+      "observations": 14,
+      "formations": 1,
+      "appearances": 1,
+      "first_fs": 190.0,
+      "last_fs": 320.0
+    },
+    "runs/open_escape_fixed/run_s0905.npz": {
+      "recording": "runs\\open_escape_fixed\\run_s0905.npz",
+      "seed": 905,
+      "mixture": "carbon rich",
+      "batch": "open_escape_fixed",
+      "observations": 93,
+      "formations": 1,
+      "appearances": 1,
+      "first_fs": 230.0,
+      "last_fs": 1150.0
+    }
+  },
+  "note": "",
+  "saved_unix": 1786425558.9483888
+}

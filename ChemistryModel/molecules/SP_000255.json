@@ -1,0 +1,46 @@
+{
+  "id": "SP_000255",
+  "formula": "N2O",
+  "atoms": 3,
+  "heavy_atoms": 3,
+  "graph_fingerprint": "f02c8e265a463c575ea054e2fb3b7475d82c036b7ed3ba437708e0694dc5ab03",
+  "payload": "SP_000255.npz",
+  "source": {
+    "recording": "runs\\identity_test\\run_s0990.npz",
+    "frame": 11,
+    "time_fs": 120.0,
+    "temperature_K": 2048.765894554377,
+    "box_A": 19.0,
+    "atom_ids": [
+      32,
+      138,
+      285
+    ],
+    "identity_history": true,
+    "seed": 990,
+    "mixture": "carbon rich",
+    "batch": "identity_test"
+  },
+  "stats": {
+    "observations": 7,
+    "formations": 0,
+    "appearances": 1,
+    "runs_seen": 1,
+    "longest_observed_lifetime_fs": 60.0
+  },
+  "sources": {
+    "runs/identity_test/run_s0990.npz": {
+      "recording": "runs\\identity_test\\run_s0990.npz",
+      "seed": 990,
+      "mixture": "carbon rich",
+      "batch": "identity_test",
+      "observations": 7,
+      "formations": 0,
+      "appearances": 1,
+      "first_fs": 120.0,
+      "last_fs": 180.0
+    }
+  },
+  "note": "",
+  "saved_unix": 1786425664.730972
+}

@@ -1,0 +1,54 @@
+{
+  "id": "SP_000267",
+  "formula": "C2NO4H4",
+  "atoms": 11,
+  "heavy_atoms": 7,
+  "graph_fingerprint": "be6b60d6dfb6420463065a20fd301af8f3a3441cafb7286d1843aa1e98ef83f5",
+  "payload": "SP_000267.npz",
+  "source": {
+    "recording": "runs\\identity_test\\run_s0990.npz",
+    "frame": 34,
+    "time_fs": 350.0,
+    "temperature_K": 1366.331336439877,
+    "box_A": 19.0,
+    "atom_ids": [
+      39,
+      95,
+      103,
+      106,
+      130,
+      193,
+      206,
+      219,
+      265,
+      269,
+      308
+    ],
+    "identity_history": true,
+    "seed": 990,
+    "mixture": "carbon rich",
+    "batch": "identity_test"
+  },
+  "stats": {
+    "observations": 13,
+    "formations": 1,
+    "appearances": 1,
+    "runs_seen": 1,
+    "longest_observed_lifetime_fs": 120.0
+  },
+  "sources": {
+    "runs/identity_test/run_s0990.npz": {
+      "recording": "runs\\identity_test\\run_s0990.npz",
+      "seed": 990,
+      "mixture": "carbon rich",
+      "batch": "identity_test",
+      "observations": 13,
+      "formations": 1,
+      "appearances": 1,
+      "first_fs": 350.0,
+      "last_fs": 470.0
+    }
+  },
+  "note": "",
+  "saved_unix": 1786425666.6737096
+}

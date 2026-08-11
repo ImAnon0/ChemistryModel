@@ -1,0 +1,188 @@
+{
+  "id": "SP_000020",
+  "formula": "OH",
+  "atoms": 2,
+  "heavy_atoms": 1,
+  "graph_fingerprint": "199bc10bf7e2fff490e3b3d35dd9626b49c3576950752a15018b19d1f1f0173e",
+  "payload": "SP_000020.npz",
+  "source": {
+    "recording": "runs\\closed_control_fixed\\run_s0900.npz",
+    "frame": 11,
+    "time_fs": 120.0,
+    "temperature_K": 2773.097900390625,
+    "box_A": 19.0,
+    "atom_ids": [
+      8,
+      201
+    ],
+    "identity_history": true,
+    "seed": 900,
+    "mixture": "carbon rich",
+    "batch": "closed_control_fixed"
+  },
+  "stats": {
+    "observations": 23135,
+    "formations": 90,
+    "appearances": 149,
+    "runs_seen": 14,
+    "longest_observed_lifetime_fs": 19880.0
+  },
+  "sources": {
+    "runs/closed_control_fixed/run_s0900.npz": {
+      "recording": "runs\\closed_control_fixed\\run_s0900.npz",
+      "seed": 900,
+      "mixture": "carbon rich",
+      "batch": "closed_control_fixed",
+      "observations": 2542,
+      "formations": 8,
+      "appearances": 12,
+      "first_fs": 120.0,
+      "last_fs": 20000.0
+    },
+    "runs/closed_control_fixed/run_s0901.npz": {
+      "recording": "runs\\closed_control_fixed\\run_s0901.npz",
+      "seed": 901,
+      "mixture": "carbon rich",
+      "batch": "closed_control_fixed",
+      "observations": 718,
+      "formations": 6,
+      "appearances": 10,
+      "first_fs": 120.0,
+      "last_fs": 4660.0
+    },
+    "runs/closed_control_fixed/run_s0902.npz": {
+      "recording": "runs\\closed_control_fixed\\run_s0902.npz",
+      "seed": 902,
+      "mixture": "carbon rich",
+      "batch": "closed_control_fixed",
+      "observations": 2704,
+      "formations": 3,
+      "appearances": 10,
+      "first_fs": 120.0,
+      "last_fs": 20000.0
+    },
+    "runs/closed_control_fixed/run_s0904.npz": {
+      "recording": "runs\\closed_control_fixed\\run_s0904.npz",
+      "seed": 904,
+      "mixture": "carbon rich",
+      "batch": "closed_control_fixed",
+      "observations": 283,
+      "formations": 7,
+      "appearances": 12,
+      "first_fs": 120.0,
+      "last_fs": 850.0
+    },
+    "runs/closed_control_fixed/run_s0905.npz": {
+      "recording": "runs\\closed_control_fixed\\run_s0905.npz",
+      "seed": 905,
+      "mixture": "carbon rich",
+      "batch": "closed_control_fixed",
+      "observations": 1743,
+      "formations": 6,
+      "appearances": 7,
+      "first_fs": 120.0,
+      "last_fs": 10820.0
+    },
+    "runs/closed_control_fixed/run_s0907.npz": {
+      "recording": "runs\\closed_control_fixed\\run_s0907.npz",
+      "seed": 907,
+      "mixture": "carbon rich",
+      "batch": "closed_control_fixed",
+      "observations": 507,
+      "formations": 3,
+      "appearances": 8,
+      "first_fs": 120.0,
+      "last_fs": 4480.0
+    },
+    "runs/identity_test/run_s0990.npz": {
+      "recording": "runs\\identity_test\\run_s0990.npz",
+      "seed": 990,
+      "mixture": "carbon rich",
+      "batch": "identity_test",
+      "observations": 107,
+      "formations": 4,
+      "appearances": 6,
+      "first_fs": 120.0,
+      "last_fs": 690.0
+    },
+    "runs/open_escape_fixed/run_s0900.npz": {
+      "recording": "runs\\open_escape_fixed\\run_s0900.npz",
+      "seed": 900,
+      "mixture": "carbon rich",
+      "batch": "open_escape_fixed",
+      "observations": 3490,
+      "formations": 9,
+      "appearances": 13,
+      "first_fs": 120.0,
+      "last_fs": 18170.0
+    },
+    "runs/open_escape_fixed/run_s0902.npz": {
+      "recording": "runs\\open_escape_fixed\\run_s0902.npz",
+      "seed": 902,
+      "mixture": "carbon rich",
+      "batch": "open_escape_fixed",
+      "observations": 2503,
+      "formations": 4,
+      "appearances": 11,
+      "first_fs": 120.0,
+      "last_fs": 20000.0
+    },
+    "runs/open_escape_fixed/run_s0903.npz": {
+      "recording": "runs\\open_escape_fixed\\run_s0903.npz",
+      "seed": 903,
+      "mixture": "carbon rich",
+      "batch": "open_escape_fixed",
+      "observations": 1124,
+      "formations": 6,
+      "appearances": 12,
+      "first_fs": 120.0,
+      "last_fs": 16420.0
+    },
+    "runs/open_escape_fixed/run_s0904.npz": {
+      "recording": "runs\\open_escape_fixed\\run_s0904.npz",
+      "seed": 904,
+      "mixture": "carbon rich",
+      "batch": "open_escape_fixed",
+      "observations": 1457,
+      "formations": 10,
+      "appearances": 15,
+      "first_fs": 120.0,
+      "last_fs": 9840.0
+    },
+    "runs/open_escape_fixed/run_s0905.npz": {
+      "recording": "runs\\open_escape_fixed\\run_s0905.npz",
+      "seed": 905,
+      "mixture": "carbon rich",
+      "batch": "open_escape_fixed",
+      "observations": 3321,
+      "formations": 10,
+      "appearances": 11,
+      "first_fs": 120.0,
+      "last_fs": 20000.0
+    },
+    "runs/open_escape_fixed/run_s0906.npz": {
+      "recording": "runs\\open_escape_fixed\\run_s0906.npz",
+      "seed": 906,
+      "mixture": "carbon rich",
+      "batch": "open_escape_fixed",
+      "observations": 1752,
+      "formations": 9,
+      "appearances": 12,
+      "first_fs": 120.0,
+      "last_fs": 14850.0
+    },
+    "runs/open_escape_fixed/run_s0907.npz": {
+      "recording": "runs\\open_escape_fixed\\run_s0907.npz",
+      "seed": 907,
+      "mixture": "carbon rich",
+      "batch": "open_escape_fixed",
+      "observations": 884,
+      "formations": 5,
+      "appearances": 10,
+      "first_fs": 120.0,
+      "last_fs": 20000.0
+    }
+  },
+  "note": "",
+  "saved_unix": 1786425519.4065077
+}

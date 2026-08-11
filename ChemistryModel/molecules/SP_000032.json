@@ -1,0 +1,90 @@
+{
+  "id": "SP_000032",
+  "formula": "COH",
+  "atoms": 3,
+  "heavy_atoms": 2,
+  "graph_fingerprint": "7ab53a5ec6ea889b41b981fd49b43ac42991445620e141c446bf00b812ad6fc5",
+  "payload": "SP_000032.npz",
+  "source": {
+    "recording": "runs\\closed_control_fixed\\run_s0900.npz",
+    "frame": 24,
+    "time_fs": 250.0,
+    "temperature_K": 1611.8404541015625,
+    "box_A": 19.0,
+    "atom_ids": [
+      0,
+      281,
+      308
+    ],
+    "identity_history": true,
+    "seed": 900,
+    "mixture": "carbon rich",
+    "batch": "closed_control_fixed"
+  },
+  "stats": {
+    "observations": 6488,
+    "formations": 8,
+    "appearances": 10,
+    "runs_seen": 5,
+    "longest_observed_lifetime_fs": 19610.0
+  },
+  "sources": {
+    "runs/closed_control_fixed/run_s0900.npz": {
+      "recording": "runs\\closed_control_fixed\\run_s0900.npz",
+      "seed": 900,
+      "mixture": "carbon rich",
+      "batch": "closed_control_fixed",
+      "observations": 1990,
+      "formations": 2,
+      "appearances": 2,
+      "first_fs": 250.0,
+      "last_fs": 20000.0
+    },
+    "runs/closed_control_fixed/run_s0904.npz": {
+      "recording": "runs\\closed_control_fixed\\run_s0904.npz",
+      "seed": 904,
+      "mixture": "carbon rich",
+      "batch": "closed_control_fixed",
+      "observations": 1286,
+      "formations": 1,
+      "appearances": 2,
+      "first_fs": 120.0,
+      "last_fs": 12570.0
+    },
+    "runs/open_escape_fixed/run_s0900.npz": {
+      "recording": "runs\\open_escape_fixed\\run_s0900.npz",
+      "seed": 900,
+      "mixture": "carbon rich",
+      "batch": "open_escape_fixed",
+      "observations": 992,
+      "formations": 2,
+      "appearances": 2,
+      "first_fs": 250.0,
+      "last_fs": 10020.0
+    },
+    "runs/open_escape_fixed/run_s0904.npz": {
+      "recording": "runs\\open_escape_fixed\\run_s0904.npz",
+      "seed": 904,
+      "mixture": "carbon rich",
+      "batch": "open_escape_fixed",
+      "observations": 2218,
+      "formations": 2,
+      "appearances": 3,
+      "first_fs": 120.0,
+      "last_fs": 20000.0
+    },
+    "runs/open_escape_fixed/run_s0906.npz": {
+      "recording": "runs\\open_escape_fixed\\run_s0906.npz",
+      "seed": 906,
+      "mixture": "carbon rich",
+      "batch": "open_escape_fixed",
+      "observations": 2,
+      "formations": 1,
+      "appearances": 1,
+      "first_fs": 740.0,
+      "last_fs": 750.0
+    }
+  },
+  "note": "",
+  "saved_unix": 1786425519.8358111
+}
