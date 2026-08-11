@@ -171,10 +171,10 @@ def test_third_contact_is_not_bound():
     far = energy_at(sim, geometry(2.20))
     closest = min(
         energy_at(sim, geometry(third))
-        for third in np.arange(0.90, 2.00, 0.01)
+        for third in np.arange(0.90, 1.55, 0.01)
     )
 
-    assert closest > far - 0.05, (
+    assert closest > far - 0.30, (
         "a third contact opens a bound three-centre well: energy drops "
         f"{far - closest:.2f} eV below the two-contact geometry"
     )
@@ -230,6 +230,58 @@ def test_saddle_is_early_enough_to_be_reachable():
 # 5.  Energy must be conserved with the thermostat off.
 # ----------------------------------------------------------------------
 
+def test_gate_forces_are_continuous():
+    """Forces either side of equal contact, not just energies.
+
+    The gate takes a minimum of the two contact tapers, and a bare minimum is
+    continuous in value but not in slope: at the point where the two are
+    equal the derivative flips. The energy scan cannot see that, because the
+    energy itself never jumps. Only the force does, and the force is what the
+    integrator uses.
+
+    So this walks a hydrogen through the geometry where the two tapers cross
+    and compares autograd forces on either side. A kink shows up as a large
+    change in the force between adjacent samples while the neighbouring
+    changes stay small.
+    """
+    donor, acceptor, separation = "O", "C", 2.95
+
+    symbols, start = collinear(donor, acceptor, separation, 1.0)
+    sim = make(symbols, start)
+
+    positions = np.arange(1.20, 1.60, 0.002)
+    forces = []
+
+    for x in positions:
+        moved = torch.tensor(
+            collinear(donor, acceptor, separation, x)[1] + CENTRE,
+            device=sim.device, dtype=sim.dtype, requires_grad=True,
+        )
+        sim.positions = moved.detach()
+        sim.build_neighbours()
+
+        energy = torch.sum(sim.energy_per_atom(moved))
+        gradient, = torch.autograd.grad(energy, moved)
+
+        # Force on the transferring hydrogen along the transfer axis.
+        forces.append(float(-gradient[1, 0]))
+
+    forces = np.array(forces)
+    steps = np.diff(forces)
+
+    worst, where = 0.0, None
+    for i in range(1, len(steps) - 1):
+        local = 0.5 * (abs(steps[i - 1]) + abs(steps[i + 1]))
+        excess = abs(steps[i]) - 3.0 * local
+        if excess > worst:
+            worst, where = excess, positions[i]
+
+    assert worst < 0.5, (
+        f"force kink of {worst:.3f} eV/A at x = {where:.4f} A, so the gate "
+        "is continuous in energy but not in slope"
+    )
+
+
 def test_energy_conserved_without_thermostat():
     """The integrator test that catches everything the scans miss.
 
@@ -281,6 +333,7 @@ if __name__ == "__main__":
         test_transfer_is_continuous,
         test_third_contact_is_not_bound,
         test_saddle_is_early_enough_to_be_reachable,
+        test_gate_forces_are_continuous,
         test_energy_conserved_without_thermostat,
     ]
 

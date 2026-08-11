@@ -166,6 +166,12 @@ class ReactiveSimulation:
         self.over_penalty = float(R.OVER_COORDINATION_PENALTY)
         self.lone_pair_squeeze = float(R.LONE_PAIR_SQUEEZE)
 
+        # Zero reproduces the previous behaviour exactly, so this whole
+        # addition is inert until it is turned on deliberately. It affects
+        # every molecule with a multiply bonded atom, not just H transfer,
+        # so measure the effect before switching it on globally.
+        self.environment_softening = float(R.ENVIRONMENT_SOFTENING)
+
         self.maximum_cutoff = float(R.MAXIMUM_CUTOFF)
 
         # How much room the neighbour table has before it goes
@@ -446,6 +452,45 @@ class ReactiveSimulation:
         pair_width = blend(
             self.bond_width, self.double_width, self.triple_width
         )
+
+        # ---- environment softening of single bonds ----
+        #
+        # The tables carry one depth per element pair, so every C-H is the
+        # methane C-H at 4.291 eV. The aldehydic C-H is 3.760: formaldehyde
+        # is a good hydrogen donor precisely because its carbon is already
+        # committed to a double bond, leaving its remaining single bonds
+        # weaker. With one generic entry the model cannot express that, and
+        # the error is not small -- H + H2CO -> H2 + HCO comes out at
+        # -0.228 eV against a thermochemical -0.718.
+        #
+        # So: reduce a single bond's depth in proportion to how much multiple
+        # bond character the partner atom is already carrying elsewhere. This
+        # is the bond-order trade-off that Tersoff and REBO potentials use,
+        # and it stays element agnostic -- no molecule is named, and an atom
+        # with only single bonds is untouched.
+        #
+        # commitment is the excess bond order each atom holds beyond one per
+        # neighbour, so it is zero for methane's carbon and near one for the
+        # carbon in a carbonyl.
+        if self.environment_softening > 0.0:
+            commitment = torch.clamp(
+                torch.sum(taper * (order - 1.0) * mask, dim=1), min=0.0
+            )
+
+            # Each end of a pair is softened by what the *other* end is
+            # committed to, and only for bonds that are themselves single:
+            # a double bond's depth already comes from the double table and
+            # should not be discounted twice.
+            partner_commitment = commitment[neighbours]
+            single_character = torch.clamp(1.0 - lower, 0.0, 1.0)
+
+            softening = 1.0 - (
+                self.environment_softening
+                * single_character
+                * torch.clamp(partner_commitment, 0.0, 1.0)
+            )
+
+            pair_depth = pair_depth * softening
 
         shift = distances - pair_length
 

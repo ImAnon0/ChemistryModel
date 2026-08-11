@@ -122,6 +122,18 @@ OUTER_ELECTRON_ARRAY = np.array(
 # the single knob that sets every activation barrier in the
 # model, fitted against the measured H + H2 barrier of 0.42 eV.
 
+# How much a single bond is weakened by multiple bond character its partner
+# is already carrying. The tables hold one depth per element pair, so every
+# C-H is the methane C-H; the aldehydic C-H is roughly 0.53 eV shallower
+# because that carbon is committed to a double bond. This is the standard
+# bond-order trade-off used by Tersoff and REBO potentials, kept element
+# agnostic so no molecule is special cased.
+#
+# 0.0 disables it and reproduces the older behaviour exactly. It touches
+# every molecule holding a double or triple bond, so measure the effect
+# before raising it: the formaldehyde abstraction should reach -0.718 eV.
+ENVIRONMENT_SOFTENING = 0.0
+
 OVER_COORDINATION_PENALTY = 7.778
 
 # Ideal angle for each number of electron domains around an atom

@@ -97,7 +97,7 @@ def formaldehyde_geometry(donor_length, transfer_length, spectators=None):
 
 
 def build(physics="high_fidelity", mixing=None, sato=None,
-          flatten=None, cap=None, ch_depth=None):
+          flatten=None, cap=None, ch_depth=None, softening=None):
     cls = (
         HighFidelityBatchedReactiveSimulation if physics == "high_fidelity"
         else BatchedReactiveSimulation
@@ -139,6 +139,14 @@ def build(physics="high_fidelity", mixing=None, sato=None,
         high_fidelity_torch.H_TRANSFER_LOWERING_CAP = (
             None if float(cap) < 0 else float(cap)
         )
+
+    if softening is not None:
+        # Same measure-before-committing pattern as the correction knobs.
+        # Unlike those, this one reaches every molecule in the run, not just
+        # a transferring hydrogen, so it is worth knowing what it does to the
+        # reaction energy before switching it on in the source.
+        import reactive as R
+        R.ENVIRONMENT_SOFTENING = float(softening)
 
     if ch_depth is not None:
         # Diagnostic only. The C-H entry is a single generic depth shared by
@@ -468,7 +476,33 @@ REFERENCE_TRANSFER = 1.008
 # This model is classical, so the computed saddle is the right comparison
 # and the experimental number is not. Fitting to 0.17 bakes a quantum effect
 # into a classical potential.
+# Two conventions, and they must not be mixed.
+#
+#   electronic   the bare saddle on the potential surface, no vibrational
+#                zero point energy anywhere
+#   adiabatic    the saddle with zero point energy included at both the
+#                reactants and the transition state
+#
+# From Table 1 of Kerkeni et al. 2022, gas phase columns. The unstarred row
+# is electronic, the starred row includes ZPE; the surrounding prose calls
+# both "barrier height", which is easy to misread.
+#
+#   CCSD(T)/cc-pVTZ        7.46 electronic   6.69 adiabatic
+#   DLPNO-CCSD(T)/CBS      7.62 electronic   5.85 adiabatic
+#   (U)CCSD(T)-F12         7.03 electronic
+#
+# This model is in the adiabatic convention, and not by choice: its
+# BOND_DEPTH table holds dissociation energies, with H-H at 436 kJ/mol
+# against a D0 of 435.99, and D0 includes zero point energy by definition.
+# A potential fitted to D0 already carries ZPE inside its well depths, so
+# the starred numbers are the ones to compare against.
+#
+# The reaction energy below is on the same footing: -0.718 eV comes from D0
+# values, and the paper's ZPE-corrected gas phase exothermicity is -0.712 eV
+# at CCSD(T)/cc-pVTZ. The electronic value is -0.619 eV. Switching the
+# barrier to the electronic convention would mean switching this too.
 REFERENCE_BARRIER = (0.254, 0.290)
+REFERENCE_BARRIER_ELECTRONIC = (0.305, 0.330)
 
 # Reaction energy from Active Thermochemical Tables dissociation energies,
 # D0(H2CO-H) = 3.760 eV and D0(H-H) = 4.478 eV.
@@ -696,7 +730,7 @@ def locate_trap(grid, donor_lengths, transfer_lengths, saddle_cell,
 
 
 def escape_report(physics, donor_lengths, transfer_lengths, mixing=None,
-                  cap=None, relax=False, ch_depth=None):
+                  cap=None, relax=False, ch_depth=None, softening=None):
     """How deep is the trap, and how hard is it to get out?
 
     The reaction has a real col.  What follows it is the problem: a bound
@@ -712,7 +746,8 @@ def escape_report(physics, donor_lengths, transfer_lengths, mixing=None,
     at any temperature this model runs at.  The escape barrier is the number
     that says which of those you have, and it is the one to fix against.
     """
-    sim = build(physics, mixing=mixing, cap=cap, ch_depth=ch_depth)
+    sim = build(physics, mixing=mixing, cap=cap, ch_depth=ch_depth,
+                softening=softening)
 
     grid = surface(sim, donor_lengths, transfer_lengths, relax=relax)
     reactant, product = basin_seeds(grid, donor_lengths, transfer_lengths)
@@ -898,9 +933,10 @@ def sweep(physics, donor_lengths, transfer_lengths, values, relax=False):
 
 
 def report(physics, donor_lengths, transfer_lengths, relax=False, plot=None,
-           mixing=None, sato=None):
+           mixing=None, sato=None, flatten=None, cap=None, ch_depth=None,
+           softening=None):
     sim = build(physics, mixing=mixing, sato=sato, flatten=flatten,
-                cap=cap)
+                cap=cap, ch_depth=ch_depth, softening=softening)
 
     print(f"physics: {getattr(sim, 'physics_model_name', 'reactive base')}")
     print(f"grid: {len(donor_lengths)} x {len(transfer_lengths)} points")
@@ -1019,6 +1055,13 @@ def main():
         ),
     )
     parser.add_argument(
+        "--softening", type=float, default=None,
+        help=(
+            "override ENVIRONMENT_SOFTENING for this run; 0.124 makes a\n"
+            "carbonyl C-H match its 3.760 eV thermochemical depth"
+        ),
+    )
+    parser.add_argument(
         "--ch-depth", type=float, default=None,
         help=(
             "override the C-H bond depth in eV for this run only; "
@@ -1081,7 +1124,7 @@ def main():
         escape_report(
             options.physics, donor_lengths, transfer_lengths,
             mixing=options.mixing, cap=options.cap, relax=options.relax,
-            ch_depth=options.ch_depth,
+            ch_depth=options.ch_depth, softening=options.softening,
         )
         return
 
@@ -1138,6 +1181,7 @@ def main():
         flatten=options.flatten,
         cap=options.cap,
         ch_depth=options.ch_depth,
+        softening=options.softening,
     )
 
 

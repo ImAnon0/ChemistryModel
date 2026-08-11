@@ -130,6 +130,14 @@ H_TRANSFER_COUPLING_FLATTEN = 0.0
 # None disables the ceiling and reproduces V4 exactly. The softening below
 # keeps the value and its slope continuous, since a hard clamp would put a
 # force discontinuity along the whole contour where the cap begins to bind.
+# Width of the smoothing on the two-contact minimum in the gate, as a squared
+# taper value. A bare min(a, b) is continuous but not differentiable where the
+# two contacts are equal, which is exactly where the donor and competitor
+# labels swap, so it trades an energy step for a force flip. The softened form
+# below is differentiable everywhere and agrees with min to within the
+# smoothing width. sqrt(1e-4) = 0.01 taper units.
+H_TRANSFER_SMOOTH_MIN_EPSILON_SQUARED = 1e-4
+
 H_TRANSFER_LOWERING_CAP = None
 H_TRANSFER_LOWERING_CAP_SOFTNESS = 0.25
 
@@ -139,6 +147,34 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
 
     physics_model_name = HF_MODEL_NAME
     physics_model_revision = HF_MODEL_REVISION
+
+    def __init__(self, *args, **kwargs):
+
+        # Owned per instance rather than read from module scope on every call.
+        # The diagnostic tools rebind these globals to sweep a parameter, and
+        # reading them lazily meant a simulation built earlier in the same
+        # process silently picked up a later experiment's settings. Copying
+        # here means every constructed model permanently owns what it was
+        # built with.
+        self.h_transfer_state_mixing_fraction = float(
+            H_TRANSFER_STATE_MIXING_FRACTION
+        )
+        self.h_transfer_gate_start = float(H_TRANSFER_GATE_START)
+        self.h_transfer_gate_full = float(H_TRANSFER_GATE_FULL)
+        self.h_transfer_sato = float(H_TRANSFER_SATO)
+        self.h_transfer_coupling_flatten = float(H_TRANSFER_COUPLING_FLATTEN)
+        self.h_transfer_lowering_cap = (
+            None if H_TRANSFER_LOWERING_CAP is None
+            else float(H_TRANSFER_LOWERING_CAP)
+        )
+        self.h_transfer_lowering_cap_softness = float(
+            H_TRANSFER_LOWERING_CAP_SOFTNESS
+        )
+        self.h_transfer_smooth_min_epsilon_squared = float(
+            H_TRANSFER_SMOOTH_MIN_EPSILON_SQUARED
+        )
+
+        super().__init__(*args, **kwargs)
 
     def energy_per_atom(self, positions):
         base = super().energy_per_atom(positions)
@@ -259,8 +295,8 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         # At sato 0 this is exactly pair_core, so the default path reproduces
         # V4 bit for bit and this whole addition is inert.
         pair_unoccupied = (
-            (1.0 - float(H_TRANSFER_SATO)) * pair_core
-            + float(H_TRANSFER_SATO) * pair_anti
+            (1.0 - float(self.h_transfer_sato)) * pair_core
+            + float(self.h_transfer_sato) * pair_anti
         )
 
         hydrogen_index = int(R.ELEMENT_INDEX["H"])
@@ -348,12 +384,12 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         )
 
         overlap = (
-            (1.0 - float(H_TRANSFER_COUPLING_FLATTEN)) * peaked_overlap
-            + float(H_TRANSFER_COUPLING_FLATTEN) * flat_overlap
+            (1.0 - float(self.h_transfer_coupling_flatten)) * peaked_overlap
+            + float(self.h_transfer_coupling_flatten) * flat_overlap
         )
 
         coupling = (
-            float(H_TRANSFER_STATE_MIXING_FRACTION)
+            float(self.h_transfer_state_mixing_fraction)
             * torch.sqrt(torch.clamp(donor_depth * competitor_depth, min=0.0))
             * overlap
         )
@@ -365,13 +401,13 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
             half_difference * half_difference + coupling * coupling + 1e-12
         ) - torch.abs(half_difference)
 
-        if H_TRANSFER_LOWERING_CAP is not None:
+        if self.h_transfer_lowering_cap is not None:
             # Softplus rather than a hard clamp: the cap binds over a finite
             # window instead of switching on along a contour, so the force
             # stays continuous where it starts to take effect. Softness is in
             # the same units as the cap.
-            ceiling = float(H_TRANSFER_LOWERING_CAP)
-            softness = max(float(H_TRANSFER_LOWERING_CAP_SOFTNESS), 1e-6)
+            ceiling = float(self.h_transfer_lowering_cap)
+            softness = max(float(self.h_transfer_lowering_cap_softness), 1e-6)
             lowering = ceiling - softness * torch.nn.functional.softplus(
                 (ceiling - lowering) / softness
             )
@@ -427,10 +463,17 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         # minimum is the competitor and this is identical to the old
         # behaviour. It differs only where the two cross, which is the only
         # place the old form was wrong.
-        weaker_contact = torch.minimum(donor_taper, competitor_taper)
+        gap = donor_taper - competitor_taper
+        weaker_contact = 0.5 * (
+            donor_taper + competitor_taper
+            - torch.sqrt(
+                gap * gap
+                + float(self.h_transfer_smooth_min_epsilon_squared)
+            )
+        )
         gate_fraction = torch.clamp(
-            (weaker_contact - float(H_TRANSFER_GATE_START))
-            / float(H_TRANSFER_GATE_FULL - H_TRANSFER_GATE_START),
+            (weaker_contact - float(self.h_transfer_gate_start))
+            / float(self.h_transfer_gate_full - self.h_transfer_gate_start),
             0.0,
             1.0,
         )
