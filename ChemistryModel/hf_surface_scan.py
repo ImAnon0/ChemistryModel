@@ -96,19 +96,28 @@ def formaldehyde_geometry(donor_length, transfer_length, spectators=None):
     return SYMBOLS, np.array([carbon, oxygen, donor_h, other_h, incoming])
 
 
-def build(physics="high_fidelity", mixing=None):
+def build(physics="high_fidelity", mixing=None, sato=None):
     cls = (
         HighFidelityBatchedReactiveSimulation if physics == "high_fidelity"
         else BatchedReactiveSimulation
     )
 
+    # The correction reads these names from module scope on every call, so
+    # rebinding them here changes the physics without editing the file.  Only
+    # useful for measuring the knobs; set them properly in the source once you
+    # know what they should be.
+    import high_fidelity_torch
+
     if mixing is not None:
-        # The correction reads this name from module scope on every call, so
-        # rebinding it here changes the coupling without editing the file.
-        # Only useful for measuring the knob; set it properly in the source
-        # once you know what it should be.
-        import high_fidelity_torch
         high_fidelity_torch.H_TRANSFER_STATE_MIXING_FRACTION = float(mixing)
+
+    if sato is not None:
+        if not hasattr(high_fidelity_torch, "H_TRANSFER_SATO"):
+            raise SystemExit(
+                "this build of high_fidelity_torch has no H_TRANSFER_SATO; "
+                "apply the v5 patch first"
+            )
+        high_fidelity_torch.H_TRANSFER_SATO = float(sato)
 
     symbols, positions = formaldehyde_geometry(1.09, 1.60)
     return cls(
@@ -317,7 +326,7 @@ def ridge_positions(sim, donor_lengths, transfer_lengths):
 
 
 def fixed_donor_slice(physics, donor_lengths, transfer_lengths, relax=False,
-                      mixing=None):
+                      mixing=None, sato=None):
     """Barrier along r(H-H) with the donor bond held at each fixed length.
 
     The full two dimensional scan asks the thermal question: what is the
@@ -337,7 +346,7 @@ def fixed_donor_slice(physics, donor_lengths, transfer_lengths, relax=False,
     The remaining rows show how much pre-stretch would be needed to bring the
     barrier within reach, which is the thing a slower encounter buys you.
     """
-    sim = build(physics, mixing=mixing)
+    sim = build(physics, mixing=mixing, sato=sato)
 
     print(f"physics: {getattr(sim, 'physics_model_name', 'reactive base')}")
     if mixing is not None:
@@ -379,6 +388,96 @@ def fixed_donor_slice(physics, donor_lengths, transfer_lengths, relax=False,
 
     print("\nthe row nearest 1.09 A is what a fast collision meets;")
     print("compare it against the relaxed two dimensional saddle")
+
+
+TRAP_DONOR = 1.39
+TRAP_TRANSFER = 0.92
+IMPACT_DONOR = 1.08
+
+
+def trap_depth(sim, transfer_lengths):
+    """How far the three-centre structure sits below separated products.
+
+    The geometry is the one a trapped trajectory actually held for 10 ps:
+    the donor bond stretched but intact while the new bond is already at
+    close to its equilibrium length, so the hydrogen is bonded twice at once.
+
+    The reference is the same hydrogen with the donor removed entirely, which
+    is where it should end up.  A negative number means the shared-hydrogen
+    structure is genuinely bound and nothing will make it dissociate; zero or
+    positive means it is at worst a shoulder that drains to products.
+    """
+    trapped = energy_at(sim, TRAP_DONOR, TRAP_TRANSFER)
+
+    # Donor walked out past every cutoff, new bond left where it was.
+    separated = min(
+        energy_at(sim, donor, TRAP_TRANSFER)
+        for donor in (2.20, 2.60, 3.00)
+    )
+
+    return trapped - separated
+
+
+def impact_barrier(sim, transfer_lengths, donor_length=IMPACT_DONOR):
+    """Barrier along r(H-H) with the donor bond at its equilibrium length.
+
+    This is the potential a fast collision meets, as distinct from the
+    relaxed two dimensional saddle, which assumes the donor bond has time to
+    stretch to meet the incoming atom.
+    """
+    profile = np.array([
+        energy_at(sim, donor_length, transfer) for transfer in transfer_lengths
+    ])
+
+    inside = np.where(transfer_lengths < 0.95)[0]
+    if len(inside) == 0:
+        return None
+
+    product = (0, int(inside[np.argmin(profile[inside])]))
+    entrance = (0, len(profile) - 1)
+
+    cell, energy = flood_saddle(profile.reshape(1, -1), entrance, product)
+    if cell is None or energy <= profile[entrance[1]] + 1e-3:
+        return None
+
+    return energy - profile[entrance[1]]
+
+
+def knob_map(physics, transfer_lengths, mixings, satos):
+    """Barrier and trap depth together, across both parameters.
+
+    These are the two quantities that have to be satisfied at once, and under
+    a single knob they moved in the same direction, which is why v4 could not
+    have both.  The question this answers is whether a second parameter
+    separates them.
+
+    Read it as: find a cell whose barrier is near the physical activation
+    scale AND whose trap depth is not negative.  If no such cell exists, the
+    anti-Morse blend is the wrong second parameter and the functional form
+    needs a different change rather than another constant.
+    """
+    print("barrier at r(C-H) = %.2f A (what a fast collision meets)" %
+          IMPACT_DONOR)
+    print("trap = three-centre energy relative to separated products;")
+    print("       negative means bound, so a trajectory can never leave\n")
+
+    header = "".join(f"{m:>17.2f}" for m in mixings)
+    print(f"{'sato':>6}{header}      <- mixing")
+
+    for sato in satos:
+        cells = []
+        for mixing in mixings:
+            sim = build(physics, mixing=mixing, sato=sato)
+            barrier = impact_barrier(sim, transfer_lengths)
+            trap = trap_depth(sim, transfer_lengths)
+
+            shown = "  none" if barrier is None else f"{barrier:6.3f}"
+            cells.append(f"{shown} /{trap:+7.3f}")
+
+        print(f"{sato:6.2f}" + "".join(f"{cell:>17}" for cell in cells))
+
+    print("\neach cell is  barrier eV / trap eV")
+    print("wanted: barrier near 0.17-0.20, trap >= 0")
 
 
 def measure(sim, donor_lengths, transfer_lengths, relax=False):
@@ -436,8 +535,8 @@ def sweep(physics, donor_lengths, transfer_lengths, values, relax=False):
 
 
 def report(physics, donor_lengths, transfer_lengths, relax=False, plot=None,
-           mixing=None):
-    sim = build(physics, mixing=mixing)
+           mixing=None, sato=None):
+    sim = build(physics, mixing=mixing, sato=sato)
 
     print(f"physics: {getattr(sim, 'physics_model_name', 'reactive base')}")
     print(f"grid: {len(donor_lengths)} x {len(transfer_lengths)} points")
@@ -538,6 +637,18 @@ def main():
         help="comma separated mixing fractions to measure, e.g. 0.45,0.55,0.65",
     )
     parser.add_argument(
+        "--sato", type=float, default=None,
+        help="override H_TRANSFER_SATO for this run (needs the v5 patch)",
+    )
+    parser.add_argument(
+        "--knob-map", action="store_true",
+        help=(
+            "measure the impact barrier and the three-centre trap depth "
+            "across both mixing and sato, to see whether any pair satisfies "
+            "them at once"
+        ),
+    )
+    parser.add_argument(
         "--fixed-donor", action="store_true",
         help=(
             "hold r(C-H) fixed and read the barrier along r(H-H) alone, "
@@ -563,10 +674,18 @@ def main():
         options.transfer_min, options.transfer_max, transfer_step
     )
 
+    if options.knob_map:
+        knob_map(
+            options.physics, transfer_lengths,
+            mixings=[0.45, 0.63, 0.80],
+            satos=[0.0, 0.25, 0.50, 0.75, 1.00],
+        )
+        return
+
     if options.fixed_donor:
         fixed_donor_slice(
             options.physics, donor_lengths, transfer_lengths,
-            relax=options.relax, mixing=options.mixing,
+            relax=options.relax, mixing=options.mixing, sato=options.sato,
         )
         return
 
@@ -585,6 +704,7 @@ def main():
         relax=options.relax,
         plot=options.plot,
         mixing=options.mixing,
+        sato=options.sato,
     )
 
 

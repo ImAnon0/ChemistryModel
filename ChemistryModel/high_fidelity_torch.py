@@ -40,8 +40,8 @@ import reactive as R
 from batched_torch import BatchedReactiveSimulation
 
 
-HF_MODEL_NAME = "reactive_v1+h_transfer_competition_v4"
-HF_MODEL_REVISION = 4
+HF_MODEL_NAME = "reactive_v1+h_transfer_competition_v3"
+HF_MODEL_REVISION = 3
 
 # A transfer correction needs both a heavy-atom donor contact and a second
 # partner contact. There is deliberately no hard taper threshold: the energy
@@ -68,6 +68,25 @@ H_TRANSFER_STATE_MIXING_FRACTION = 0.63
 # Cubic smoothstep has zero slope at both ends, so the force stays continuous.
 H_TRANSFER_GATE_START = 0.20
 H_TRANSFER_GATE_FULL = 0.50
+
+# In each valence state one bond is occupied and the other is not. V4 gave the
+# unoccupied partner only the repulsive half of its Morse curve, which is
+# positive but far too weak: with both contacts strong the mixed state can
+# still sink into a bound three-centre well, which is exactly what V1 was
+# built to prevent and what a 10 ps trapped trajectory showed it does not.
+#
+# LEPS handles this with a separate anti-Morse curve for the unoccupied bond,
+# genuinely repulsive where the occupied one is attractive. This constant
+# blends between the two:
+#
+#     0.0  exactly V4 (unoccupied bond keeps bare Morse repulsion)
+#     1.0  full anti-Morse
+#
+# It is deliberately shared by every element pair for now. Real LEPS uses a
+# per-pair Sato parameter, and this probably needs to become a table: one
+# value has to serve C-H and H-H at once, and their depths differ by enough
+# that a single number may not suit both. Measure before assuming.
+H_TRANSFER_SATO = 0.0
 
 
 class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
@@ -182,6 +201,23 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         pair_morse = taper * (repulsive - attractive)
         pair_core = taper * repulsive
 
+        # Anti-Morse: the triplet-like curve for a bond that is not occupied
+        # in this state. It reuses the same depth, length and width entries as
+        # the bonding curve, so no new tables are introduced; only the sign
+        # structure differs. It is repulsive at every separation and decays to
+        # zero at long range.
+        pair_anti = 0.5 * pair_depth * taper * (
+            torch.exp(-2.0 * pair_width * shift)
+            + 2.0 * torch.exp(-pair_width * shift)
+        )
+
+        # At sato 0 this is exactly pair_core, so the default path reproduces
+        # V4 bit for bit and this whole addition is inert.
+        pair_unoccupied = (
+            (1.0 - float(H_TRANSFER_SATO)) * pair_core
+            + float(H_TRANSFER_SATO) * pair_anti
+        )
+
         hydrogen_index = int(R.ELEMENT_INDEX["H"])
         is_hydrogen = self.types == hydrogen_index
         heavy = other_types != hydrogen_index
@@ -200,6 +236,7 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         donor_depth = pair_depth[row, donor_slot]
         donor_morse = pair_morse[row, donor_slot]
         donor_core = pair_core[row, donor_slot]
+        donor_unoccupied = pair_unoccupied[row, donor_slot]
 
         donor_strength = donor_score[row, donor_slot]
         donor_valid = (
@@ -223,6 +260,7 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         competitor_depth = pair_depth[row, competitor_slot]
         competitor_morse = pair_morse[row, competitor_slot]
         competitor_core = pair_core[row, competitor_slot]
+        competitor_unoccupied = pair_unoccupied[row, competitor_slot]
 
         # If every non-donor slot is padded/absent, argmax still returns slot
         # zero. Gate on the *excluded score* rather than the gathered taper so
@@ -234,11 +272,11 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
 
         # State D: donor-H is the occupied bond; the competing partner keeps
         # only its short-range core repulsion.
-        donor_state = donor_morse + competitor_core
+        donor_state = donor_morse + competitor_unoccupied
 
         # State P: the new H-partner bond is occupied; the donor keeps only its
         # core repulsion. This prevents V1's two-full-bonds C-H-H minimum.
-        partner_state = donor_core + competitor_morse
+        partner_state = donor_unoccupied + competitor_morse
 
         # Electronic/valence mixing exists only while both contacts coexist.
         # The balance term is one for equal contacts and tends smoothly to zero
