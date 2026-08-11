@@ -40,8 +40,8 @@ import reactive as R
 from batched_torch import BatchedReactiveSimulation
 
 
-HF_MODEL_NAME = "reactive_v1+h_transfer_competition_v3"
-HF_MODEL_REVISION = 3
+HF_MODEL_NAME = "reactive_v1+h_transfer_competition_v4"
+HF_MODEL_REVISION = 4
 
 # A transfer correction needs both a heavy-atom donor contact and a second
 # partner contact. There is deliberately no hard taper threshold: the energy
@@ -56,7 +56,7 @@ H_TRANSFER_COMPETITOR_TAPER_MIN = 0.0
 # smoothly gated by simultaneous contact and by how balanced the two contacts
 # are. 0.45 is intentionally a first experimental value rather than a tune-to-
 # outcome knob.
-H_TRANSFER_STATE_MIXING_FRACTION = 0.45
+H_TRANSFER_STATE_MIXING_FRACTION = 0.63
 
 # V2 switched to the valence-state surface as soon as the second contact had
 # any non-zero cutoff taper. That was mathematically smooth but physically too

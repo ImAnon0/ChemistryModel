@@ -38,29 +38,46 @@ TARGET_AXIS_FORWARD_EPS_A = 0.15
 SAFE_GAP_STEP_A = 0.05
 SAFE_GAP_BUFFER_A = 0.20
 FIRST_ENCOUNTER_RELEASE_A = 0.05
+
+from high_fidelity_torch import (
+    HF_MODEL_NAME, HF_MODEL_REVISION,
+    H_TRANSFER_STATE_MIXING_FRACTION,
+    H_TRANSFER_GATE_START, H_TRANSFER_GATE_FULL,
+)
+
 STANDARD_PHYSICS_MODEL = "reactive_v1"
-HIGH_FIDELITY_PHYSICS_MODEL = "reactive_v1+h_transfer_competition_v3"
-HIGH_FIDELITY_H_TRANSFER_MIXING = 0.45
-HIGH_FIDELITY_H_TRANSFER_GATE_START = 0.20
-HIGH_FIDELITY_H_TRANSFER_GATE_FULL = 0.50
+HIGH_FIDELITY_PHYSICS_MODEL = HF_MODEL_NAME
+HIGH_FIDELITY_H_TRANSFER_MIXING = H_TRANSFER_STATE_MIXING_FRACTION
+HIGH_FIDELITY_H_TRANSFER_GATE_START = H_TRANSFER_GATE_START
+HIGH_FIDELITY_H_TRANSFER_GATE_FULL = H_TRANSFER_GATE_FULL
 
 
 def heartbeat_path(folder):
     return os.path.join(folder, f".progress_{os.getpid()}.json")
 
 
-def write_heartbeat(folder, seed_label, done, total, started, boxes_in_group):
+def write_heartbeat(folder, seed_label, done, total, started, boxes_in_group,
+                    phase="simulation", results_done=None, results_total=None):
+    payload = {
+        "pid": os.getpid(),
+        "seed": seed_label,
+        "steps_done": int(done),
+        "steps_total": int(total),
+        "run_started": started,
+        "updated": time.time(),
+        "boxes_in_group": int(boxes_in_group),
+        "phase": str(phase),
+    }
+    if results_done is not None:
+        payload["results_done"] = int(results_done)
+    if results_total is not None:
+        payload["results_total"] = int(results_total)
+
     try:
-        with open(heartbeat_path(folder), "w", encoding="utf-8") as handle:
-            json.dump({
-                "pid": os.getpid(),
-                "seed": seed_label,
-                "steps_done": int(done),
-                "steps_total": int(total),
-                "run_started": started,
-                "updated": time.time(),
-                "boxes_in_group": int(boxes_in_group),
-            }, handle)
+        temporary = heartbeat_path(folder) + ".part"
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle)
+        os.replace(temporary, heartbeat_path(folder))
     except OSError:
         pass
 
@@ -1780,6 +1797,22 @@ def main():
 
             each_seconds = seconds / max(len(seeds), 1)
 
+            # The dynamics are finished, but the run is not complete until
+            # every trajectory, entry and index update is safely on disk.
+            # Keep the heartbeat alive during that finalisation phase so the
+            # Lab does not present 100% simulation as a mysteriously hung job.
+            write_heartbeat(
+                options.out,
+                f"{seeds[0]}-{seeds[-1]}" if len(seeds) > 1 else str(seeds[0]),
+                1,
+                1,
+                time.time(),
+                len(seeds),
+                phase="saving_results",
+                results_done=0,
+                results_total=len(seeds),
+            )
+
             for box, seed in enumerate(seeds):
                 recorder = recorders[box]
                 path = os.path.join(options.out, f"run_s{int(seed):04d}.npz")
@@ -1798,6 +1831,23 @@ def main():
                     contact_diagnostic=diagnostics[box],
                 )
                 write_entry(options.out, entry)
+
+                # Rebuild after every repeat, not only after all eight.  A
+                # crash during post-processing therefore leaves every result
+                # already finished visible to the Lab and resumable.
+                rebuild_index(options.out)
+                write_heartbeat(
+                    options.out,
+                    f"{seeds[0]}-{seeds[-1]}" if len(seeds) > 1 else str(seeds[0]),
+                    1,
+                    1,
+                    time.time(),
+                    len(seeds),
+                    phase="saving_results",
+                    results_done=box + 1,
+                    results_total=len(seeds),
+                )
+
                 if partner is not None and entry.get("collision_diagnostics"):
                     diagnostic = entry["collision_diagnostics"]
                     start = entry.get("collision_start_safety", {})
@@ -1814,7 +1864,6 @@ def main():
                         f"{entry['picoseconds']:g} ps"
                     )
 
-            rebuild_index(options.out)
             print()
 
             # Hard rule: the loop cannot begin the next group until this
@@ -1823,6 +1872,12 @@ def main():
 
         print("characterisation complete")
     finally:
+        # If finalisation failed halfway through, keep index.json consistent
+        # with every entry that did make it to disk.
+        try:
+            rebuild_index(options.out)
+        except Exception:
+            pass
         clear_heartbeat(options.out)
         running.remove_lock(options.out)
 

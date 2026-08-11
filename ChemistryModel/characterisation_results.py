@@ -15,13 +15,37 @@ def _read_json(path, default):
 
 
 def _finished_entries(folder):
+    # index.json is a convenience cache, not the source of truth.  Entry files
+    # are written atomically after each NPZ, so merge them in directly.  This
+    # makes completed/partial results visible even if the runner dies before
+    # its final index rebuild.
+    by_seed = {}
+
     index = _read_json(os.path.join(folder, "index.json"), [])
-    if not isinstance(index, list):
-        return []
+    if isinstance(index, list):
+        for entry in index:
+            if not isinstance(entry, dict) or entry.get("seed") is None:
+                continue
+            by_seed[int(entry["seed"])] = entry
+
+    directory = os.path.join(folder, "entries")
+    if os.path.isdir(directory):
+        for name in sorted(os.listdir(directory)):
+            if not (name.startswith("seed_") and name.endswith(".json")):
+                continue
+            entry = _read_json(os.path.join(directory, name), None)
+            if not isinstance(entry, dict) or entry.get("seed") is None:
+                continue
+            seed = int(entry["seed"])
+            # Characterisation writes the trajectory before the entry.  Only
+            # expose the repeat once both halves exist.
+            npz = os.path.join(folder, f"run_s{seed:04d}.npz")
+            if os.path.exists(npz):
+                by_seed[seed] = entry
 
     entries = [
-        entry for entry in index
-        if isinstance(entry, dict) and entry.get("finished", True) is not False
+        entry for entry in by_seed.values()
+        if entry.get("finished", True) is not False
     ]
     entries.sort(key=lambda entry: int(entry.get("seed", 0)))
     return entries
@@ -35,6 +59,16 @@ def _latest_stamp(folder):
             stamp = max(stamp, os.path.getmtime(path))
         except OSError:
             pass
+
+    directory = os.path.join(folder, "entries")
+    if os.path.isdir(directory):
+        for name in os.listdir(directory):
+            if not name.endswith(".json"):
+                continue
+            try:
+                stamp = max(stamp, os.path.getmtime(os.path.join(directory, name)))
+            except OSError:
+                pass
     return stamp
 
 
