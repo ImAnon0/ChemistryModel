@@ -1119,28 +1119,40 @@ class Lab(QtWidgets.QWidget):
         research_splitter.setChildrenCollapsible(False)
         research_layout.addWidget(research_splitter)
 
-        # Selected molecule / natural discovery information.
+        # Selected molecule. This was a full text panel of the same height as
+        # the others, and most of what it said -- atoms, appearances, longest
+        # observed life -- is repeated by the library detail on the right. So
+        # it is a dropdown and one line now, and the height it was using goes
+        # to the results.
+        #
+        # What it had that the library detail does not: the controlled trial
+        # totals and the natural formation examples. Those are folded into
+        # the line and its tooltip rather than dropped.
         selected_panel = QtWidgets.QWidget()
         selected_layout = QtWidgets.QVBoxLayout(selected_panel)
         selected_layout.setContentsMargins(0, 0, 0, 0)
+        selected_layout.setSpacing(4)
 
-        title = QtWidgets.QLabel("selected molecule")
+        picker = QtWidgets.QHBoxLayout()
+
+        title = QtWidgets.QLabel("molecule")
         title.setStyleSheet("font-weight: bold; font-size: 14px;")
-        selected_layout.addWidget(title)
+        picker.addWidget(title)
 
         self.character_molecule = QtWidgets.QComboBox()
         self.character_molecule.currentIndexChanged.connect(
             self.on_character_molecule_changed
         )
-        selected_layout.addWidget(self.character_molecule)
+        picker.addWidget(self.character_molecule, stretch=1)
+        selected_layout.addLayout(picker)
 
-        self.character_selected = QtWidgets.QPlainTextEdit()
-        self.character_selected.setReadOnly(True)
-        self.character_selected.setLineWrapMode(
-            QtWidgets.QPlainTextEdit.LineWrapMode.NoWrap
+        self.character_selected = QtWidgets.QLabel()
+        self.character_selected.setTextFormat(
+            QtCore.Qt.TextFormat.PlainText
         )
-        self.character_selected.setFont(font)
-        selected_layout.addWidget(self.character_selected, stretch=1)
+        self.character_selected.setStyleSheet("color: #999;")
+        self.character_selected.setWordWrap(False)
+        selected_layout.addWidget(self.character_selected)
 
         research_splitter.addWidget(selected_panel)
 
@@ -1172,7 +1184,21 @@ class Lab(QtWidgets.QWidget):
         new_title.setStyleSheet("font-weight: bold;")
         test_layout.addWidget(new_title)
 
+        # Two columns rather than one. Eleven full width rows of dropdowns
+        # took a third of the tab for values that are mostly a few characters
+        # wide, and pushed the results pane -- the thing the tab exists to
+        # show -- into a strip. Split so that what defines the experiment is
+        # on the left and what defines the run is on the right.
+        columns = QtWidgets.QHBoxLayout()
+        columns.setSpacing(18)
+
         form = QtWidgets.QFormLayout()
+        form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
+        form.setFormAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+
+        run_form = QtWidgets.QFormLayout()
+        run_form.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
+        run_form.setFormAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
         self.character_test = QtWidgets.QComboBox()
         self.character_test.addItems([
@@ -1241,12 +1267,12 @@ class Lab(QtWidgets.QWidget):
         self.character_temperature = self.choice(
             [100, 200, 250, 300, 500, 750, 1000, 1500, 2000], 250, 0
         )
-        form.addRow("temperature (K)", self.character_temperature)
+        run_form.addRow("temperature (K)", self.character_temperature)
 
         self.character_duration = self.choice(
             [1, 2, 5, 10, 20, 40], 10, 1
         )
-        form.addRow("duration (ps)", self.character_duration)
+        run_form.addRow("duration (ps)", self.character_duration)
 
         # A collision is over in tens of femtoseconds, so the default soup
         # cadence of 40 steps (10 fs a frame) captures the whole reaction in
@@ -1263,25 +1289,27 @@ class Lab(QtWidgets.QWidget):
             "itself lasts roughly 20 to 40 fs, so coarse values record the "
             "outcome but not the mechanism."
         )
-        form.addRow("capture every N steps", self.character_capture)
+        run_form.addRow("capture every N steps", self.character_capture)
 
         self.character_box = self.choice(
             [10, 12, 15, 19, 24, 30], 12, 1
         )
-        form.addRow("box (A)", self.character_box)
+        run_form.addRow("box (A)", self.character_box)
 
         self.character_repeats = self.choice(
             [1, 8, 16, 24, 32, 40, 48, 64, 80, 96, 128], 8, 0
         )
-        form.addRow("repeats", self.character_repeats)
+        run_form.addRow("repeats", self.character_repeats)
 
         group_rule = QtWidgets.QLabel(
             "1, or exact multiples of 8; one 8-box group at a time"
         )
         group_rule.setStyleSheet("color: #555;")
-        form.addRow("grouping", group_rule)
+        run_form.addRow("grouping", group_rule)
 
-        test_layout.addLayout(form)
+        columns.addLayout(form, 1)
+        columns.addLayout(run_form, 1)
+        test_layout.addLayout(columns)
 
         row = QtWidgets.QHBoxLayout()
         self.character_run_button = self.button(
@@ -1383,10 +1411,15 @@ class Lab(QtWidgets.QWidget):
         results_layout.addWidget(result_splitter, stretch=5)
 
         research_splitter.addWidget(results_panel)
-        research_splitter.setStretchFactor(0, 1)
-        research_splitter.setStretchFactor(1, 2)
-        research_splitter.setStretchFactor(2, 4)
-        research_splitter.setSizes([155, 330, 360])
+        research_splitter.setStretchFactor(0, 0)
+        research_splitter.setStretchFactor(1, 1)
+        research_splitter.setStretchFactor(2, 6)
+
+        # The molecule panel is a dropdown and a line now rather than a text
+        # pane, and the form is two columns rather than eleven rows, so both
+        # give their height to the results -- which is the thing the tab
+        # exists to show and was previously a four row strip.
+        research_splitter.setSizes([60, 210, 575])
 
         main_splitter.addWidget(research_widget)
 
@@ -1714,7 +1747,7 @@ class Lab(QtWidgets.QWidget):
                 "Press Scan recordings. Only stable recordings with verified "
                 "per-frame atom identity are allowed to contribute."
             )
-            self.character_selected.setPlainText(
+            self.character_selected.setText(
                 "Scan recordings to populate the test dropdown."
             )
             self.molecule_open_source.setEnabled(False)
@@ -1950,7 +1983,7 @@ class Lab(QtWidgets.QWidget):
 
     def on_character_molecule_changed(self, index):
         if index < 0 or index >= self.character_molecule.count():
-            self.character_selected.setPlainText(
+            self.character_selected.setText(
                 "Scan recordings to populate the test dropdown."
             )
             self.character_run_button.setEnabled(False)
@@ -1972,36 +2005,43 @@ class Lab(QtWidgets.QWidget):
         totals = self.reload_characterisation_results(molecule_id)
         stats = selected.get("stats", {})
 
-        lines = [
-            f"{selected.get('id', '?')}  {selected.get('formula', '?')}",
-            f"atoms          {selected.get('atoms', '?')}  "
-            f"({selected.get('heavy_atoms', '?')} heavy)",
-            f"natural        {stats.get('appearances', 0)} appearance episodes; "
-            f"{stats.get('formations', 0)} formations; "
-            f"{stats.get('runs_seen', 0)} runs",
-            f"natural life   {stats.get('longest_observed_lifetime_fs', 0):.0f} fs longest observed",
-            f"controlled     {totals.get('trials', 0)} trials across "
-            f"{totals.get('experiments', 0)} settings",
-        ]
+        # One line, the things that change as you move through the library:
+        # how much natural evidence there is and how much testing has been
+        # done. Everything static about the molecule is in the library detail
+        # on the right and does not need saying twice.
+        summary = (
+            f"{selected.get('atoms', '?')} atoms "
+            f"({selected.get('heavy_atoms', '?')} heavy)"
+            f"   ·   natural: {stats.get('appearances', 0)} episodes, "
+            f"{stats.get('formations', 0)} formations, "
+            f"{stats.get('runs_seen', 0)} runs"
+            f"   ·   tested: {totals.get('trials', 0)} trials across "
+            f"{totals.get('experiments', 0)} settings"
+        )
 
         outcomes = totals.get("outcomes", {})
         if outcomes:
-            lines.append(
-                "test outcomes   "
-                + ", ".join(f"{name} {count}" for name, count in outcomes.items())
+            summary += "   ·   " + ", ".join(
+                f"{name} {count}" for name, count in outcomes.items()
             )
 
+        self.character_selected.setText(summary)
+
+        # The formation examples are worth keeping but not worth a panel:
+        # they are read once when a molecule is new to you, not watched.
         events = molecule_store.formation_events_for_species(molecule_id, limit=3)
         if events:
-            lines += ["", "natural formation examples"]
+            detail = ["natural formation examples"]
             for event in events:
                 before = self._format_event_side(event.get("reactants", []))
                 after = self._format_event_side(event.get("products", []))
-                lines.append(
-                    f"  {event.get('temperature_K', 0):.0f} K  {before} -> {after}"
+                detail.append(
+                    f"  {event.get('temperature_K', 0):.0f} K  "
+                    f"{before} -> {after}"
                 )
-
-        self.character_selected.setPlainText("\n".join(lines))
+            self.character_selected.setToolTip("\n".join(detail))
+        else:
+            self.character_selected.setToolTip("")
 
         for row, item in enumerate(self.library_molecules):
             if item.get("id") == molecule_id:
