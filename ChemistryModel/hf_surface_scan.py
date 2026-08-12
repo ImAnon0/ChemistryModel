@@ -317,6 +317,90 @@ def methane_geometry(donor_length, transfer_length, spectators=None):
     )
 
 
+# ----------------------------------------------------------------------
+# Fourth system: the one nothing was ever fitted to.
+# ----------------------------------------------------------------------
+#
+# H + NH3 -> H2 + NH2 is the first reaction here involving nitrogen, and no
+# parameter in the model has ever been calibrated against it. The mixing
+# fraction came from formaldehyde, the environment softening from
+# formaldehyde, and the bond table correction was found by testing ammonia's
+# reaction energy but the depths themselves are dissociation energies read
+# from CRC rather than anything fitted.
+#
+# So whatever this system gives is a prediction, not a fit, and it is worth
+# keeping that way: if a Sato parameter or anything else is ever fitted to
+# barriers, ammonia should be held out rather than included.
+#
+# Its reaction energy already tests well. The corrected N-H depth gives
+# +0.145 eV against the HEAT and ATcT value of +0.122, with the old table
+# giving -0.466 -- the wrong sign. That was what exposed the table holding
+# average bond enthalpies rather than dissociation energies.
+
+AMMONIA_SYMBOLS = ["N", "H", "H", "H", "H"]
+
+# Spectator coordinates: the two N-H bonds that are not transferring, and
+# the angle each makes with the donor bond. Ammonia is pyramidal, so 107
+# degrees rather than methane's tetrahedral 109.47.
+AMMONIA_FROZEN = np.array([1.01, 1.01, 107.0])
+
+AMMONIA_LIMITS = [(0.90, 1.30), (0.90, 1.30), (95.0, 125.0)]
+
+
+def ammonia_geometry(donor_length, transfer_length, spectators=None):
+    """NH3 with a hydrogen approaching one N-H collinearly.
+
+    Built to mirror methane's arrangement as closely as the two molecules
+    allow, so a difference between them is the chemistry rather than the
+    scan. Nitrogen has one fewer hydrogen and a slightly tighter angle, so
+    there are three spectator coordinates rather than four.
+    """
+    if spectators is None:
+        spectators = AMMONIA_FROZEN
+
+    first, second, angle = spectators
+
+    nitrogen = np.zeros(3)
+
+    # Donor bond along +z, the incoming atom beyond it on the same line.
+    donor_axis = np.array([0.0, 0.0, 1.0])
+    donor_h = donor_length * donor_axis
+    incoming = donor_h + transfer_length * donor_axis
+
+    # The other two arranged around the axis. Their azimuthal separation is
+    # derived rather than assumed: placing them on opposite sides, as
+    # methane's three are, leaves the donor at the right angle to each but
+    # the two of them at 146 degrees to each other rather than 107. For all
+    # three pairwise angles to equal the target,
+    #
+    #     cos(separation) = (cos(angle) - cos(angle)^2) / sin(angle)^2
+    #
+    # Methane escapes this because three spectators at 120 degrees of azimuth
+    # and a tetrahedral polar angle happen to give exactly 109.47 between
+    # every pair. Two spectators have no such coincidence available.
+    radians = np.radians(angle)
+    cosine = np.cos(radians)
+    separation = np.arccos(
+        np.clip(
+            (cosine - cosine * cosine) / max(np.sin(radians) ** 2, 1e-12),
+            -1.0, 1.0,
+        )
+    )
+
+    placed = []
+    for index, length in enumerate((first, second)):
+        turn = index * separation
+        placed.append(nitrogen + length * np.array([
+            np.sin(radians) * np.cos(turn),
+            np.sin(radians) * np.sin(turn),
+            cosine,
+        ]))
+
+    return AMMONIA_SYMBOLS, np.array(
+        [nitrogen, donor_h, *placed, incoming]
+    )
+
+
 SYSTEMS = {
     "formaldehyde": {
         "geometry": formaldehyde_geometry,
@@ -336,6 +420,12 @@ SYSTEMS = {
         "limits": METHANE_LIMITS,
         "description": "H + CH4 -> H2 + CH3, the strong-bond control",
     },
+    "ammonia": {
+        "geometry": ammonia_geometry,
+        "frozen": AMMONIA_FROZEN,
+        "limits": AMMONIA_LIMITS,
+        "description": "H + NH3 -> H2 + NH2, nothing was fitted to this",
+    },
 }
 
 # Which system the geometry helpers build. Set once from the command line
@@ -350,8 +440,50 @@ ACTIVE_SYSTEM = "formaldehyde"
 SYSTEM_START = {
     "formaldehyde": (1.09, 1.60),
     "water": (0.98, 1.80),
-    "methane": (0.480, 0.520),
+    # Was (0.480, 0.520), a reference barrier pair that landed here from an
+    # edit meant for REFERENCE_BARRIERS: both dictionaries have a "methane"
+    # key and a two-number value, so a careless text replacement matched the
+    # wrong one. Every methane simulation was therefore constructed with its
+    # atoms half an angstrom apart. Harmless in effect, since the positions
+    # are overwritten before any energy is read and the batched path does not
+    # use this at all, but not something to leave sitting there.
+    "methane": (1.09, 1.60),
+    "ammonia": (1.01, 1.60),
 }
+
+
+def check_systems_registered():
+    """Every system needs an entry in all four tables.
+
+    They are separate dictionaries keyed by the same names, so a system can
+    be added to one and forgotten in another, and the failure surfaces as a
+    KeyError deep in a scan rather than at import. Worse, two of them hold a
+    two-number tuple per system, so an edit meant for one can silently land
+    in the other -- which happened: a reference barrier pair ended up as
+    methane's construction geometry.
+
+    REFERENCE_BARRIERS is deliberately allowed to be missing an entry, since
+    a system may have no published barrier to compare against yet.
+    """
+    problems = []
+    for name in SYSTEMS:
+        for table, label in (
+            (SYSTEM_START, "SYSTEM_START"),
+            (SYSTEM_PROBES, "SYSTEM_PROBES"),
+            (SPECTATOR_NAMES, "SPECTATOR_NAMES"),
+        ):
+            if name not in table:
+                problems.append(f"{name} missing from {label}")
+
+    # A construction geometry is a pair of bond lengths, so both entries
+    # should be plausible distances. A reference barrier pair would not be.
+    for name, start in SYSTEM_START.items():
+        if not all(0.5 <= value <= 3.0 for value in start):
+            problems.append(
+                f"{name} SYSTEM_START {start} is not a pair of distances"
+            )
+
+    return problems
 
 
 def active_geometry(donor_length, transfer_length, spectators=None):
@@ -984,6 +1116,14 @@ SYSTEM_PROBES = {
                 "transfer": (0.65, 1.60, 0.005),
                 "product_below": 0.95, "detached_transfer": 1.30,
                 "detached_donor": 1.75, "bonded_transfer": 0.95},
+    # N-H is shorter than C-H, 1.01 against 1.09, and its outer cutoff is
+    # 1.626 against 1.744, so the window starts lower and the detached donor
+    # threshold comes down with it.
+    "ammonia": {"trap": (1.35, 0.92), "impact": 1.01,
+                "donor": (0.92, 1.85, 0.02),
+                "transfer": (0.65, 1.60, 0.005),
+                "product_below": 0.95, "detached_transfer": 1.30,
+                "detached_donor": 1.65, "bonded_transfer": 0.95},
 }
 
 TRAP_DONOR = 1.39
@@ -1457,6 +1597,7 @@ BARRIER_TRANSFER_STEP = 0.01
 
 
 SPECTATOR_NAMES = {
+    "ammonia": ("r(N-H) 1", "r(N-H) 2", "angle"),
     "formaldehyde": ("r(C=O)", "r(C-H) spectator", "donor angle",
                      "spectator angle"),
     "methane": ("r(C-H) 1", "r(C-H) 2", "r(C-H) 3", "angle"),
@@ -2149,6 +2290,12 @@ def main():
         pair, _, value = item.partition("=")
         pair_depths[pair] = float(value)
     options.pair_depths = pair_depths or None
+
+    problems = check_systems_registered()
+    if problems:
+        raise SystemExit(
+            "system tables are inconsistent:\n  " + "\n  ".join(problems)
+        )
 
     probe = apply_system(options.system)
 
