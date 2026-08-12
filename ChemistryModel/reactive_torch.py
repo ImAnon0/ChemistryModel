@@ -477,7 +477,7 @@ class ReactiveSimulation:
             torch.full_like(total, self.over_reference_depth),
         )
 
-        ratio = mean_depth / self.over_reference_depth
+        ratio = torch.sqrt(mean_depth / self.over_reference_depth)
         scale = 1.0 + self.over_depth_weight * (ratio - 1.0)
 
         # Kept positive: a deep enough well should make crowding harder, not
@@ -596,6 +596,11 @@ class ReactiveSimulation:
         # counted, so if the two computed depths differently the subtraction
         # would remove an energy that was never added, and the transfer
         # surface would be a hybrid of two potentials.
+        # Kept before softening, for the over-coordination scale below. That
+        # scale is meant to read how strong an atom's bonds are as an element
+        # property; reading the softened value would apply the environment
+        # discount twice, once in the well depth and again in the barrier.
+        unsoftened_depth = pair_depth
         pair_depth = pair_depth * self.environment_softening_factor(
             taper, order, lower, mask, neighbours, cache_key=positions
         )
@@ -625,7 +630,7 @@ class ReactiveSimulation:
         over_per_atom = (
             self.over_penalty
             * self.over_coordination_scale(
-                taper, pair_depth, mask, cache_key=positions
+                taper, unsoftened_depth, mask, cache_key=positions
             )
             * excess ** 2
         )

@@ -307,6 +307,7 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         # must compute identical depths; otherwise the subtraction removes an
         # energy that was never added and the transfer surface becomes a
         # hybrid of a softened base and an unsoftened correction.
+        unsoftened_depth = pair_depth
         pair_depth = pair_depth * self.environment_softening_factor(
             taper, order, lower, mask, neighbours
         )
@@ -498,7 +499,13 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         excess_rest = torch.clamp(
             coordination - donor_taper - competitor_taper, min=0.0
         )
-        base_h_over = self.over_penalty * (excess ** 2 - excess_rest ** 2)
+        base_h_over = (
+            self.over_penalty
+            * self.over_coordination_scale(
+                taper, unsoftened_depth, mask, cache_key=positions
+            )
+            * (excess ** 2 - excess_rest ** 2)
+        )
 
         local_base = donor_morse + competitor_morse + base_h_over
         delta = mixed_state - local_base
