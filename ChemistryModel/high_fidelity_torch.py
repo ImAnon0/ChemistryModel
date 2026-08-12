@@ -34,6 +34,7 @@ constant. It must be validated across independent H-transfer reactions before
 promotion beyond characterisation.
 """
 
+import numpy as np
 import torch
 
 import reactive as R
@@ -87,6 +88,31 @@ H_TRANSFER_GATE_FULL = 0.50
 # value has to serve C-H and H-H at once, and their depths differ by enough
 # that a single number may not suit both. Measure before assuming.
 H_TRANSFER_SATO = 0.0
+
+# Per-pair override of the value above, keyed on element pair. Empty means
+# every pair uses the global value, so this is inert until something is put
+# in it.
+#
+# The reason it exists: the three systems with reference barriers need to
+# move in different directions -- water down about 0.30 eV, methane up about
+# 0.20, formaldehyde not at all -- and no global knob can do that. The
+# coupling scales with the geometric mean depth of the two bonds, and
+# formaldehyde sits at 4.12, the reference at 4.40, methane at 4.53 and
+# water at 5.16. Methane and water are on the same side of the reference, so
+# any monotonic function of depth drags them together. Five global knobs
+# have now been tested and every one of them did exactly that.
+#
+# Pair type is a genuine chemical axis rather than a sixth global constant:
+# water transfers O-H to O-H while the carbon systems transfer C-H to H-H,
+# so a per-pair unoccupied-state curve can move one without the other. That
+# is also what real LEPS does.
+#
+# It is a diagnostic first. Four pair values against three reference
+# barriers would fit trivially and mean nothing, so this should not become a
+# fitted table unless there are substantially more reactions than
+# parameters, with whole molecular environments held out. Ammonia is
+# deliberately unreferenced for that purpose.
+H_TRANSFER_SATO_PAIRS = {}
 
 # The state coupling is scaled by a geometric overlap that peaks when both
 # contacts are strong -- which is exactly the shared-hydrogen configuration
@@ -190,6 +216,21 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         self.h_transfer_gate_start = float(H_TRANSFER_GATE_START)
         self.h_transfer_gate_full = float(H_TRANSFER_GATE_FULL)
         self.h_transfer_sato = float(H_TRANSFER_SATO)
+
+        # Built into a table the same shape as the other pair parameters, so
+        # the energy expression can index it rather than branching per pair.
+        # Assembled as a plain array here and turned into a tensor after the
+        # base constructor: self.device and self.dtype do not exist until it
+        # has run, while the constants above must be set before it, since it
+        # computes forces and therefore calls energy_per_atom.
+        sato_values = np.full(
+            (len(R.ELEMENTS), len(R.ELEMENTS)), float(H_TRANSFER_SATO)
+        )
+        for pair, value in H_TRANSFER_SATO_PAIRS.items():
+            first, second = (part.strip() for part in pair.split("-"))
+            i = int(R.ELEMENT_INDEX[first])
+            j = int(R.ELEMENT_INDEX[second])
+            sato_values[i, j] = sato_values[j, i] = float(value)
         self.h_transfer_coupling_flatten = float(H_TRANSFER_COUPLING_FLATTEN)
         self.h_transfer_lowering_cap = (
             None if H_TRANSFER_LOWERING_CAP is None
@@ -208,7 +249,25 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
             H_TRANSFER_COUPLING_REFERENCE_DEPTH
         )
 
+        # Kept as an array and turned into a tensor on first use. The
+        # correction reads it during the base constructor's force
+        # calculation, which happens before self.device exists, so it cannot
+        # be a tensor yet; and it is indexed by self.types, which is a
+        # tensor, so it cannot stay an array either. A lazy property is the
+        # only ordering that satisfies both.
+        self._sato_values = sato_values
+
         super().__init__(*args, **kwargs)
+
+    @property
+    def h_transfer_sato_table(self):
+        table = getattr(self, "_sato_table", None)
+        if table is None:
+            table = torch.tensor(
+                self._sato_values, device=self.device, dtype=self.dtype
+            )
+            self._sato_table = table
+        return table
 
     def energy_per_atom(self, positions):
         base = super().energy_per_atom(positions)
@@ -338,9 +397,14 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
 
         # At sato 0 this is exactly pair_core, so the default path reproduces
         # V4 bit for bit and this whole addition is inert.
+        # Per pair rather than one number, so O-H can differ from C-H.
+        pair_sato = self.h_transfer_sato_table[
+            self.types[:, None], self.types[neighbours]
+        ]
+
         pair_unoccupied = (
-            (1.0 - float(self.h_transfer_sato)) * pair_core
-            + float(self.h_transfer_sato) * pair_anti
+            (1.0 - pair_sato) * pair_core
+            + pair_sato * pair_anti
         )
 
         hydrogen_index = int(R.ELEMENT_INDEX["H"])

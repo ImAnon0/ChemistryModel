@@ -139,17 +139,18 @@ WATER_SYMBOLS = ["O", "H", "H", "O", "H"]
 # angle each makes with the transfer axis.
 WATER_FROZEN = np.array([0.96, 0.96, 104.5, 104.5])
 
-# The angle floor was 90 degrees and the relaxed saddle sat exactly on it,
-# which meant the barrier reported there was the edge of the search box
-# rather than a minimum. Widened to 60 so the optimiser can find whatever it
-# actually wants.
+# These angles are measured from the transfer axis, not between the two
+# bonds, so a spectator value of 75.53 is an H-O-H angle of 104.47. The two
+# are complements and sum to 180. That cost a long detour: 75.53 kept
+# appearing as the relaxed value and looked like the optimiser folding a
+# water molecule 29 degrees away from its rest angle, when it was the
+# optimiser finding the rest angle exactly.
 #
-# 60 degrees is chosen to be permissive rather than physical: a water
-# molecule does not have a 60 degree H-O-H angle, so if the relaxed saddle
-# lands near this floor as well, the answer is not that the bound is still
-# too tight but that the minimisation is running away into geometries the
-# angle term does not properly penalise. Those two cases look identical from
-# the barrier alone, which is why the bound is reported.
+# So the range below is 30 to 120 degrees of H-O-H. The floor was 90 in
+# spectator terms, which is 90 of H-O-H and above the 104.47 the model
+# wants, so the relaxed saddle sat on the bound and its barrier was the edge
+# of the search box rather than a minimum. Widening was the right fix for
+# the wrong stated reason.
 WATER_LIMITS = [(0.85, 1.15), (0.85, 1.15), (60.0, 150.0), (60.0, 150.0)]
 
 
@@ -538,7 +539,7 @@ def check_water_symmetry(points=((1.00, 1.40), (1.10, 1.30), (1.20, 1.20),
 def build(physics="high_fidelity", mixing=None, sato=None,
           flatten=None, cap=None, softening=None,
           depth_power=None, over_weight=None, pair_depths=None,
-          boxes=None):
+          sato_pairs=None, boxes=None):
     cls = (
         HighFidelityBatchedReactiveSimulation if physics == "high_fidelity"
         else BatchedReactiveSimulation
@@ -626,6 +627,10 @@ def build(physics="high_fidelity", mixing=None, sato=None,
         import reactive as R
         R.ENVIRONMENT_SOFTENING = float(softening)
 
+    if sato_pairs is not None:
+        saved["sato_pairs"] = dict(high_fidelity_torch.H_TRANSFER_SATO_PAIRS)
+        high_fidelity_torch.H_TRANSFER_SATO_PAIRS = dict(sato_pairs)
+
     if pair_depths:
         # Diagnostic only. Each entry is a single generic depth shared by
         # every atom of that pair, so overriding one asks what the barrier
@@ -690,6 +695,8 @@ def build(physics="high_fidelity", mixing=None, sato=None,
         if hasattr(high_fidelity_torch, "H_TRANSFER_LOWERING_CAP"):
             high_fidelity_torch.H_TRANSFER_LOWERING_CAP = saved["cap"]
         R.ENVIRONMENT_SOFTENING = saved["softening"]
+        if "sato_pairs" in saved:
+            high_fidelity_torch.H_TRANSFER_SATO_PAIRS = saved["sato_pairs"]
         if "over_weight" in saved:
             R.OVER_COORDINATION_DEPTH_WEIGHT = saved["over_weight"]
         if "depth_power" in saved:
@@ -1598,11 +1605,14 @@ BARRIER_TRANSFER_STEP = 0.01
 
 SPECTATOR_NAMES = {
     "ammonia": ("r(N-H) 1", "r(N-H) 2", "angle"),
-    "formaldehyde": ("r(C=O)", "r(C-H) spectator", "donor angle",
-                     "spectator angle"),
+    "formaldehyde": ("r(C=O)", "r(C-H) spectator", "donor angle from C=O",
+                     "spectator angle from C=O"),
     "methane": ("r(C-H) 1", "r(C-H) 2", "r(C-H) 3", "angle"),
-    "water": ("r(O-H) donor", "r(O-H) acceptor", "donor angle",
-              "acceptor angle"),
+    # The angles are from the transfer axis, so they are complements of the
+    # bond angle and sum to 180 with it. Named to say so, because "donor
+    # angle" reading 75.53 looks like a badly distorted water and is not.
+    "water": ("r(O-H) donor", "r(O-H) acceptor", "donor 180-HOH",
+              "acceptor 180-HOH"),
 }
 
 
@@ -1634,7 +1644,7 @@ def describe_spectators(name, values, tolerance=1e-3):
 
 
 def measure_barrier(physics, name, mixing=None, power=None, over_weight=None,
-                    sato=None, relax=False,
+                    sato=None, sato_pairs=None, relax=False,
                     donor_step=BARRIER_DONOR_STEP,
                     transfer_step=BARRIER_TRANSFER_STEP):
     """Barrier, reaction energy and saddle geometry for one setting.
@@ -1649,7 +1659,7 @@ def measure_barrier(physics, name, mixing=None, power=None, over_weight=None,
     apply_system(name)
     sim = build(
         physics, mixing=mixing, depth_power=power, over_weight=over_weight,
-        sato=sato,
+        sato=sato, sato_pairs=sato_pairs,
     )
 
     # Window from the system, not hardcoded. These were formaldehyde's
@@ -1675,7 +1685,7 @@ def measure_barrier(physics, name, mixing=None, power=None, over_weight=None,
         record_spectators=True, progress_label=name, physics=physics,
         build_kwargs=dict(
             mixing=mixing, depth_power=power, over_weight=over_weight,
-            sato=sato,
+            sato=sato, sato_pairs=sato_pairs,
         ),
     )
     grid, spectators = result
@@ -1784,7 +1794,8 @@ def agreement_report(physics, relax=False, mixing=None, power=None,
 
 
 def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
-                 mixings=None, over_weights=None, satos=None, relax=False,
+                 mixings=None, over_weights=None, satos=None,
+                 sato_pairs=None, relax=False,
                  systems=("formaldehyde", "water", "methane")):
     """Sweep both coupling knobs against every system with a known barrier.
 
@@ -1842,7 +1853,8 @@ def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
             for name in systems:
                 found = measure_barrier(
                     physics, name, mixing=mixing, power=power,
-                    over_weight=over_weight, sato=sato, relax=relax,
+                    over_weight=over_weight, sato=sato,
+                    sato_pairs=sato_pairs, relax=relax,
                 )
                 if found is None:
                     cells.append(f"{'no route':>20}")
@@ -2195,6 +2207,14 @@ def main():
         ),
     )
     parser.add_argument(
+        "--sato-pair", action="append", default=None, metavar="PAIR=value",
+        help=(
+            "per-pair Sato value, e.g. O-H=0.2. Repeatable. This is the one "
+            "axis that can move water without moving the carbon systems, "
+            "since water transfers O-H to O-H and they transfer C-H to H-H"
+        ),
+    )
+    parser.add_argument(
         "--satos", default=None,
         help=(
             "comma separated H_TRANSFER_SATO values for --slope; blends the "
@@ -2285,6 +2305,12 @@ def main():
     SCAN_DEVICE = options.device
     SCAN_DTYPE = torch.float32 if options.fast else torch.float64
 
+    sato_pairs = {}
+    for item in (options.sato_pair or []):
+        pair, _, value = item.partition("=")
+        sato_pairs[pair] = float(value)
+    options.sato_pairs = sato_pairs or None
+
     pair_depths = {}
     for item in (options.pair_depth or []):
         pair, _, value = item.partition("=")
@@ -2362,6 +2388,7 @@ def main():
                 tuple(float(part) for part in options.satos.split(","))
                 if options.satos else None
             ),
+            sato_pairs=options.sato_pairs,
             relax=options.relax,
         )
         return
