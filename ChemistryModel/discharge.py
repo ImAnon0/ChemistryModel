@@ -37,6 +37,20 @@ import reactive as R
 
 
 def find_bonds(positions, types, box_size, threshold=0.35):
+    """Bonded pairs, with the depth each one actually has.
+
+    The depth matters because the kick below is sized from it, and a bond's
+    depth is not the single-bond table entry unless the bond is single. A
+    carbonyl C=O is 7.77 eV against a tabulated single-bond 3.71, and
+    dinitrogen is 9.79 against 1.73. Sizing the kick from the single-bond
+    value meant every multiple bond was selected for dissociation, counted
+    as dissociated, given a shove worth a quarter to two thirds of its
+    depth, and left intact. The report said the strike worked.
+
+    So the order is computed here, using the same helpers the potential
+    uses, and the depth blended from it. No new physics: this is the depth
+    the bond already has in the energy expression.
+    """
     count = len(positions)
 
     first, second = np.triu_indices(count, k=1)
@@ -53,7 +67,20 @@ def find_bonds(positions, types, box_size, threshold=0.35):
 
     keep = taper > threshold
 
-    return first[keep], second[keep], offsets[keep], distances[keep]
+    # Bond order needs the whole neighbourhood, not just the bonded pairs,
+    # so the taper is rebuilt as a square matrix before the selection above
+    # is applied.
+    square = np.zeros((count, count))
+    square[first, second] = taper
+    square[second, first] = taper
+
+    order, _ = R.bond_orders(square, types)
+    _, depth, _ = R.interpolate_parameters(order, types)
+
+    return (
+        first[keep], second[keep], offsets[keep], distances[keep],
+        depth[first[keep], second[keep]],
+    )
 
 
 def strike(positions, velocities, masses, types, box_size,
@@ -112,7 +139,7 @@ def strike(positions, velocities, masses, types, box_size,
 
     # ---- the electron-impact part ----
 
-    first, second, bond_offsets, distances = find_bonds(
+    first, second, bond_offsets, distances, bond_depth = find_bonds(
         positions, types, box_size
     )
 
@@ -127,8 +154,6 @@ def strike(positions, velocities, masses, types, box_size,
         chance = pair_weight * dissociation
 
         chosen = generator.random(len(first)) < chance
-
-        depth = R.BOND_DEPTH[types[first], types[second]]
 
         for index in np.where(chosen)[0]:
             a = int(first[index])
@@ -145,8 +170,18 @@ def strike(positions, velocities, masses, types, box_size,
             # Enough relative energy to clear the well, with a
             # margin so the fragments actually separate rather
             # than falling straight back together.
+            #
+            # One thing this does not see: the environment
+            # softening, which weakens a single bond according to
+            # what its partner is committed to elsewhere. A
+            # carbonyl C-H is 3.76 eV rather than the tabulated
+            # 4.55, so it is kicked at 1.7 times its depth instead
+            # of 1.4. It breaks either way, just harder than
+            # intended, and correcting it would mean the whole
+            # softening calculation here for a margin that is
+            # already a free parameter.
 
-            energy = excess * depth[index]
+            energy = excess * bond_depth[index]
 
             relative_speed = np.sqrt(
                 2.0 * energy / (reduced * 103.642)

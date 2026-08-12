@@ -510,6 +510,23 @@ class Lab(QtWidgets.QWidget):
         self.capture_every = self.choice([10, 20, 40, 80, 200], 40, 0)
         left.addRow("capture every N steps", self.capture_every)
 
+        # The runner has always supported this; it was simply not exposed.
+        # Without it a twenty picosecond run leaves nothing on disk until it
+        # finishes, so a crash or a stop loses the lot. With it the recording
+        # and its index entry are rewritten at the interval, and grouped runs
+        # checkpoint every box in the group rather than waiting for all of
+        # them.
+        #
+        # Zero keeps the old behaviour of writing only at the end.
+        self.save_every = self.choice([0, 1, 2, 5, 10, 20], 5, 0)
+        self.save_every.setToolTip(
+            "Write the recording and its index entry this often, in "
+            "picoseconds, rather than only when the run finishes. A stopped "
+            "or crashed run then leaves usable progress on disk. Zero writes "
+            "at the end only."
+        )
+        left.addRow("save every (ps)", self.save_every)
+
         self.grouped = QtWidgets.QCheckBox(
             "8 boxes at once, one group at a time"
         )
@@ -863,6 +880,7 @@ class Lab(QtWidgets.QWidget):
             "--ps", f"{self.picoseconds.value():g}",
             "--seeds", str(int(self.seeds.value())),
             "--capture-every", str(int(self.capture_every.value())),
+            "--save-every-ps", f"{self.save_every.value():g}",
             "--hot-temperature", f"{self.hot_temperature.value():g}",
             "--hot-until-fs", f"{self.hot_until.value():g}",
             "--cool-temperature",
@@ -920,6 +938,7 @@ class Lab(QtWidgets.QWidget):
             "--cool-temperature",
             f"{self.cool_temperature.value():g}",
             "--capture-every", str(int(self.capture_every.value())),
+            "--save-every-ps", f"{self.save_every.value():g}",
         ]
 
         if self.strikes.value() > 0:
@@ -1139,7 +1158,29 @@ class Lab(QtWidgets.QWidget):
         title.setStyleSheet("font-weight: bold; font-size: 14px;")
         picker.addWidget(title)
 
+        # Editable with a completer rather than a separate search field.
+        # Nearly four hundred species is not something to scroll, and typing
+        # into the box itself is one control rather than two: "CH3" or "041"
+        # both narrow it, since the completer matches anywhere in the entry
+        # rather than only at the start.
         self.character_molecule = QtWidgets.QComboBox()
+        self.character_molecule.setEditable(True)
+        self.character_molecule.setInsertPolicy(
+            QtWidgets.QComboBox.InsertPolicy.NoInsert
+        )
+
+        completer = self.character_molecule.completer()
+        completer.setCompletionMode(
+            QtWidgets.QCompleter.CompletionMode.PopupCompletion
+        )
+        completer.setFilterMode(QtCore.Qt.MatchFlag.MatchContains)
+        completer.setCaseSensitivity(
+            QtCore.Qt.CaseSensitivity.CaseInsensitive
+        )
+
+        self.character_molecule.lineEdit().setPlaceholderText(
+            "type a formula or id to filter"
+        )
         self.character_molecule.currentIndexChanged.connect(
             self.on_character_molecule_changed
         )
@@ -1695,7 +1736,9 @@ class Lab(QtWidgets.QWidget):
 
         self.molecule_library_list.blockSignals(False)
 
-        # Main test dropdown.
+        # Main test dropdown. Editable boxes keep whatever the user typed
+        # when the model is replaced, so the text is restored from the
+        # selection afterwards rather than left as a stale fragment.
         self.character_molecule.blockSignals(True)
         self.character_molecule.clear()
 
@@ -1710,6 +1753,14 @@ class Lab(QtWidgets.QWidget):
                 if self.character_molecule.itemData(index) == current_id:
                     self.character_molecule.setCurrentIndex(index)
                     break
+
+        # Put the selected entry's text back, since an editable box keeps
+        # whatever was typed when its contents are replaced and would
+        # otherwise show a half-finished filter next to a different molecule.
+        if self.character_molecule.currentIndex() >= 0:
+            self.character_molecule.setEditText(
+                self.character_molecule.currentText()
+            )
 
         self.character_molecule.blockSignals(False)
 
@@ -3264,6 +3315,7 @@ class Lab(QtWidgets.QWidget):
             "first_strike": self.first_strike.value(),
             "strike_interval": self.strike_interval.value(),
             "capture_every": self.capture_every.value(),
+            "save_every": self.save_every.value(),
             "character_capture": self.character_capture.value(),
             "grouped": self.grouped.isChecked(),
             "folder_name": self.folder_name.text(),
@@ -3292,6 +3344,7 @@ class Lab(QtWidgets.QWidget):
             (self.first_strike, "first_strike"),
             (self.strike_interval, "strike_interval"),
             (self.capture_every, "capture_every"),
+            (self.save_every, "save_every"),
             (self.character_capture, "character_capture"),
         ]
 

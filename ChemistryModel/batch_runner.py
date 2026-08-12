@@ -353,11 +353,17 @@ def run_one(mixture, seed, options, progress=None,
             )
 
             if options.verbose:
+                # bonds_in_channel as well as dissociated: a strike that
+                # catches atoms but finds no whole bond among them reports
+                # zero broken, and that reads as a broken kick when it is
+                # really a channel too narrow to contain both ends of
+                # anything.
                 print(
                     f"    strike at "
                     f"{simulation.elapsed_femtoseconds:.0f} fs: "
                     f"{report['struck']} atoms, "
-                    f"{report['dissociated']} bonds broken"
+                    f"{report.get('bonds_in_channel', 0)} whole bonds, "
+                    f"{report['dissociated']} broken"
                 )
 
             strikes_done += 1
@@ -686,11 +692,14 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
                 broken = sum(
                     report["dissociated"] for report in reports
                 )
+                available = sum(
+                    report.get("bonds_in_channel", 0) for report in reports
+                )
 
                 print(
                     f"    strike at "
                     f"{simulation.elapsed_femtoseconds:.0f} fs: "
-                    f"{broken} bonds broken across "
+                    f"{broken} of {available} whole bonds broken across "
                     f"{len(reports)} boxes"
                 )
 
@@ -1627,7 +1636,7 @@ def main():
     parser.add_argument("--first-strike-fs", type=float, default=3000.0)
     parser.add_argument("--strike-interval-fs", type=float,
                         default=3000.0)
-    parser.add_argument("--strike-radius", type=float, default=2.2)
+    parser.add_argument("--strike-radius", type=float, default=3.5)
     parser.add_argument(
         "--strike-temperature", type=float, default=25000.0,
         help="channel temperature in kelvin; lightning is 20-30 thousand"
