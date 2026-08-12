@@ -1248,12 +1248,14 @@ BARRIER_TRANSFER_STEP = 0.01
 
 
 def measure_barrier(physics, name, mixing=None, power=None, over_weight=None,
+                    sato=None,
                     donor_step=BARRIER_DONOR_STEP,
                     transfer_step=BARRIER_TRANSFER_STEP):
     """Barrier and reaction energy for one system at one parameter setting."""
     apply_system(name)
     sim = build(
-        physics, mixing=mixing, depth_power=power, over_weight=over_weight
+        physics, mixing=mixing, depth_power=power, over_weight=over_weight,
+        sato=sato,
     )
 
     donor_lengths = np.arange(1.00, 1.90, donor_step)
@@ -1269,7 +1271,7 @@ def measure_barrier(physics, name, mixing=None, power=None, over_weight=None,
 
 
 def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
-                 mixings=None, over_weights=None,
+                 mixings=None, over_weights=None, satos=None,
                  systems=("formaldehyde", "water", "methane")):
     """Sweep both coupling knobs against every system with a known barrier.
 
@@ -1299,6 +1301,8 @@ def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
         mixings = (0.63,)
     if over_weights is None:
         over_weights = (0.0,)
+    if satos is None:
+        satos = (0.0,)
 
     print("barrier and error against the computed reference, in eV")
     print("reference midpoints: " + ", ".join(
@@ -1308,10 +1312,11 @@ def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
     print("power 1.00 with mixing 0.63 is the current model\n")
 
     header = "".join(f"{name:>20}" for name in systems)
-    print(f"{'mixing':>7}{'power':>7}{'over':>6}{header}"
+    print(f"{'mixing':>7}{'power':>7}{'over':>6}{'sato':>6}{header}"
           f"{'spread':>9}{'worst':>8}")
 
-    for over_weight in over_weights:
+    for sato in satos:
+     for over_weight in over_weights:
       for mixing in mixings:
         for power in powers:
             cells = []
@@ -1321,7 +1326,7 @@ def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
             for name in systems:
                 height, _ = measure_barrier(
                     physics, name, mixing=mixing, power=power,
-                    over_weight=over_weight,
+                    over_weight=over_weight, sato=sato,
                 )
                 if height is None:
                     cells.append(f"{'no route':>20}")
@@ -1339,7 +1344,7 @@ def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
                 spread = f"{'-':>8}"
             worst = f"{max(errors):7.3f}" if errors else f"{'-':>7}"
 
-            print(f"{mixing:7.2f}{power:7.2f}{over_weight:6.2f}"
+            print(f"{mixing:7.2f}{power:7.2f}{over_weight:6.2f}{sato:6.2f}"
                   + "".join(cells) + spread + worst)
 
     print("\neach cell is  barrier / error against the reference midpoint")
@@ -1638,6 +1643,17 @@ def main():
         ),
     )
     parser.add_argument(
+        "--satos", default=None,
+        help=(
+            "comma separated H_TRANSFER_SATO values for --slope; blends the "
+            "unoccupied partner's curve from bare Morse repulsion toward a "
+            "genuinely repulsive anti-Morse. It was set aside earlier for "
+            "moving the barrier and the three-centre trap together, but that "
+            "was judged on formaldehyde alone; the question here is whether "
+            "it separates systems rather than what it does to one"
+        ),
+    )
+    parser.add_argument(
         "--over-weights", default=None,
         help=(
             "comma separated OVER_COORDINATION_DEPTH_WEIGHT values for "
@@ -1753,6 +1769,10 @@ def main():
             over_weights=(
                 tuple(float(part) for part in options.over_weights.split(","))
                 if options.over_weights else None
+            ),
+            satos=(
+                tuple(float(part) for part in options.satos.split(","))
+                if options.satos else None
             ),
         )
         return
