@@ -48,6 +48,7 @@ number was an artefact.
 """
 
 import argparse
+import time
 
 import numpy as np
 import torch
@@ -546,9 +547,24 @@ def relaxed_energy(sim, donor_length, transfer_length, start=None):
     return float(result.fun), np.asarray(result.x, float)
 
 
-def surface(sim, donor_lengths, transfer_lengths, relax=False, progress=True):
-    """Energy grid, indexed [donor, transfer]."""
+def surface(sim, donor_lengths, transfer_lengths, relax=False, progress=True,
+            record_spectators=False, progress_label=""):
+    """Energy grid, indexed [donor, transfer].
+
+    With record_spectators the relaxed spectator coordinates are kept for
+    every cell and returned alongside the grid. That is what lets a caller
+    ask what geometry a saddle actually has, and whether the optimiser
+    reached it by pinning a coordinate against its limit -- which would make
+    the energy there a boundary artefact rather than a minimum.
+    """
+    started = time.monotonic()
+
     grid = np.empty((len(donor_lengths), len(transfer_lengths)))
+    spectators = (
+        np.empty((len(donor_lengths), len(transfer_lengths),
+                  len(active_frozen())))
+        if record_spectators else None
+    )
     carried = None
 
     for i, donor in enumerate(donor_lengths):
@@ -564,15 +580,39 @@ def surface(sim, donor_lengths, transfer_lengths, relax=False, progress=True):
                 )
                 if j == 0:
                     carried = row_start
+                if spectators is not None:
+                    spectators[i, j] = row_start
             else:
                 value = energy_at(sim, donor, transfer)
+                if spectators is not None:
+                    spectators[i, j] = active_frozen()
 
             grid[i, j] = value
 
         if progress and relax:
-            print(f"  row {i + 1}/{len(donor_lengths)}  "
-                  f"r(C-H) = {donor:.3f} A", flush=True)
+            # Relaxation runs a minimisation at every cell, so a grid takes
+            # minutes and prints nothing without this. Overwrites one line
+            # rather than scrolling, and carries the label so several grids
+            # in a row can be told apart.
+            done = i + 1
+            width = 28
+            filled = int(width * done / len(donor_lengths))
+            elapsed = time.monotonic() - started
+            remaining = elapsed * (len(donor_lengths) - done) / max(done, 1)
+            print(
+                f"\r  {progress_label:<14}"
+                f"[{'#' * filled}{'.' * (width - filled)}] "
+                f"{done:>3}/{len(donor_lengths)}  "
+                f"r {donor:.2f} A  "
+                f"{elapsed:5.0f}s elapsed, {remaining:4.0f}s left ",
+                end="", flush=True,
+            )
 
+    if progress and relax:
+        print(flush=True)
+
+    if spectators is not None:
+        return grid, spectators
     return grid
 
 
@@ -1220,33 +1260,33 @@ def proton_transfer_report(physics, separations=(2.60, 2.70, 2.80, 3.00),
 
 
 # Computed barriers, in eV, for the three systems the scanner can build.
-# These are what the model is being asked to reproduce.
 #
-# All three are CLASSICAL barriers: the bare height of the potential surface,
-# saddle minus reactants, with no vibrational zero point energy anywhere.
-# That is the same quantity the scanner measures, since it floods a grid of
-# static geometries, and the model integrates Newton's equations on a static
-# surface with no vibrational levels of its own.
+# CONVENTION: classical. The bare height of the potential surface, saddle
+# minus reactants, with no vibrational zero point energy anywhere. That is
+# what the scanner measures, since it floods a grid of static geometries,
+# and what the model can represent, since it integrates Newton's equations
+# on a static surface with no vibrational levels of its own.
 #
-# The literature also quotes adiabatic barriers, which subtract the zero
-# point difference between the transition state and the reactants and run
-# roughly 0.05 to 0.13 eV lower. Mixing the two conventions is easy and was
-# done here twice: it made methane look about 0.09 eV worse than it is.
-# Every value below is quoted directly from a source rather than converted,
-# so there is no arithmetic here to get wrong.
+# The literature also quotes adiabatic barriers, which include the zero point
+# difference between the transition state and the reactants and run roughly
+# 0.05 to 0.13 eV lower. Mixing the two conventions was done here twice and
+# cost real time both occasions: it made formaldehyde's target 0.034 eV too
+# low and methane's 0.09 eV too high. Every value below is quoted directly
+# from a source in the classical convention. Do not convert one to match
+# another, and do not add an estimated correction; find a quoted value.
 #
-#   formaldehyde  6.69 kcal/mol, CCSD(T)/cc-pVTZ//MP2/cc-pVTZ, Siai,
-#                 Oueslati and Kerkeni 2016, Chem. Phys. 474, 44-51
+#   formaldehyde  7.46 kcal/mol, electronic barrier, CCSD(T)/cc-pVTZ//MP2,
+#                 Table 1 of Kerkeni et al. 2022 (the 6.69 in the same table
+#                 is the starred, ZPE-corrected row)
 #   water         8.4 kcal/mol, symmetric OH + H2O exchange, CCSD(T) with
 #                 CCSDT(Q) corrections, Schaefer and co-workers 2016
 #   methane       14.1 kcal/mol, PES-2014 fitted to CCSD(T)=FULL/aug-cc-pVQZ
 #
-# A single value rather than a range, because these are specific published
-# numbers and a range would suggest a spread of estimates that does not
-# exist. Different methods disagree by a few tenths of a kcal/mol, which is
-# far below the errors being measured.
+# Stored as a pair for the printing code, but both entries are the same
+# number: these are specific published values, and a range would suggest a
+# spread of estimates that does not exist.
 REFERENCE_BARRIERS = {
-    "formaldehyde": (0.290, 0.290),
+    "formaldehyde": (0.324, 0.324),
     "water": (0.364, 0.364),
     "methane": (0.611, 0.611),
 }
@@ -1260,11 +1300,55 @@ BARRIER_DONOR_STEP = 0.04
 BARRIER_TRANSFER_STEP = 0.01
 
 
+SPECTATOR_NAMES = {
+    "formaldehyde": ("r(C=O)", "r(C-H) spectator", "donor angle",
+                     "spectator angle"),
+    "methane": ("r(C-H) 1", "r(C-H) 2", "r(C-H) 3", "angle"),
+    "water": ("r(O-H) donor", "r(O-H) acceptor", "donor angle",
+              "acceptor angle"),
+}
+
+
+def describe_spectators(name, values, tolerance=1e-3):
+    """Report the relaxed spectator coordinates and flag any at a limit.
+
+    A coordinate sitting on its bound is not a minimum, it is the edge of
+    the box the optimiser was allowed to search. The energy there says more
+    about the limits than about the molecule, so anything pinned has to be
+    visible rather than folded into a single number.
+    """
+    labels = SPECTATOR_NAMES.get(name)
+    limits = SYSTEMS[name]["limits"]
+
+    lines = []
+    pinned = []
+    for index, (value, (low, high)) in enumerate(zip(values, limits)):
+        label = labels[index] if labels else f"spectator {index}"
+        mark = ""
+        if value <= low + tolerance:
+            mark = f"  AT LOWER LIMIT {low:g}"
+            pinned.append(label)
+        elif value >= high - tolerance:
+            mark = f"  AT UPPER LIMIT {high:g}"
+            pinned.append(label)
+        lines.append(f"    {label:>20} {value:8.3f}{mark}")
+
+    return lines, pinned
+
+
 def measure_barrier(physics, name, mixing=None, power=None, over_weight=None,
-                    sato=None,
+                    sato=None, relax=False,
                     donor_step=BARRIER_DONOR_STEP,
                     transfer_step=BARRIER_TRANSFER_STEP):
-    """Barrier and reaction energy for one system at one parameter setting."""
+    """Barrier, reaction energy and saddle geometry for one setting.
+
+    Relaxation is off by default because a relaxed grid costs a constrained
+    minimisation per cell. It matters more than that cost suggests: holding
+    the spectators rigid put a 0.3 eV artefact in formaldehyde's reaction
+    energy and moved water's barrier by 0.15 eV, and it moved the three
+    systems by different amounts, so a frozen comparison between them is not
+    trustworthy even when each number looks reasonable on its own.
+    """
     apply_system(name)
     sim = build(
         physics, mixing=mixing, depth_power=power, over_weight=over_weight,
@@ -1273,29 +1357,102 @@ def measure_barrier(physics, name, mixing=None, power=None, over_weight=None,
 
     # Window from the system, not hardcoded. These were formaldehyde's
     # bounds, which meant water was scanned from donor 1.00 when its O-H sits
-    # at 0.96, clipping the reactant minimum off the edge of the grid, and
-    # down to transfer 0.65, deep inside O-H repulsion. Its basin thresholds
-    # came from apply_system regardless, so the reactant seed was chosen from
-    # one or two columns at the very edge. Every water figure in a slope
-    # table before this was measured that way.
+    # at 0.96, clipping the reactant minimum off the edge of the grid.
     probe = SYSTEM_PROBES[name]
     donor_low, donor_high, _ = probe["donor"]
     transfer_low, transfer_high, _ = probe["transfer"]
 
+    # Relaxing runs a minimisation at every cell, so the grid coarsens when
+    # it is switched on -- the same trade the main scan makes. This matches
+    # the step the relaxed escape runs use, so the two agree rather than
+    # differing by grid alone. It moves a barrier by a millivolt or two,
+    # which is far below the errors being measured.
+    if relax:
+        transfer_step = max(transfer_step, 0.02)
+
     donor_lengths = np.arange(donor_low, donor_high, donor_step)
     transfer_lengths = np.arange(transfer_low, transfer_high, transfer_step)
 
-    found = locate_saddle(sim, donor_lengths, transfer_lengths)
-    if found is None:
-        return None, None
+    result = surface(
+        sim, donor_lengths, transfer_lengths, relax=relax, progress=relax,
+        record_spectators=True, progress_label=name,
+    )
+    grid, spectators = result
 
-    _, _, height, grid = found
     reactant, product = basin_seeds(grid, donor_lengths, transfer_lengths)
-    return height, float(grid[product] - grid[reactant])
+    if reactant is None:
+        return None
+
+    cell, energy = flood_saddle(grid, reactant, product)
+    if cell is None:
+        return None
+
+    return {
+        "barrier": float(energy - grid[reactant]),
+        "reaction": float(grid[product] - grid[reactant]),
+        "donor": float(donor_lengths[cell[0]]),
+        "transfer": float(transfer_lengths[cell[1]]),
+        "spectators": spectators[cell],
+        "reactant_donor": float(donor_lengths[reactant[0]]),
+        "reactant_transfer": float(transfer_lengths[reactant[1]]),
+    }
+
+
+def agreement_report(physics, relax=False):
+    """Do the two measurement paths give the same barrier?
+
+    measure_barrier and escape_report both locate a saddle by flooding, but
+    they were written separately and diverged once already: measure_barrier
+    hardcoded formaldehyde's scan window, so water was measured on the wrong
+    grid and reported three different barriers from nominally identical
+    settings. Nothing catches that except comparing them directly.
+
+    Same system, same window, same parameters, same relaxation. Any
+    difference beyond the grid step is a bug in one of the two.
+    """
+    print("barrier from each path, same settings")
+    print(f"spectators: {'relaxed' if relax else 'frozen'}\n")
+    print(f"{'system':>14}{'measure_barrier':>18}{'escape path':>14}"
+          f"{'difference':>12}")
+
+    for name in ("formaldehyde", "water", "methane"):
+        probe = apply_system(name)
+        donor_low, donor_high, donor_step = probe["donor"]
+        transfer_low, transfer_high, transfer_step = probe["transfer"]
+
+        found = measure_barrier(
+            physics, name, relax=relax,
+            donor_step=donor_step, transfer_step=transfer_step,
+        )
+
+        # The escape path, inlined at the same window and step.
+        apply_system(name)
+        sim = build(physics)
+        donor_lengths = np.arange(donor_low, donor_high, donor_step)
+        transfer_lengths = np.arange(
+            transfer_low, transfer_high, transfer_step
+        )
+        grid = surface(
+            sim, donor_lengths, transfer_lengths, relax=relax,
+            progress=relax, progress_label=f"{name} direct",
+        )
+        reactant, product = basin_seeds(
+            grid, donor_lengths, transfer_lengths
+        )
+        cell, energy = flood_saddle(grid, reactant, product)
+        direct = float(energy - grid[reactant])
+
+        difference = found["barrier"] - direct
+        flag = "" if abs(difference) < 1e-6 else "   MISMATCH"
+        print(f"{name:>14}{found['barrier']:16.4f}{direct:14.4f}"
+              f"{difference:+12.6f}{flag}")
+
+    print("\nthe two paths share flood_saddle and basin_seeds, so identical")
+    print("windows must give identical answers; anything else is a bug")
 
 
 def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
-                 mixings=None, over_weights=None, satos=None,
+                 mixings=None, over_weights=None, satos=None, relax=False,
                  systems=("formaldehyde", "water", "methane")):
     """Sweep both coupling knobs against every system with a known barrier.
 
@@ -1346,15 +1503,24 @@ def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
             cells = []
             barriers = []
             errors = []
+            pinned = []
 
             for name in systems:
-                height, _ = measure_barrier(
+                found = measure_barrier(
                     physics, name, mixing=mixing, power=power,
-                    over_weight=over_weight, sato=sato,
+                    over_weight=over_weight, sato=sato, relax=relax,
                 )
-                if height is None:
+                if found is None:
                     cells.append(f"{'no route':>20}")
                     continue
+
+                height = found["barrier"]
+                pinned.extend(
+                    (name, label)
+                    for label in describe_spectators(
+                        name, found["spectators"]
+                    )[1]
+                )
 
                 barriers.append(height)
                 low, high = REFERENCE_BARRIERS[name]
@@ -1369,7 +1535,29 @@ def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
             worst = f"{max(errors):7.3f}" if errors else f"{'-':>7}"
 
             print(f"{mixing:7.2f}{power:7.2f}{over_weight:6.2f}{sato:6.2f}"
-                  + "".join(cells) + spread + worst)
+                  + "".join(cells) + spread + worst
+                  + ("   PINNED" if pinned else ""))
+            for name, label in pinned:
+                print(f"{'':>26}{name} saddle has {label} at a limit")
+
+    if not relax:
+        print("\nfrozen spectators: a comparison between systems on a frozen")
+        print("grid is not trustworthy, since they relax by different amounts")
+        print("(0.02 eV for formaldehyde, 0.15 for water). Use --relax.")
+
+    if len(mixings) * len(powers) * len(over_weights) * len(satos) == 1:
+        for name in systems:
+            found = measure_barrier(
+                physics, name, mixing=mixings[0], power=powers[0],
+                over_weight=over_weights[0], sato=satos[0], relax=relax,
+            )
+            if found is None:
+                continue
+            print(f"\n{name} saddle: r(donor) {found['donor']:.3f} A, "
+                  f"r(transfer) {found['transfer']:.3f} A")
+            lines, _ = describe_spectators(name, found["spectators"])
+            for line in lines:
+                print(line)
 
     print("\neach cell is  barrier / error against the reference midpoint")
     print("spread is the widest gap between systems; it should grow as the")
@@ -1691,6 +1879,13 @@ def main():
         help="comma separated depth powers for --slope",
     )
     parser.add_argument(
+        "--agreement", action="store_true",
+        help=(
+            "check that measure_barrier and the escape path give the same "
+            "barrier at the same window and settings"
+        ),
+    )
+    parser.add_argument(
         "--slope", action="store_true",
         help=(
             "compare formaldehyde and methane barriers across the coupling "
@@ -1779,6 +1974,10 @@ def main():
         options.transfer_min, options.transfer_max, transfer_step
     )
 
+    if options.agreement:
+        agreement_report(options.physics, relax=options.relax)
+        return
+
     if options.slope:
         slope_report(
             options.physics,
@@ -1798,6 +1997,7 @@ def main():
                 tuple(float(part) for part in options.satos.split(","))
                 if options.satos else None
             ),
+            relax=options.relax,
         )
         return
 
