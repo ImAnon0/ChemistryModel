@@ -1684,19 +1684,31 @@ def proton_transfer_report(physics, separations=(2.60, 2.70, 2.80, 3.00),
 # on a static surface with no vibrational levels of its own.
 #
 # The literature also quotes adiabatic barriers, which include the zero point
-# difference between the transition state and the reactants and run roughly
-# 0.05 to 0.13 eV lower. Mixing the two conventions was done here twice and
-# cost real time both occasions: it made formaldehyde's target 0.034 eV too
-# low and methane's 0.09 eV too high. Every value below is quoted directly
-# from a source in the classical convention. Do not convert one to match
-# another, and do not add an estimated correction; find a quoted value.
+# difference between the transition state and the reactants. Mixing the two
+# conventions happened three times while assembling this table, always in
+# the same direction, because the adiabatic figure is the one usually
+# quoted in an abstract:
+#
+#   formaldehyde  6.69 was taken for 7.46, the target 0.034 eV too low
+#   methane       first 12.1 from a reverse barrier, then 14.1 which is the
+#                 vibrationally adiabatic value, not the classical 0.64 eV
+#
+# So: do not convert between conventions, and do not subtract an estimated
+# zero point correction. Find a value the source states as classical. The
+# two are not even at the same geometry -- for H + CH4 the adiabatic maximum
+# sits at s = +0.10 rather than at the saddle -- so a constant offset
+# between them does not exist to apply.
 #
 #   formaldehyde  7.46 kcal/mol, electronic barrier, CCSD(T)/cc-pVTZ//MP2,
 #                 Table 1 of Kerkeni et al. 2022 (the 6.69 in the same table
 #                 is the starred, ZPE-corrected row)
 #   water         8.4 kcal/mol, symmetric OH + H2O exchange, CCSD(T) with
 #                 CCSDT(Q) corrections, Schaefer and co-workers 2016
-#   methane       14.1 kcal/mol, PES-2014 fitted to CCSD(T)=FULL/aug-cc-pVQZ
+#   methane       0.64 eV, classical barrier at the transition state of the
+#                 permutationally invariant full-dimensional ab initio PES
+#                 for H + CH4, J. Chem. Phys. 142, 204302 (2015). Quoted in
+#                 eV in the source, so no conversion of mine sits between
+#                 the paper and this table.
 #
 # Water is a range, and not because its value is uncertain. The transition
 # state is the same; what differs is where the counting starts.
@@ -1722,7 +1734,7 @@ def proton_transfer_report(physics, separations=(2.60, 2.70, 2.80, 3.00),
 REFERENCE_BARRIERS = {
     "formaldehyde": (0.324, 0.324),
     "water": (0.364, 0.525),
-    "methane": (0.611, 0.611),
+    "methane": (0.640, 0.640),
 }
 
 
