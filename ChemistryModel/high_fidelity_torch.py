@@ -274,7 +274,7 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         # energy that was never added and the transfer surface becomes a
         # hybrid of a softened base and an unsoftened correction.
         pair_depth = pair_depth * self.environment_softening_factor(
-            taper, order, lower, mask, neighbours
+            taper, order, lower, mask, neighbours, cache_key=positions
         )
         pair_width = blend(
             self.bond_width, self.double_width, self.triple_width
