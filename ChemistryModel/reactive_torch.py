@@ -560,7 +560,7 @@ class ReactiveSimulation:
             torch.zeros_like(weighted)
         )
 
-        extra = torch.minimum(share_out, share_back)
+        extra = torch.minimum(share_out, share_back) * taper
 
         order = torch.clamp(1.0 + extra, 0.0, 3.0) * mask
 

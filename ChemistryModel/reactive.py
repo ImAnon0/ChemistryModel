@@ -279,7 +279,7 @@ def bond_orders(taper, types):
 
     # A bond can only be as strong as the poorer partner allows.
 
-    extra = np.minimum(share, share.T)
+    extra = np.minimum(share, share.T) * taper
 
     order = 1.0 + extra
 
