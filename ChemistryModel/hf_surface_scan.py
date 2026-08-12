@@ -59,6 +59,16 @@ from high_fidelity_torch import HighFidelityBatchedReactiveSimulation
 BOX = 20.0
 CENTRE = np.array([BOX / 2, BOX / 2, BOX / 2])
 
+# float64 is the default because the continuity work needed to resolve energy
+# steps around 0.05 eV, which float32 noise would bury. Reading a barrier to
+# three decimals does not need it, so --fast trades that precision for speed.
+#
+# These systems are five or six atoms, so a GPU may well be slower than the
+# CPU here: per-call launch overhead dominates when there is almost nothing to
+# compute. --device exists to find out rather than to assume.
+SCAN_DEVICE = "cpu"
+SCAN_DTYPE = torch.float64
+
 SYMBOLS = ["C", "O", "H", "H", "H"]
 
 # Spectator degrees of freedom, in the order the optimiser sees them:
@@ -225,6 +235,68 @@ def water_geometry(donor_length, transfer_length, spectators=None):
     ])
 
 
+# ----------------------------------------------------------------------
+# Third system: the control that formaldehyde cannot provide.
+# ----------------------------------------------------------------------
+#
+# H + CH4 -> H2 + CH3 uses the identical transfer machinery to formaldehyde,
+# but the carbon holds no multiple bond, so the environment softening is
+# inert and the donor keeps the full generic C-H depth. Methane's C-H is one
+# of the stronger bonds in ordinary chemistry and formaldehyde's is one of
+# the weaker, so the barriers should differ by a wide margin in a known
+# direction.
+#
+# Dynamics says they do not: at the same collision energy methane converted
+# 63% of encounters against formaldehyde's 38%, which is the ordering
+# inverted. This system exists so the same question can be asked of the
+# surface directly, where there is no collision geometry to argue about.
+
+METHANE_SYMBOLS = ["C", "H", "H", "H", "H", "H"]
+
+# Spectator coordinates: the three C-H bonds that are not transferring, and
+# the angle each makes with the donor bond.
+METHANE_FROZEN = np.array([1.09, 1.09, 1.09, 109.47])
+
+METHANE_LIMITS = [(0.95, 1.35), (0.95, 1.35), (0.95, 1.35), (95.0, 125.0)]
+
+
+def methane_geometry(donor_length, transfer_length, spectators=None):
+    """CH4 with a hydrogen approaching one C-H collinearly.
+
+    Built to mirror the formaldehyde arrangement as closely as the two
+    molecules allow: the donor bond lies along an axis, the incoming atom
+    continues that line, and the spectators are held in a fixed
+    arrangement. What differs is only the molecule, which is the point.
+    """
+    if spectators is None:
+        spectators = METHANE_FROZEN
+
+    first, second, third, angle = spectators
+
+    carbon = np.zeros(3)
+
+    # Donor bond along +z, the incoming atom beyond it on the same line.
+    donor_axis = np.array([0.0, 0.0, 1.0])
+    donor_h = donor_length * donor_axis
+    incoming = donor_h + transfer_length * donor_axis
+
+    # The other three arranged around the axis at the tetrahedral angle.
+    radians = np.radians(angle)
+    spectator_lengths = (first, second, third)
+    spectators_out = []
+    for index, length in enumerate(spectator_lengths):
+        turn = 2.0 * np.pi * index / 3.0
+        spectators_out.append(carbon + length * np.array([
+            np.sin(radians) * np.cos(turn),
+            np.sin(radians) * np.sin(turn),
+            np.cos(radians),
+        ]))
+
+    return METHANE_SYMBOLS, np.array(
+        [carbon, donor_h, *spectators_out, incoming]
+    )
+
+
 SYSTEMS = {
     "formaldehyde": {
         "geometry": formaldehyde_geometry,
@@ -237,6 +309,12 @@ SYSTEMS = {
         "frozen": WATER_FROZEN,
         "limits": WATER_LIMITS,
         "description": "H2O + OH -> OH + H2O, symmetric proton transfer",
+    },
+    "methane": {
+        "geometry": methane_geometry,
+        "frozen": METHANE_FROZEN,
+        "limits": METHANE_LIMITS,
+        "description": "H + CH4 -> H2 + CH3, the strong-bond control",
     },
 }
 
@@ -252,6 +330,7 @@ ACTIVE_SYSTEM = "formaldehyde"
 SYSTEM_START = {
     "formaldehyde": (1.09, 1.60),
     "water": (0.98, 1.80),
+    "methane": (1.09, 1.60),
 }
 
 
@@ -269,7 +348,8 @@ def active_limits():
 
 
 def build(physics="high_fidelity", mixing=None, sato=None,
-          flatten=None, cap=None, ch_depth=None, softening=None):
+          flatten=None, cap=None, ch_depth=None, softening=None,
+          depth_power=None, over_weight=None):
     cls = (
         HighFidelityBatchedReactiveSimulation if physics == "high_fidelity"
         else BatchedReactiveSimulation
@@ -328,6 +408,28 @@ def build(physics="high_fidelity", mixing=None, sato=None,
             None if float(cap) < 0 else float(cap)
         )
 
+    if depth_power is not None:
+        if not hasattr(high_fidelity_torch, "H_TRANSFER_COUPLING_DEPTH_POWER"):
+            raise SystemExit(
+                "this build has no H_TRANSFER_COUPLING_DEPTH_POWER; apply "
+                "the coupling patch first"
+            )
+        saved["depth_power"] = (
+            high_fidelity_torch.H_TRANSFER_COUPLING_DEPTH_POWER
+        )
+        high_fidelity_torch.H_TRANSFER_COUPLING_DEPTH_POWER = float(
+            depth_power
+        )
+
+    if over_weight is not None:
+        if not hasattr(R, "OVER_COORDINATION_DEPTH_WEIGHT"):
+            raise SystemExit(
+                "this build has no OVER_COORDINATION_DEPTH_WEIGHT; apply "
+                "the over-coordination patch first"
+            )
+        saved["over_weight"] = R.OVER_COORDINATION_DEPTH_WEIGHT
+        R.OVER_COORDINATION_DEPTH_WEIGHT = float(over_weight)
+
     if softening is not None:
         # Same measure-before-committing pattern as the correction knobs.
         # Unlike those, this one reaches every molecule in the run, not just
@@ -364,8 +466,8 @@ def build(physics="high_fidelity", mixing=None, sato=None,
                 box_size=BOX,
                 random_seed=0,
                 relax_on_start=False,
-                device="cpu",
-                dtype=torch.float64,
+                device=SCAN_DEVICE,
+                dtype=SCAN_DTYPE,
             )
         finally:
             R.BOND_DEPTH[carbon, hydrogen] = saved[0]
@@ -378,8 +480,8 @@ def build(physics="high_fidelity", mixing=None, sato=None,
             box_size=BOX,
             random_seed=0,
             relax_on_start=False,
-            device="cpu",
-            dtype=torch.float64,
+            device=SCAN_DEVICE,
+            dtype=SCAN_DTYPE,
         )
     finally:
         high_fidelity_torch.H_TRANSFER_STATE_MIXING_FRACTION = saved["mixing"]
@@ -390,6 +492,12 @@ def build(physics="high_fidelity", mixing=None, sato=None,
         if hasattr(high_fidelity_torch, "H_TRANSFER_LOWERING_CAP"):
             high_fidelity_torch.H_TRANSFER_LOWERING_CAP = saved["cap"]
         R.ENVIRONMENT_SOFTENING = saved["softening"]
+        if "over_weight" in saved:
+            R.OVER_COORDINATION_DEPTH_WEIGHT = saved["over_weight"]
+        if "depth_power" in saved:
+            high_fidelity_torch.H_TRANSFER_COUPLING_DEPTH_POWER = (
+                saved["depth_power"]
+            )
 
 
 def energy_of(sim, positions):
@@ -679,6 +787,14 @@ SYSTEM_PROBES = {
               "transfer": (0.90, 1.80, 0.02),
               "product_below": 1.10, "detached_transfer": 1.55,
               "detached_donor": 1.55, "bonded_transfer": 1.10},
+    # Same window and thresholds as formaldehyde on purpose: the two are
+    # meant to be compared, and a different grid would leave any difference
+    # arguable.
+    "methane": {"trap": (1.39, 0.92), "impact": 1.09,
+                "donor": (1.00, 1.90, 0.02),
+                "transfer": (0.65, 1.60, 0.005),
+                "product_below": 0.95, "detached_transfer": 1.30,
+                "detached_donor": 1.75, "bonded_transfer": 0.95},
 }
 
 TRAP_DONOR = 1.39
@@ -968,7 +1084,8 @@ def locate_trap(grid, donor_lengths, transfer_lengths, saddle_cell,
 
 
 def escape_report(physics, donor_lengths, transfer_lengths, mixing=None,
-                  cap=None, relax=False, ch_depth=None, softening=None):
+                  cap=None, relax=False, ch_depth=None, softening=None,
+                  depth_power=None):
     """How deep is the trap, and how hard is it to get out?
 
     The reaction has a real col.  What follows it is the problem: a bound
@@ -985,7 +1102,7 @@ def escape_report(physics, donor_lengths, transfer_lengths, mixing=None,
     that says which of those you have, and it is the one to fix against.
     """
     sim = build(physics, mixing=mixing, cap=cap, ch_depth=ch_depth,
-                softening=softening)
+                softening=softening, depth_power=depth_power)
 
     grid = surface(sim, donor_lengths, transfer_lengths, relax=relax)
     reactant, product = basin_seeds(grid, donor_lengths, transfer_lengths)
@@ -1100,6 +1217,135 @@ def proton_transfer_report(physics, separations=(2.60, 2.70, 2.80, 3.00),
 
     print("\nasymmetry must be zero: the geometry is its own mirror image, so")
     print("any departure is the correction failing to vanish on one side.")
+
+
+# Computed classical barriers, in eV, for the three systems the scanner can
+# build. These are what the model is being asked to reproduce.
+#
+#   formaldehyde  Siai, Oueslati and Kerkeni 2016, ZPE-corrected 5.85 to
+#                 6.69 kcal/mol
+#   water         Schaefer and co-workers 2016, classical 8.4 kcal/mol for
+#                 the symmetric OH + H2O exchange; the adiabatic value is
+#                 roughly a kcal/mol lower
+#   methane       the textbook H + CH4 barrier, near 14 kcal/mol
+#
+# The model carries zero point energy inside its well depths, because
+# BOND_DEPTH holds dissociation energies, so the adiabatic column is the
+# like-for-like comparison and the classical one is listed for context.
+REFERENCE_BARRIERS = {
+    "formaldehyde": (0.254, 0.290),
+    "water": (0.290, 0.330),
+    "methane": (0.560, 0.620),
+}
+
+
+# Grid for reading a barrier, as opposed to locating a saddle precisely.
+# The fine grid is 8,550 points to extract one number; a barrier is flat
+# enough near its top that a quarter of the points give the same value to
+# three decimals, and the sweep builds one surface per cell.
+BARRIER_DONOR_STEP = 0.04
+BARRIER_TRANSFER_STEP = 0.01
+
+
+def measure_barrier(physics, name, mixing=None, power=None, over_weight=None,
+                    donor_step=BARRIER_DONOR_STEP,
+                    transfer_step=BARRIER_TRANSFER_STEP):
+    """Barrier and reaction energy for one system at one parameter setting."""
+    apply_system(name)
+    sim = build(
+        physics, mixing=mixing, depth_power=power, over_weight=over_weight
+    )
+
+    donor_lengths = np.arange(1.00, 1.90, donor_step)
+    transfer_lengths = np.arange(0.65, 1.60, transfer_step)
+
+    found = locate_saddle(sim, donor_lengths, transfer_lengths)
+    if found is None:
+        return None, None
+
+    _, _, height, grid = found
+    reactant, product = basin_seeds(grid, donor_lengths, transfer_lengths)
+    return height, float(grid[product] - grid[reactant])
+
+
+def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
+                 mixings=None, over_weights=None,
+                 systems=("formaldehyde", "water", "methane")):
+    """Sweep both coupling knobs against every system with a known barrier.
+
+    There are two separate errors and one knob each, which is why they have
+    to be looked at together.
+
+        depth power   how much a difference in bond strength shows up as a
+                      difference in barrier. At one the coupling scales with
+                      the depths it couples, which cancels most of the effect
+                      and leaves an Evans-Polanyi slope near 0.09 against a
+                      physical 0.3 to 0.5. Lowering it rotates the barriers
+                      apart about a fixed reference depth.
+
+        mixing        the overall size of the coupling, and so how far every
+                      barrier sits below the diabatic crossing. This moves
+                      all three together rather than separating them.
+
+    They are not quite independent: mixing multiplies the whole coupling, so
+    it changes the spacing a little as well as the height. Expect to iterate
+    rather than read a single answer off one pass.
+
+    Each cell shows the barrier and how far it sits from the middle of that
+    system's reference range, so a column of small errors is the target
+    rather than any single number.
+    """
+    if mixings is None:
+        mixings = (0.63,)
+    if over_weights is None:
+        over_weights = (0.0,)
+
+    print("barrier and error against the computed reference, in eV")
+    print("reference midpoints: " + ", ".join(
+        f"{name} {0.5 * sum(REFERENCE_BARRIERS[name]):.3f}"
+        for name in systems if name in REFERENCE_BARRIERS
+    ))
+    print("power 1.00 with mixing 0.63 is the current model\n")
+
+    header = "".join(f"{name:>20}" for name in systems)
+    print(f"{'mixing':>7}{'power':>7}{'over':>6}{header}"
+          f"{'spread':>9}{'worst':>8}")
+
+    for over_weight in over_weights:
+      for mixing in mixings:
+        for power in powers:
+            cells = []
+            barriers = []
+            errors = []
+
+            for name in systems:
+                height, _ = measure_barrier(
+                    physics, name, mixing=mixing, power=power,
+                    over_weight=over_weight,
+                )
+                if height is None:
+                    cells.append(f"{'no route':>20}")
+                    continue
+
+                barriers.append(height)
+                low, high = REFERENCE_BARRIERS[name]
+                error = height - 0.5 * (low + high)
+                errors.append(abs(error))
+                cells.append(f"{height:8.3f} {error:+9.3f}")
+
+            if len(barriers) > 1:
+                spread = f"{max(barriers) - min(barriers):8.3f}"
+            else:
+                spread = f"{'-':>8}"
+            worst = f"{max(errors):7.3f}" if errors else f"{'-':>7}"
+
+            print(f"{mixing:7.2f}{power:7.2f}{over_weight:6.2f}"
+                  + "".join(cells) + spread + worst)
+
+    print("\neach cell is  barrier / error against the reference midpoint")
+    print("spread is the widest gap between systems; it should grow as the")
+    print("power falls, since the references span 0.27 to 0.59 eV")
+    print("worst is the largest single error, which is the number to minimise")
 
 
 def cap_sweep(physics, transfer_lengths, mixings, caps):
@@ -1372,6 +1618,47 @@ def main():
         ),
     )
     parser.add_argument(
+        "--depth-power", type=float, default=None,
+        help="override H_TRANSFER_COUPLING_DEPTH_POWER for this run",
+    )
+    parser.add_argument(
+        "--device", default="cpu",
+        help="torch device for the scan; cuda is worth trying but these "
+             "systems are small enough that it may not help",
+    )
+    parser.add_argument(
+        "--fast", action="store_true",
+        help="run in float32; enough for barriers, not for continuity checks",
+    )
+    parser.add_argument(
+        "--mixings", default=None,
+        help=(
+            "comma separated mixing fractions for --slope; the coupling's "
+            "overall size, which moves every barrier together"
+        ),
+    )
+    parser.add_argument(
+        "--over-weights", default=None,
+        help=(
+            "comma separated OVER_COORDINATION_DEPTH_WEIGHT values for "
+            "--slope; scales the penalty by each atom's mean contact depth, "
+            "which is the only term in the barrier that can tell one element "
+            "from another"
+        ),
+    )
+    parser.add_argument(
+        "--powers", default=None,
+        help="comma separated depth powers for --slope",
+    )
+    parser.add_argument(
+        "--slope", action="store_true",
+        help=(
+            "compare formaldehyde and methane barriers across the coupling "
+            "depth power, to see whether that scaling is what flattens the "
+            "model's response to bond strength"
+        ),
+    )
+    parser.add_argument(
         "--proton-transfer", action="store_true",
         help=(
             "symmetric water proton transfer at fixed O-O separations; the "
@@ -1419,6 +1706,10 @@ def main():
     parser.add_argument("--transfer-step", type=float, default=None)
     options = parser.parse_args()
 
+    global SCAN_DEVICE, SCAN_DTYPE
+    SCAN_DEVICE = options.device
+    SCAN_DTYPE = torch.float32 if options.fast else torch.float64
+
     probe = apply_system(options.system)
 
     # Relaxing costs a constrained minimisation per cell, so the default grid
@@ -1448,6 +1739,24 @@ def main():
         options.transfer_min, options.transfer_max, transfer_step
     )
 
+    if options.slope:
+        slope_report(
+            options.physics,
+            powers=(
+                tuple(float(part) for part in options.powers.split(","))
+                if options.powers else (1.00, 0.75, 0.50, 0.25, 0.00)
+            ),
+            mixings=(
+                tuple(float(part) for part in options.mixings.split(","))
+                if options.mixings else None
+            ),
+            over_weights=(
+                tuple(float(part) for part in options.over_weights.split(","))
+                if options.over_weights else None
+            ),
+        )
+        return
+
     if options.proton_transfer:
         apply_system("water")
         proton_transfer_report(
@@ -1461,6 +1770,7 @@ def main():
             options.physics, donor_lengths, transfer_lengths,
             mixing=options.mixing, cap=options.cap, relax=options.relax,
             ch_depth=options.ch_depth, softening=options.softening,
+            depth_power=options.depth_power,
         )
         return
 

@@ -140,6 +140,38 @@ ENVIRONMENT_SOFTENING = 0.124
 # force flip on that surface. sqrt(1e-4) = 0.01 in bond-order units.
 ENVIRONMENT_SOFTENING_SMOOTH_EPSILON_SQUARED = 1e-4
 
+
+# How much of the over-coordination penalty comes from the bonds involved,
+# as opposed to the single global constant above.
+#
+# That constant is most of every activation barrier in the model, and it is
+# one number for every element pair. So nothing in the barrier can tell a
+# C-H from an O-H, and the model separates reactions far less than it should:
+# measured against computed references spanning 0.272 to 0.590 eV, the best
+# available parameter choice spreads three systems by 0.096 eV. The
+# Evans-Polanyi slope comes out near 0.09 where hydrogen abstraction runs
+# 0.3 to 0.5.
+#
+# Physically the cost of over-coordination is not a constant. Forcing a
+# second partner onto an atom already tightly bound costs more than forcing
+# one onto an atom loosely bound, so the penalty should scale with the
+# strength of the bonds being squeezed together. Scaling it by the mean depth
+# of an atom's own contacts, relative to a reference, gives that without
+# naming any element or adding a table.
+#
+#     0.0  exactly as before, one global constant
+#     1.0  penalty scales linearly with the atom's mean contact depth
+#
+# Measure before raising it: this is the largest single term in every barrier
+# in the model.
+OVER_COORDINATION_DEPTH_WEIGHT = 0.0
+
+# The depth, in eV, at which the scaled penalty equals the global constant.
+# Roughly the C-H entry, so formaldehyde and methane stay near where they
+# were fitted and the change shows up as spreading rather than as an overall
+# shift.
+OVER_COORDINATION_REFERENCE_DEPTH = 4.29
+
 OVER_COORDINATION_PENALTY = 7.778
 
 # Ideal angle for each number of electron domains around an atom

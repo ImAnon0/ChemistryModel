@@ -136,6 +136,34 @@ H_TRANSFER_COUPLING_FLATTEN = 0.0
 # labels swap, so it trades an energy step for a force flip. The softened form
 # below is differentiable everywhere and agrees with min to within the
 # smoothing width. sqrt(1e-4) = 0.01 taper units.
+# How much of the coupling's scale comes from the bonds being coupled, as
+# opposed to a fixed reference.
+#
+# The coupling is what lowers the barrier at the crossing, and it currently
+# scales as sqrt(D_donor * D_partner). That gives a deeper donor well a
+# larger coupling and so a lower barrier, which works against the effect it
+# should have: a stronger bond ought to be harder to break, not easier.
+#
+# The two very nearly cancel. Measured on the surface, formaldehyde and
+# methane differ by 0.235 eV in reaction energy and only 0.020 eV in
+# barrier, an effective Evans-Polanyi slope near 0.09 where hydrogen
+# abstraction runs 0.3 to 0.5. Dynamics agrees: at 3x thermal the two are
+# separated only by how close a trajectory gets, 0.652 A against 1.066 A.
+#
+#     1.0  exactly as before, coupling scales with the geometric mean depth
+#     0.0  coupling uses H_TRANSFER_COUPLING_REFERENCE_DEPTH regardless
+#
+# Anything between interpolates the exponent. This exists to find out whether
+# that cancellation is the cause before anything is changed on the strength
+# of the argument alone.
+H_TRANSFER_COUPLING_DEPTH_POWER = 1.0
+
+# The fixed depth the coupling falls back on, in eV, as the power goes to
+# zero. Roughly the geometric mean of the C-H and H-H entries, so the
+# formaldehyde barrier stays in the region it was fitted in and the
+# comparison is not confounded by an overall shift.
+H_TRANSFER_COUPLING_REFERENCE_DEPTH = 4.40
+
 H_TRANSFER_SMOOTH_MIN_EPSILON_SQUARED = 1e-4
 
 H_TRANSFER_LOWERING_CAP = None
@@ -172,6 +200,12 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         )
         self.h_transfer_smooth_min_epsilon_squared = float(
             H_TRANSFER_SMOOTH_MIN_EPSILON_SQUARED
+        )
+        self.h_transfer_coupling_depth_power = float(
+            H_TRANSFER_COUPLING_DEPTH_POWER
+        )
+        self.h_transfer_coupling_reference_depth = float(
+            H_TRANSFER_COUPLING_REFERENCE_DEPTH
         )
 
         super().__init__(*args, **kwargs)
@@ -274,7 +308,7 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         # energy that was never added and the transfer surface becomes a
         # hybrid of a softened base and an unsoftened correction.
         pair_depth = pair_depth * self.environment_softening_factor(
-            taper, order, lower, mask, neighbours, cache_key=positions
+            taper, order, lower, mask, neighbours
         )
         pair_width = blend(
             self.bond_width, self.double_width, self.triple_width
@@ -397,9 +431,24 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
             + float(self.h_transfer_coupling_flatten) * flat_overlap
         )
 
+        # Geometric mean of the two well depths, raised to a tunable power
+        # and made up to the reference depth by the remainder. At power one
+        # this is exactly sqrt(D_donor * D_partner); at zero it is the
+        # reference and the coupling stops caring which bonds it couples.
+        mean_depth = torch.sqrt(
+            torch.clamp(donor_depth * competitor_depth, min=1e-12)
+        )
+        power = float(self.h_transfer_coupling_depth_power)
+        reference = float(self.h_transfer_coupling_reference_depth)
+
+        coupling_scale = (
+            reference * (mean_depth / reference) ** power
+            if power != 1.0 else mean_depth
+        )
+
         coupling = (
             float(self.h_transfer_state_mixing_fraction)
-            * torch.sqrt(torch.clamp(donor_depth * competitor_depth, min=0.0))
+            * coupling_scale
             * overlap
         )
 

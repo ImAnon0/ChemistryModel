@@ -164,6 +164,8 @@ class ReactiveSimulation:
         self.angle_stiffness = to_tensor(R.ANGLE_STIFFNESS_ARRAY)
 
         self.over_penalty = float(R.OVER_COORDINATION_PENALTY)
+        self.over_depth_weight = float(R.OVER_COORDINATION_DEPTH_WEIGHT)
+        self.over_reference_depth = float(R.OVER_COORDINATION_REFERENCE_DEPTH)
         self.lone_pair_squeeze = float(R.LONE_PAIR_SQUEEZE)
 
         # Zero reproduces the previous behaviour exactly, so this whole
@@ -433,6 +435,59 @@ class ReactiveSimulation:
             self._softening_cache = (cache_key, factor)
         return factor
 
+    def over_coordination_scale(self, taper, pair_depth, mask,
+                                cache_key=None):
+        """Per-atom multiplier on the over-coordination penalty.
+
+        That penalty is most of every activation barrier the model has, and
+        it is a single constant for every element. So nothing in the barrier
+        distinguishes one bond from another, and reactions that should differ
+        by hundreds of meV come out within tens.
+
+        The cost of crowding an extra partner onto an atom is not a constant
+        in reality: it is larger when the bonds already present are strong.
+        So the penalty is scaled by the mean depth of the atom's own
+        contacts, weighted by how much each contact is actually engaged, and
+        measured against a reference depth at which the scale is one.
+
+        Element agnostic, and no new table: the depths come from the same
+        entries the bond energies already use. Returns exactly one when the
+        weight is zero.
+        """
+        if self.over_depth_weight <= 0.0:
+            return torch.ones(
+                taper.shape[0], device=taper.device, dtype=taper.dtype
+            )
+
+        if cache_key is not None:
+            cache = getattr(self, "_over_scale_cache", None)
+            if cache is not None and cache[0] is cache_key:
+                return cache[1]
+
+        # Engagement-weighted mean depth of this atom's contacts. An atom
+        # with no contacts at all falls back to the reference, so its scale
+        # is one and the penalty is unchanged -- it has no over-coordination
+        # to be penalised for in any case.
+        weight = taper * mask
+        total = torch.sum(weight, dim=1)
+        mean_depth = torch.where(
+            total > 1e-9,
+            torch.sum(weight * pair_depth, dim=1)
+            / torch.clamp(total, min=1e-9),
+            torch.full_like(total, self.over_reference_depth),
+        )
+
+        ratio = mean_depth / self.over_reference_depth
+        scale = 1.0 + self.over_depth_weight * (ratio - 1.0)
+
+        # Kept positive: a deep enough well should make crowding harder, not
+        # turn the penalty into a reward.
+        scale = torch.clamp(scale, min=0.05)
+
+        if cache_key is not None:
+            self._over_scale_cache = (cache_key, scale)
+        return scale
+
     def energy_per_atom(self, positions):
         # Mirrors reactive.potential_energy term for term, in the
         # padded neighbour-table form.
@@ -567,7 +622,13 @@ class ReactiveSimulation:
 
         excess = torch.clamp(coordination - valence, min=0.0)
 
-        over_per_atom = self.over_penalty * excess ** 2
+        over_per_atom = (
+            self.over_penalty
+            * self.over_coordination_scale(
+                taper, pair_depth, mask, cache_key=positions
+            )
+            * excess ** 2
+        )
 
         # ---- angles, from electron domain counting ----
 
