@@ -1409,7 +1409,8 @@ def measure_barrier(physics, name, mixing=None, power=None, over_weight=None,
     }
 
 
-def agreement_report(physics, relax=False):
+def agreement_report(physics, relax=False, mixing=None, power=None,
+                     over_weight=None, sato=None):
     """Do the two measurement paths give the same barrier?
 
     measure_barrier and escape_report both locate a saddle by flooding, but
@@ -1421,8 +1422,21 @@ def agreement_report(physics, relax=False):
     Same system, same window, same parameters, same relaxation. Any
     difference beyond the grid step is a bug in one of the two.
     """
+    import high_fidelity_torch
+
     print("barrier from each path, same settings")
-    print(f"spectators: {'relaxed' if relax else 'frozen'}\n")
+    print(f"spectators: {'relaxed' if relax else 'frozen'}")
+    # Printed because this used to take no parameters at all and silently
+    # measured whatever the source held, which made its numbers look
+    # comparable to a sweep run at a different mixing when they were not.
+    print("mixing %s, depth power %s, over weight %s, sato %s" % (
+        mixing if mixing is not None
+        else f"{high_fidelity_torch.H_TRANSFER_STATE_MIXING_FRACTION} (source)",
+        power if power is not None else "1.0 (source)",
+        over_weight if over_weight is not None else "0.0 (source)",
+        sato if sato is not None else "0.0 (source)",
+    ))
+    print()
     print(f"{'system':>14}{'measure_barrier':>18}{'escape path':>14}"
           f"{'difference':>12}")
 
@@ -1441,13 +1455,17 @@ def agreement_report(physics, relax=False):
             transfer_step = max(transfer_step, 0.02)
 
         found = measure_barrier(
-            physics, name, relax=relax,
+            physics, name, relax=relax, mixing=mixing, power=power,
+            over_weight=over_weight, sato=sato,
             donor_step=donor_step, transfer_step=transfer_step,
         )
 
         # The escape path, inlined at the same window and step.
         apply_system(name)
-        sim = build(physics)
+        sim = build(
+            physics, mixing=mixing, depth_power=power,
+            over_weight=over_weight, sato=sato,
+        )
         donor_lengths = np.arange(donor_low, donor_high, donor_step)
         transfer_lengths = np.arange(
             transfer_low, transfer_high, transfer_step
@@ -1516,6 +1534,8 @@ def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
     print(f"{'mixing':>7}{'power':>7}{'over':>6}{'sato':>6}{header}"
           f"{'spread':>9}{'worst':>8}")
 
+    measured = {}
+
     for sato in satos:
      for over_weight in over_weights:
       for mixing in mixings:
@@ -1533,6 +1553,12 @@ def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
                 if found is None:
                     cells.append(f"{'no route':>20}")
                     continue
+
+                # Kept so the geometry report below can use it. It used to
+                # call measure_barrier again for every system, which meant a
+                # single-setting relaxed sweep built each grid twice and took
+                # twice as long as it needed to.
+                measured[name] = found
 
                 height = found["barrier"]
                 pinned.extend(
@@ -1567,10 +1593,7 @@ def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
 
     if len(mixings) * len(powers) * len(over_weights) * len(satos) == 1:
         for name in systems:
-            found = measure_barrier(
-                physics, name, mixing=mixings[0], power=powers[0],
-                over_weight=over_weights[0], sato=satos[0], relax=relax,
-            )
+            found = measured.get(name)
             if found is None:
                 continue
             print(f"\n{name} saddle: r(donor) {found['donor']:.3f} A, "
@@ -1982,11 +2005,16 @@ def main():
     if options.transfer_max == 1.60:
         options.transfer_max = transfer_high
 
+    # Both coarsen by two when relaxing. The transfer step used to coarsen by
+    # four, which gave water twelve columns against measure_barrier's
+    # forty-five and reported a barrier of 0.004 eV where the finer grid finds
+    # 0.349: too coarse to resolve a col at all. The row counts matched, so
+    # both paths printed the same 23/23 and the difference was invisible.
     donor_step = options.donor_step or (
         (donor_default * 2 if options.relax else donor_default)
     )
     transfer_step = options.transfer_step or (
-        (transfer_default * 4 if options.relax else transfer_default)
+        (transfer_default * 2 if options.relax else transfer_default)
     )
 
     donor_lengths = np.arange(options.donor_min, options.donor_max, donor_step)
@@ -1995,7 +2023,15 @@ def main():
     )
 
     if options.agreement:
-        agreement_report(options.physics, relax=options.relax)
+        agreement_report(
+            options.physics, relax=options.relax, mixing=options.mixing,
+            power=options.depth_power,
+            over_weight=(
+                float(options.over_weights.split(",")[0])
+                if options.over_weights else None
+            ),
+            sato=options.sato,
+        )
         return
 
     if options.slope:
