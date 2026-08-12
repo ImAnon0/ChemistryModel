@@ -96,6 +96,178 @@ def formaldehyde_geometry(donor_length, transfer_length, spectators=None):
     return SYMBOLS, np.array([carbon, oxygen, donor_h, other_h, incoming])
 
 
+# ----------------------------------------------------------------------
+# Second system: a hydrogen hopping between two oxygens.
+# ----------------------------------------------------------------------
+#
+# Everything so far is calibrated on one reaction, which leaves open whether
+# the mixing fraction and the softening describe hydrogen transfer or just
+# describe formaldehyde. This is the independent check, and it is chosen to
+# be awkward for the correction in ways the first system was not:
+#
+#   different tables      O-H depths and cutoffs rather than C-H, so nothing
+#                         carries over from the fitted pair
+#   softening inert       neither oxygen holds a multiple bond, so the
+#                         environment term contributes nothing and the
+#                         correction is tested on its own
+#   symmetric             donor and acceptor are the same element, so the
+#                         argmax that picks donor and competitor swaps its
+#                         labels exactly at the transition state, which is
+#                         the geometry the gate fix was written for
+#
+# Being symmetric also pins the reaction energy at zero by construction. Any
+# departure from zero is the correction failing to vanish in one asymptote,
+# which no amount of parameter choice should be able to hide.
+
+# H2O + OH, five atoms: the moving proton plus one spectator on each oxygen.
+# Two full waters plus a proton would be H5O2+, a charged species the model
+# has no way to represent, and it produced an 8 eV nonsense when tried.
+WATER_SYMBOLS = ["O", "H", "H", "O", "H"]
+
+# Spectator coordinates: the two O-H bonds that are not transferring, and the
+# angle each makes with the transfer axis.
+WATER_FROZEN = np.array([0.96, 0.96, 104.5, 104.5])
+
+WATER_LIMITS = [(0.85, 1.15), (0.85, 1.15), (90.0, 130.0), (90.0, 130.0)]
+
+
+def water_pair_geometry(oxygen_separation, offset, spectators=None):
+    """Two waters at a fixed separation, proton displaced along the O-O axis.
+
+    offset is the proton's displacement from the midpoint, so 0 is the
+    symmetric shared position and positive values move it toward the
+    acceptor. The heavy atoms do not move.
+
+    That fixed separation is the point. Letting the two O-H distances vary
+    independently, as the two dimensional scan does, sweeps the O-O distance
+    along with them, and oxygen-oxygen repulsion then dominates a surface
+    meant to be about the proton. Holding the heavy atoms and moving one
+    coordinate is how symmetric proton transfer is normally treated, and it
+    makes the symmetry exact: the energy at +offset must equal the energy at
+    -offset, for any correct potential, with no parameter able to hide a
+    departure.
+    """
+    if spectators is None:
+        spectators = WATER_FROZEN
+
+    donor_oh, acceptor_oh, donor_angle, acceptor_angle = spectators
+
+    donor_oxygen = np.zeros(3)
+    acceptor_oxygen = np.array([oxygen_separation, 0.0, 0.0])
+    moving_h = np.array([0.5 * oxygen_separation + offset, 0.0, 0.0])
+
+    def spoke(origin, length, angle, direction, tilt):
+        radians = np.radians(angle)
+        return origin + length * np.array([
+            direction * np.cos(radians),
+            np.sin(radians) * np.cos(tilt),
+            np.sin(radians) * np.sin(tilt),
+        ])
+
+    # Mirror images of each other about the midpoint, so the whole
+    # arrangement is symmetric and the check below means what it says.
+    donor_spokes = [
+        spoke(donor_oxygen, donor_oh, donor_angle, -1.0, tilt)
+        for tilt in (np.pi / 2, -np.pi / 2)
+    ]
+    acceptor_spokes = [
+        spoke(acceptor_oxygen, acceptor_oh, acceptor_angle, 1.0, tilt)
+        for tilt in (np.pi / 2, -np.pi / 2)
+    ]
+
+    return WATER_SYMBOLS, np.array([
+        donor_oxygen, moving_h, donor_spokes[0],
+        acceptor_oxygen, acceptor_spokes[0],
+    ])
+
+
+def water_geometry(donor_length, transfer_length, spectators=None):
+    """H2O ... H ... OH2 with the transferring hydrogen on the O-O axis.
+
+    donor_length is the distance from the donor oxygen to the transferring
+    hydrogen; transfer_length is from that hydrogen to the acceptor oxygen.
+    The two oxygens therefore sit donor_length + transfer_length apart, which
+    means the scan sweeps the O-O separation as well rather than holding it
+    fixed. That is deliberate: the heavy atoms move during a real proton
+    transfer, and pinning them would put a wall in the way of the reaction.
+    """
+    if spectators is None:
+        spectators = WATER_FROZEN
+
+    donor_oh, acceptor_oh, donor_angle, acceptor_angle = spectators
+
+    donor_oxygen = np.zeros(3)
+    moving_h = np.array([donor_length, 0.0, 0.0])
+    acceptor_oxygen = np.array([donor_length + transfer_length, 0.0, 0.0])
+
+    def spoke(origin, length, angle, direction, tilt):
+        radians = np.radians(angle)
+        return origin + length * np.array([
+            direction * np.cos(radians),
+            np.sin(radians) * np.cos(tilt),
+            np.sin(radians) * np.sin(tilt),
+        ])
+
+    # The spectator hydrogens are placed off axis and out of plane so the
+    # arrangement is a real pair of waters rather than a flat contrivance.
+    donor_spokes = [
+        spoke(donor_oxygen, donor_oh, donor_angle, -1.0, angle)
+        for angle in (0.0, np.pi)
+    ]
+    acceptor_spokes = [
+        spoke(acceptor_oxygen, acceptor_oh, acceptor_angle, 1.0, angle)
+        for angle in (np.pi / 2, -np.pi / 2)
+    ]
+
+    return WATER_SYMBOLS, np.array([
+        donor_oxygen, moving_h, donor_spokes[0],
+        acceptor_oxygen, acceptor_spokes[0],
+    ])
+
+
+SYSTEMS = {
+    "formaldehyde": {
+        "geometry": formaldehyde_geometry,
+        "frozen": FROZEN,
+        "limits": LIMITS,
+        "description": "H + H2CO -> H2 + HCO",
+    },
+    "water": {
+        "geometry": water_geometry,
+        "frozen": WATER_FROZEN,
+        "limits": WATER_LIMITS,
+        "description": "H2O + OH -> OH + H2O, symmetric proton transfer",
+    },
+}
+
+# Which system the geometry helpers build. Set once from the command line
+# rather than threaded through every function, because every scan works on
+# one system at a time and passing it everywhere would touch code that has
+# nothing else to do with the choice.
+ACTIVE_SYSTEM = "formaldehyde"
+
+# Geometry used only to construct the simulation object, before any scan
+# point is evaluated. It has to be a sane arrangement for the system, not a
+# scan point of interest.
+SYSTEM_START = {
+    "formaldehyde": (1.09, 1.60),
+    "water": (0.98, 1.80),
+}
+
+
+def active_geometry(donor_length, transfer_length, spectators=None):
+    entry = SYSTEMS[ACTIVE_SYSTEM]
+    return entry["geometry"](donor_length, transfer_length, spectators)
+
+
+def active_frozen():
+    return SYSTEMS[ACTIVE_SYSTEM]["frozen"]
+
+
+def active_limits():
+    return SYSTEMS[ACTIVE_SYSTEM]["limits"]
+
+
 def build(physics="high_fidelity", mixing=None, sato=None,
           flatten=None, cap=None, ch_depth=None, softening=None):
     cls = (
@@ -108,6 +280,22 @@ def build(physics="high_fidelity", mixing=None, sato=None,
     # useful for measuring the knobs; set them properly in the source once you
     # know what they should be.
     import high_fidelity_torch
+    import reactive as R
+
+    # Every override is restored afterwards. Constructors copy these onto the
+    # instance, so a simulation keeps what it was built with and the globals
+    # do not need to stay changed -- leaving them changed meant a later
+    # build() with no arguments silently inherited an earlier experiment.
+    saved = {
+        "mixing": high_fidelity_torch.H_TRANSFER_STATE_MIXING_FRACTION,
+        "sato": getattr(high_fidelity_torch, "H_TRANSFER_SATO", None),
+        "flatten": getattr(
+            high_fidelity_torch, "H_TRANSFER_COUPLING_FLATTEN", None
+        ),
+        "cap": getattr(high_fidelity_torch, "H_TRANSFER_LOWERING_CAP", None),
+        "softening": R.ENVIRONMENT_SOFTENING,
+        "ch_depth": None,
+    }
 
     if mixing is not None:
         high_fidelity_torch.H_TRANSFER_STATE_MIXING_FRACTION = float(mixing)
@@ -169,7 +357,7 @@ def build(physics="high_fidelity", mixing=None, sato=None,
         R.BOND_DEPTH[carbon, hydrogen] = float(ch_depth)
         R.BOND_DEPTH[hydrogen, carbon] = float(ch_depth)
 
-        symbols, positions = formaldehyde_geometry(1.09, 1.60)
+        symbols, positions = active_geometry(*SYSTEM_START[ACTIVE_SYSTEM])
         try:
             return cls(
                 boxes=[(symbols, positions + CENTRE)],
@@ -183,15 +371,25 @@ def build(physics="high_fidelity", mixing=None, sato=None,
             R.BOND_DEPTH[carbon, hydrogen] = saved[0]
             R.BOND_DEPTH[hydrogen, carbon] = saved[1]
 
-    symbols, positions = formaldehyde_geometry(1.09, 1.60)
-    return cls(
-        boxes=[(symbols, positions + CENTRE)],
-        box_size=BOX,
-        random_seed=0,
-        relax_on_start=False,
-        device="cpu",
-        dtype=torch.float64,
-    )
+    symbols, positions = active_geometry(*SYSTEM_START[ACTIVE_SYSTEM])
+    try:
+        return cls(
+            boxes=[(symbols, positions + CENTRE)],
+            box_size=BOX,
+            random_seed=0,
+            relax_on_start=False,
+            device="cpu",
+            dtype=torch.float64,
+        )
+    finally:
+        high_fidelity_torch.H_TRANSFER_STATE_MIXING_FRACTION = saved["mixing"]
+        if saved["sato"] is not None:
+            high_fidelity_torch.H_TRANSFER_SATO = saved["sato"]
+        if saved["flatten"] is not None:
+            high_fidelity_torch.H_TRANSFER_COUPLING_FLATTEN = saved["flatten"]
+        if hasattr(high_fidelity_torch, "H_TRANSFER_LOWERING_CAP"):
+            high_fidelity_torch.H_TRANSFER_LOWERING_CAP = saved["cap"]
+        R.ENVIRONMENT_SOFTENING = saved["softening"]
 
 
 def energy_of(sim, positions):
@@ -207,7 +405,7 @@ def energy_of(sim, positions):
 
 
 def energy_at(sim, donor_length, transfer_length, spectators=None):
-    _, positions = formaldehyde_geometry(
+    _, positions = active_geometry(
         donor_length, transfer_length, spectators
     )
     return energy_of(sim, positions)
@@ -225,10 +423,10 @@ def relaxed_energy(sim, donor_length, transfer_length, start=None):
     from scipy.optimize import minimize
 
     if start is None:
-        start = FROZEN
+        start = active_frozen()
 
     def cost(spectators):
-        for value, (low, high) in zip(spectators, LIMITS):
+        for value, (low, high) in zip(spectators, active_limits()):
             if not low <= value <= high:
                 return 1e6
         return energy_at(sim, donor_length, transfer_length, spectators)
@@ -275,13 +473,21 @@ def surface(sim, donor_lengths, transfer_lengths, relax=False, progress=True):
 # ----------------------------------------------------------------------
 
 def basin_seeds(grid, donor_lengths, transfer_lengths,
-                detached_transfer=1.30, detached_donor=1.75,
-                bonded_transfer=0.95):
+                detached_transfer=None, detached_donor=None,
+                bonded_transfer=None):
     """Cells standing for the reactant and product basins.
 
     Reactant: the incoming hydrogen out past its cutoffs, molecule intact.
     Product:  the donor bond broken, the new H-H bond formed.
     """
+    probe = SYSTEM_PROBES[ACTIVE_SYSTEM]
+    if detached_transfer is None:
+        detached_transfer = probe["detached_transfer"]
+    if detached_donor is None:
+        detached_donor = probe["detached_donor"]
+    if bonded_transfer is None:
+        bonded_transfer = probe["bonded_transfer"]
+
     reactant_columns = np.where(transfer_lengths >= detached_transfer)[0]
     product_rows = np.where(donor_lengths >= detached_donor)[0]
     product_columns = np.where(transfer_lengths <= bonded_transfer)[0]
@@ -372,7 +578,9 @@ def ridge_positions(sim, donor_lengths, transfer_lengths):
         ])
         column = profile.reshape(1, -1)
 
-        inside = np.where(transfer_lengths < 0.95)[0]
+        inside = np.where(
+            transfer_lengths < SYSTEM_PROBES[ACTIVE_SYSTEM]['product_below']
+        )[0]
         if len(inside) == 0:
             found.append(None)
             continue
@@ -434,7 +642,9 @@ def fixed_donor_slice(physics, donor_lengths, transfer_lengths, relax=False,
         # Same flood construction as the full grid, on a single row: the
         # barrier is the highest point on the easiest route from the product
         # well out to the entrance channel within this slice.
-        inside = np.where(transfer_lengths < 0.95)[0]
+        inside = np.where(
+            transfer_lengths < SYSTEM_PROBES[ACTIVE_SYSTEM]['product_below']
+        )[0]
         if len(inside) == 0:
             print(f"{donor:8.3f} {'no product well':>11}")
             continue
@@ -455,9 +665,35 @@ def fixed_donor_slice(physics, donor_lengths, transfer_lengths, relax=False,
     print("compare it against the relaxed two dimensional saddle")
 
 
+# Probe geometries, per system. The formaldehyde values are the ones a
+# trapped trajectory actually held; the water ones are the symmetric shared
+# proton and an equilibrium O-H, which are the analogous configurations.
+SYSTEM_PROBES = {
+    "formaldehyde": {"trap": (1.39, 0.92), "impact": 1.08,
+                     "donor": (1.00, 1.90, 0.02),
+                     "transfer": (0.65, 1.60, 0.005),
+                     "product_below": 0.95, "detached_transfer": 1.30,
+                     "detached_donor": 1.75, "bonded_transfer": 0.95},
+    "water": {"trap": (1.20, 1.20), "impact": 0.98,
+              "donor": (0.90, 1.80, 0.02),
+              "transfer": (0.90, 1.80, 0.02),
+              "product_below": 1.10, "detached_transfer": 1.55,
+              "detached_donor": 1.55, "bonded_transfer": 1.10},
+}
+
 TRAP_DONOR = 1.39
 TRAP_TRANSFER = 0.92
 IMPACT_DONOR = 1.08
+
+
+def apply_system(name):
+    """Point the probe constants and basin thresholds at one system."""
+    global ACTIVE_SYSTEM, TRAP_DONOR, TRAP_TRANSFER, IMPACT_DONOR
+    ACTIVE_SYSTEM = name
+    probe = SYSTEM_PROBES[name]
+    TRAP_DONOR, TRAP_TRANSFER = probe["trap"]
+    IMPACT_DONOR = probe["impact"]
+    return probe
 
 # Reference transition state for H + H2CO -> H2 + HCO, from Siai, Oueslati
 # and Kerkeni (2016), Chem. Phys. 474, 44-51: CCSD(T)//MP2 geometry with a
@@ -543,7 +779,9 @@ def impact_barrier(sim, transfer_lengths, donor_length=IMPACT_DONOR):
         energy_at(sim, donor_length, transfer) for transfer in transfer_lengths
     ])
 
-    inside = np.where(transfer_lengths < 0.95)[0]
+    inside = np.where(
+            transfer_lengths < SYSTEM_PROBES[ACTIVE_SYSTEM]['product_below']
+        )[0]
     if len(inside) == 0:
         return None
 
@@ -805,6 +1043,63 @@ def escape_report(physics, donor_lengths, transfer_lengths, mixing=None,
     else:
         print("  deep enough to hold a trajectory for the whole run at this")
         print("  temperature, so this is a dead end rather than a delay")
+
+
+def proton_transfer_report(physics, separations=(2.60, 2.70, 2.80, 3.00),
+                           mixing=None, cap=None, softening=None):
+    """Symmetric proton transfer between two waters, at fixed O-O distances.
+
+    This is the independent check on everything fitted to formaldehyde. The
+    correction has never seen these tables, the environment softening is
+    inert because neither oxygen holds a multiple bond, and the donor and
+    acceptor are the same element so the argmax that labels them swaps its
+    choice exactly at the midpoint.
+
+    Three things are reported and only the first is a matter of taste:
+
+        asymmetry   the largest energy difference between mirror geometries,
+                    which must be zero and is not a parameter choice
+        barrier     the central barrier, which should fall as the oxygens
+                    approach and vanish somewhere near 2.4 to 2.5 A
+        shape       whether the midpoint is a maximum, as it must be at long
+                    separation, or a minimum, which would be the shared
+                    proton trapped exactly as it was in formaldehyde
+    """
+    sim = build(physics, mixing=mixing, cap=cap, softening=softening)
+
+    print("symmetric proton transfer, H2O ... H ... OH2")
+    print("heavy atoms fixed; the proton moves along the O-O axis\n")
+    print(f"{'O-O':>6} {'asymmetry':>11} {'well at':>9} {'barrier':>10}  shape")
+
+    for separation in separations:
+        offsets = np.arange(-0.60, 0.6001, 0.005)
+        energies = np.array([
+            energy_of(sim, water_pair_geometry(separation, offset)[1])
+            for offset in offsets
+        ])
+
+        # Mirror check: the curve reversed must equal the curve.
+        asymmetry = float(np.max(np.abs(energies - energies[::-1])))
+
+        middle = len(offsets) // 2
+        centre = energies[middle]
+
+        left = energies[:middle]
+        well = int(np.argmin(left))
+        barrier = centre - left[well]
+
+        if barrier > 1e-3:
+            shape = "double well, proton localised"
+        elif barrier < -1e-3:
+            shape = "MIDPOINT IS A MINIMUM (shared proton trapped)"
+        else:
+            shape = "flat"
+
+        print(f"{separation:6.2f} {asymmetry:9.4f} eV "
+              f"{offsets[well]:+8.3f}A {barrier:8.4f} eV  {shape}")
+
+    print("\nasymmetry must be zero: the geometry is its own mirror image, so")
+    print("any departure is the correction failing to vanish on one side.")
 
 
 def cap_sweep(physics, transfer_lengths, mixings, caps):
@@ -1069,6 +1364,21 @@ def main():
         ),
     )
     parser.add_argument(
+        "--system", default="formaldehyde", choices=sorted(SYSTEMS),
+        help=(
+            "which transfer to scan; water is the independent check, with "
+            "different tables, no environment softening, and a symmetric "
+            "crossing that must come out at zero reaction energy"
+        ),
+    )
+    parser.add_argument(
+        "--proton-transfer", action="store_true",
+        help=(
+            "symmetric water proton transfer at fixed O-O separations; the "
+            "independent check on parameters fitted to formaldehyde"
+        ),
+    )
+    parser.add_argument(
         "--escape", action="store_true",
         help=(
             "locate the spurious minimum past the saddle and measure how "
@@ -1109,16 +1419,42 @@ def main():
     parser.add_argument("--transfer-step", type=float, default=None)
     options = parser.parse_args()
 
+    probe = apply_system(options.system)
+
     # Relaxing costs a constrained minimisation per cell, so the default grid
     # coarsens when it is switched on.  Both remain fine enough to place the
     # saddle well inside the accuracy the model itself claims.
-    donor_step = options.donor_step or (0.04 if options.relax else 0.02)
-    transfer_step = options.transfer_step or (0.02 if options.relax else 0.005)
+    donor_low, donor_high, donor_default = probe["donor"]
+    transfer_low, transfer_high, transfer_default = probe["transfer"]
+
+    if options.donor_min == 1.00:
+        options.donor_min = donor_low
+    if options.donor_max == 1.90:
+        options.donor_max = donor_high
+    if options.transfer_min == 0.65:
+        options.transfer_min = transfer_low
+    if options.transfer_max == 1.60:
+        options.transfer_max = transfer_high
+
+    donor_step = options.donor_step or (
+        (donor_default * 2 if options.relax else donor_default)
+    )
+    transfer_step = options.transfer_step or (
+        (transfer_default * 4 if options.relax else transfer_default)
+    )
 
     donor_lengths = np.arange(options.donor_min, options.donor_max, donor_step)
     transfer_lengths = np.arange(
         options.transfer_min, options.transfer_max, transfer_step
     )
+
+    if options.proton_transfer:
+        apply_system("water")
+        proton_transfer_report(
+            options.physics, mixing=options.mixing, cap=options.cap,
+            softening=options.softening,
+        )
+        return
 
     if options.escape:
         escape_report(

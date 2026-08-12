@@ -134,6 +134,12 @@ OUTER_ELECTRON_ARRAY = np.array(
 # before raising it: the formaldehyde abstraction should reach -0.718 eV.
 ENVIRONMENT_SOFTENING = 0.124
 
+# Width of the smoothing on the two-ended maximum in that softening, as a
+# squared commitment value. A bare max() is continuous but not
+# differentiable where the two atoms' commitments are equal, which puts a
+# force flip on that surface. sqrt(1e-4) = 0.01 in bond-order units.
+ENVIRONMENT_SOFTENING_SMOOTH_EPSILON_SQUARED = 1e-4
+
 OVER_COORDINATION_PENALTY = 7.778
 
 # Ideal angle for each number of electron domains around an atom

@@ -40,8 +40,8 @@ import reactive as R
 from batched_torch import BatchedReactiveSimulation
 
 
-HF_MODEL_NAME = "reactive_v1+h_transfer_competition_v6"
-HF_MODEL_REVISION = 6
+HF_MODEL_NAME = "reactive_v1+h_transfer_competition_v7"
+HF_MODEL_REVISION = 7
 
 # A transfer correction needs both a heavy-atom donor contact and a second
 # partner contact. There is deliberately no hard taper threshold: the energy
@@ -266,6 +266,15 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         )
         pair_depth = blend(
             self.bond_depth, self.double_depth, self.triple_depth
+        )
+
+        # The same environment softening the base applied. This correction
+        # subtracts the local picture the base already counted, so the two
+        # must compute identical depths; otherwise the subtraction removes an
+        # energy that was never added and the transfer surface becomes a
+        # hybrid of a softened base and an unsoftened correction.
+        pair_depth = pair_depth * self.environment_softening_factor(
+            taper, order, lower, mask, neighbours
         )
         pair_width = blend(
             self.bond_width, self.double_width, self.triple_width

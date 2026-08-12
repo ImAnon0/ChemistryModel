@@ -126,12 +126,28 @@ def test_transfer_is_continuous():
     deliberate: that is ordinary hydrogen-bond separation, where the swap
     lands inside the engagement window rather than safely outside it.
     """
-    for donor, acceptor in [("O", "C"), ("O", "N"), ("N", "C"), ("O", "O")]:
-        for separation in np.arange(2.60, 3.30, 0.05):
+    # Narrowed deliberately, because the full sweep was 117,000 energy
+    # evaluations and ran for minutes. The step it exists to catch came from
+    # the donor and competitor labels swapping, which happens where the two
+    # contacts are equal -- so only the middle of the transfer can show it,
+    # and only at separations where that crossing lands inside the
+    # engagement window. 2.85 to 3.05 A is that window; the pairs kept are
+    # the asymmetric one where the swap is sharpest and the symmetric one
+    # where it is exact. Widen it again if a regression is suspected here.
+    for donor, acceptor in [("O", "C"), ("O", "O")]:
+        for separation in (2.90, 2.95, 3.00):
             symbols, _ = collinear(donor, acceptor, separation, 1.0)
             sim = make(symbols, collinear(donor, acceptor, separation, 1.0)[1])
 
-            xs = np.arange(0.95, separation - 0.95, 0.0005)
+            # A step is a jump between two adjacent samples, so the sample
+            # spacing sets how big the jump looks, not whether it is seen.
+            # The pre-fix defect was 0.055 eV appearing over 0.0002 A, which
+            # at any coarser spacing still shows up as one interval far out
+            # of line with its neighbours. What matters is bracketing the
+            # crossing, so the window is narrow and the spacing is not.
+            xs = np.arange(
+                0.5 * separation - 0.20, 0.5 * separation + 0.20, 0.005
+            )
             values = [
                 energy_at(sim, collinear(donor, acceptor, separation, x)[1])
                 for x in xs
@@ -174,7 +190,12 @@ def test_third_contact_is_not_bound():
         for third in np.arange(0.90, 1.55, 0.01)
     )
 
-    assert closest > far - 0.30, (
+    # 0.15 eV is about seven kT at 250 K: shallow enough that thermal motion
+    # empties it, deep enough that a genuine three-centre well fails. The
+    # sweep stops at 1.55 A, just past the 1.536 A O-H cutoff, because beyond
+    # that there is no third contact and the minimum found was ordinary
+    # long-range attraction rather than anything three-centre.
+    assert closest > far - 0.15, (
         "a third contact opens a bound three-centre well: energy drops "
         f"{far - closest:.2f} eV below the two-contact geometry"
     )
@@ -201,8 +222,12 @@ def test_saddle_is_early_enough_to_be_reachable():
         basin_seeds, build, flood_saddle, surface,
     )
 
-    donor_lengths = np.arange(1.00, 1.90, 0.02)
-    transfer_lengths = np.arange(0.65, 1.60, 0.005)
+    # Coarser than the scanner default: this test only checks that the col
+    # opens early and lands in a plausible range, and neither answer turns
+    # on a hundredth of an angstrom. Use the scanner when the position
+    # itself matters.
+    donor_lengths = np.arange(1.00, 1.90, 0.04)
+    transfer_lengths = np.arange(0.65, 1.60, 0.01)
 
     sim = build("high_fidelity")
     grid = surface(sim, donor_lengths, transfer_lengths)
@@ -282,6 +307,51 @@ def test_gate_forces_are_continuous():
     )
 
 
+def test_softening_forces_are_continuous():
+    """The environment softening takes a maximum, so it needs the same check.
+
+    The factor combines the commitments of both atoms in a pair, and a bare
+    maximum flips its derivative where the two are equal.  Along a transfer
+    the bond orders shift, so the two commitments can meet.
+
+    Commitment varies slowly with geometry, so any kink here should be much
+    smaller than the gate's was.  That is a reason to measure it rather than
+    a reason to skip it.
+    """
+    symbols, start = formaldehyde_plus_hydrogen(1.60)
+    sim = make(symbols, start)
+
+    approaches = np.arange(0.80, 1.80, 0.004)
+    forces = []
+
+    for approach in approaches:
+        moved = torch.tensor(
+            formaldehyde_plus_hydrogen(approach)[1] + CENTRE,
+            device=sim.device, dtype=sim.dtype, requires_grad=True,
+        )
+        sim.positions = moved.detach()
+        sim.build_neighbours()
+
+        energy = torch.sum(sim.energy_per_atom(moved))
+        gradient, = torch.autograd.grad(energy, moved)
+        forces.append(float(torch.linalg.norm(gradient[4])))
+
+    forces = np.array(forces)
+    steps = np.diff(forces)
+
+    worst, where = 0.0, None
+    for i in range(1, len(steps) - 1):
+        local = 0.5 * (abs(steps[i - 1]) + abs(steps[i + 1]))
+        excess = abs(steps[i]) - 3.0 * local
+        if excess > worst:
+            worst, where = excess, approaches[i]
+
+    assert worst < 0.5, (
+        f"force kink of {worst:.3f} eV/A at approach {where:.4f} A in the "
+        "environment softening"
+    )
+
+
 def test_energy_conserved_without_thermostat():
     """The integrator test that catches everything the scans miss.
 
@@ -334,6 +404,7 @@ if __name__ == "__main__":
         test_third_contact_is_not_bound,
         test_saddle_is_early_enough_to_be_reachable,
         test_gate_forces_are_continuous,
+        test_softening_forces_are_continuous,
         test_energy_conserved_without_thermostat,
     ]
 

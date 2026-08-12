@@ -171,6 +171,9 @@ class ReactiveSimulation:
         # every molecule with a multiply bonded atom, not just H transfer,
         # so measure the effect before switching it on globally.
         self.environment_softening = float(R.ENVIRONMENT_SOFTENING)
+        self.environment_softening_epsilon = float(
+            R.ENVIRONMENT_SOFTENING_SMOOTH_EPSILON_SQUARED
+        )
 
         self.maximum_cutoff = float(R.MAXIMUM_CUTOFF)
 
@@ -353,6 +356,83 @@ class ReactiveSimulation:
     def energy(self, positions):
         return torch.sum(self.energy_per_atom(positions))
 
+    def environment_softening_factor(self, taper, order, lower, mask,
+                                     neighbours, cache_key=None):
+        """How much each single bond is weakened by its partner's commitment.
+
+        The tables carry one depth per element pair, so every C-H is the
+        methane C-H at 4.291 eV. The aldehydic C-H is nearer 3.760, because
+        that carbon is already committed to a double bond and its remaining
+        single bonds are correspondingly weaker. A single generic entry
+        cannot express that, and the error is not small: the formaldehyde
+        abstraction came out at -0.228 eV against a thermochemical -0.718.
+
+        So a single bond's depth is reduced in proportion to the multiple
+        bond character its partner already carries elsewhere. The idea is the
+        bond-order trade-off that Tersoff and REBO potentials use, though the
+        form here is much simpler than either. It stays element agnostic: no
+        molecule is named, and an atom holding only single bonds is untouched.
+
+        Returns a multiplier of the same shape as the pair tables, and
+        exactly one when the feature is switched off.
+        """
+        if self.environment_softening <= 0.0:
+            return torch.ones_like(taper)
+
+        # Cached within a single energy evaluation. The high fidelity
+        # correction runs immediately after the base energy on the same
+        # geometry and needs the identical factor, so computing it twice
+        # duplicates a gather and a square root over every pair, which is
+        # enough work to matter on a large box.
+        #
+        # Keyed on the positions tensor itself. Identity is exact and free,
+        # where comparing values would cost more than the calculation being
+        # saved. The tensor is held rather than its id, so a later object
+        # cannot land on a recycled address and collide. Base and correction
+        # each build their own taper, so keying on that would never hit.
+        if cache_key is not None:
+            cache = getattr(self, "_softening_cache", None)
+            if cache is not None and cache[0] is cache_key:
+                return cache[1]
+
+        # Excess bond order beyond one per neighbour: zero for methane's
+        # carbon, one for the carbon in a carbonyl.
+        commitment = torch.clamp(
+            torch.sum(taper * (order - 1.0) * mask, dim=1), min=0.0
+        )
+
+        # Both ends have to agree, because the bond energy is assembled from
+        # a half contribution in each atom's row. Keying on the partner alone
+        # softens only the half seen from the hydrogen and delivers exactly
+        # half the intended effect.
+        #
+        # Smoothed rather than a bare maximum: max() is continuous in value
+        # but not in slope where the two commitments cross, which would put a
+        # force flip on that surface. Same treatment, and same reasoning, as
+        # the two-contact minimum in the transfer gate.
+        own = commitment[:, None]
+        partner = commitment[neighbours]
+        gap = own - partner
+        pair_commitment = 0.5 * (
+            own + partner
+            + torch.sqrt(gap * gap + self.environment_softening_epsilon)
+        )
+
+        # Only bonds that are themselves single are discounted: a double
+        # bond's depth already comes from the double table and must not be
+        # reduced twice.
+        single_character = torch.clamp(1.0 - lower, 0.0, 1.0)
+
+        factor = 1.0 - (
+            self.environment_softening
+            * single_character
+            * torch.clamp(pair_commitment, 0.0, 1.0)
+        )
+
+        if cache_key is not None:
+            self._softening_cache = (cache_key, factor)
+        return factor
+
     def energy_per_atom(self, positions):
         # Mirrors reactive.potential_energy term for term, in the
         # padded neighbour-table form.
@@ -455,49 +535,15 @@ class ReactiveSimulation:
 
         # ---- environment softening of single bonds ----
         #
-        # The tables carry one depth per element pair, so every C-H is the
-        # methane C-H at 4.291 eV. The aldehydic C-H is 3.760: formaldehyde
-        # is a good hydrogen donor precisely because its carbon is already
-        # committed to a double bond, leaving its remaining single bonds
-        # weaker. With one generic entry the model cannot express that, and
-        # the error is not small -- H + H2CO -> H2 + HCO comes out at
-        # -0.228 eV against a thermochemical -0.718.
-        #
-        # So: reduce a single bond's depth in proportion to how much multiple
-        # bond character the partner atom is already carrying elsewhere. This
-        # is the bond-order trade-off that Tersoff and REBO potentials use,
-        # and it stays element agnostic -- no molecule is named, and an atom
-        # with only single bonds is untouched.
-        #
-        # commitment is the excess bond order each atom holds beyond one per
-        # neighbour, so it is zero for methane's carbon and near one for the
-        # carbon in a carbonyl.
-        if self.environment_softening > 0.0:
-            commitment = torch.clamp(
-                torch.sum(taper * (order - 1.0) * mask, dim=1), min=0.0
-            )
-
-            # Each end of a pair is softened by what the *other* end is
-            # committed to, and only for bonds that are themselves single:
-            # a double bond's depth already comes from the double table and
-            # should not be discounted twice.
-            # Both ends of a pair must agree, because the bond energy is
-            # assembled from a half-contribution in each atom's row. Keying
-            # on the partner alone softens only the half seen from the
-            # hydrogen, and the carbon's half keeps the generic depth --
-            # giving exactly half the intended effect.
-            partner_commitment = torch.maximum(
-                commitment[:, None], commitment[neighbours]
-            )
-            single_character = torch.clamp(1.0 - lower, 0.0, 1.0)
-
-            softening = 1.0 - (
-                self.environment_softening
-                * single_character
-                * torch.clamp(partner_commitment, 0.0, 1.0)
-            )
-
-            pair_depth = pair_depth * softening
+        # Factored into a method because the high fidelity correction has to
+        # apply exactly the same factor. That correction rebuilds the Morse
+        # terms in order to subtract the local picture the base already
+        # counted, so if the two computed depths differently the subtraction
+        # would remove an energy that was never added, and the transfer
+        # surface would be a hybrid of two potentials.
+        pair_depth = pair_depth * self.environment_softening_factor(
+            taper, order, lower, mask, neighbours, cache_key=positions
+        )
 
         shift = distances - pair_length
 
