@@ -1137,7 +1137,8 @@ def ridge_positions(sim, donor_lengths, transfer_lengths):
 
 
 def fixed_donor_slice(physics, donor_lengths, transfer_lengths, relax=False,
-                      mixing=None, sato=None, flatten=None, cap=None):
+                      mixing=None, sato=None, flatten=None, cap=None,
+                      gradient_based=True):
     """Barrier along r(H-H) with the donor bond held at each fixed length.
 
     The full two dimensional scan asks the thermal question: what is the
@@ -1169,7 +1170,9 @@ def fixed_donor_slice(physics, donor_lengths, transfer_lengths, relax=False,
     for donor in donor_lengths:
         if relax:
             profile = np.array([
-                relaxed_energy(sim, donor, transfer)[0]
+                relaxed_energy(
+                    sim, donor, transfer, gradient_based=gradient_based
+                )[0]
                 for transfer in transfer_lengths
             ])
         else:
@@ -1350,7 +1353,8 @@ def impact_barrier(sim, transfer_lengths, donor_length=IMPACT_DONOR):
     return energy - profile[entrance[1]]
 
 
-def locate_saddle(sim, donor_lengths, transfer_lengths, relax=False):
+def locate_saddle(sim, donor_lengths, transfer_lengths, relax=False,
+                  gradient_based=True):
     """Find the saddle on the grid rather than assuming where it sits.
 
     Earlier versions checked curvature at a hardcoded point, the geometry a
@@ -1362,7 +1366,8 @@ def locate_saddle(sim, donor_lengths, transfer_lengths, relax=False):
     Returns (donor, transfer, height above the reactant minimum, grid), or
     None if the two basins cannot be separated on this window.
     """
-    grid = surface(sim, donor_lengths, transfer_lengths, relax=relax)
+    grid = surface(sim, donor_lengths, transfer_lengths, relax=relax,
+                   gradient_based=gradient_based)
 
     reactant, product = basin_seeds(grid, donor_lengths, transfer_lengths)
     if reactant is None:
@@ -1428,7 +1433,8 @@ def saddle_character(sim, donor=TRAP_DONOR, transfer=TRAP_TRANSFER,
 
 
 def saddle_report(physics, donor_lengths, transfer_lengths, caps,
-                  mixing=None, relax=False, pair_depths=None):
+                  mixing=None, relax=False, pair_depths=None,
+                  gradient_based=True):
     """Locate the saddle at each cap, then check it against the reference.
 
     Three things have to be right at once, and only the first is a fit:
@@ -1455,7 +1461,10 @@ def saddle_report(physics, donor_lengths, transfer_lengths, caps,
     for cap in caps:
         sim = build(physics, mixing=mixing, cap=cap, pair_depths=pair_depths)
 
-        found = locate_saddle(sim, donor_lengths, transfer_lengths, relax=relax)
+        found = locate_saddle(
+            sim, donor_lengths, transfer_lengths, relax=relax,
+            gradient_based=gradient_based,
+        )
         label = "none" if cap < 0 else f"{cap:.2f}"
 
         if found is None:
@@ -1524,7 +1533,7 @@ def locate_trap(grid, donor_lengths, transfer_lengths, saddle_cell,
 
 def escape_report(physics, donor_lengths, transfer_lengths, mixing=None,
                   cap=None, relax=False, pair_depths=None, softening=None,
-                  depth_power=None):
+                  depth_power=None, gradient_based=True):
     """How deep is the trap, and how hard is it to get out?
 
     The reaction has a real col.  What follows it is the problem: a bound
@@ -1546,6 +1555,7 @@ def escape_report(physics, donor_lengths, transfer_lengths, mixing=None,
     grid = surface(
         sim, donor_lengths, transfer_lengths, relax=relax, physics=physics,
         progress=True, progress_label=ACTIVE_SYSTEM,
+        gradient_based=gradient_based,
         build_kwargs=dict(
             mixing=mixing, cap=cap, pair_depths=pair_depths,
             softening=softening, depth_power=depth_power,
@@ -1688,12 +1698,30 @@ def proton_transfer_report(physics, separations=(2.60, 2.70, 2.80, 3.00),
 #                 CCSDT(Q) corrections, Schaefer and co-workers 2016
 #   methane       14.1 kcal/mol, PES-2014 fitted to CCSD(T)=FULL/aug-cc-pVQZ
 #
-# Stored as a pair for the printing code, but both entries are the same
-# number: these are specific published values, and a range would suggest a
-# spread of estimates that does not exist.
+# Water is a range, and not because its value is uncertain. The transition
+# state is the same; what differs is where the counting starts.
+#
+# The same paper that gives 8.4 kcal/mol from separated reactants also
+# locates two entrance complexes, 3.7 and 2.1 kcal/mol below them. A real
+# encounter falls into one of those and climbs from there, so measured from
+# a complex the barrier is 10.5 to 12.1 kcal/mol, or 0.455 to 0.525 eV.
+#
+# The model has no long-range attraction: past the O-H cutoff of 1.536 A the
+# two molecules stop interacting entirely, and the scan's reactant energy is
+# flat from 1.70 A outward. So it cannot form either complex, and neither
+# reference state is unambiguously the one it should be judged against.
+# Recording a single number would bake that modelling choice into any fit
+# without saying so.
+#
+# Note the upper figure is arithmetic on two quoted numbers rather than a
+# third quoted number: 8.4 plus the complex depth. Sound, but not the same
+# kind of evidence as the 8.4 itself.
+#
+# The other two are single published values, stored as equal pairs so the
+# printing code can treat every entry the same way.
 REFERENCE_BARRIERS = {
     "formaldehyde": (0.324, 0.324),
-    "water": (0.364, 0.364),
+    "water": (0.364, 0.525),
     "methane": (0.611, 0.611),
 }
 
@@ -1815,7 +1843,7 @@ def measure_barrier(physics, name, mixing=None, power=None, over_weight=None,
 
 
 def agreement_report(physics, relax=False, mixing=None, power=None,
-                     over_weight=None, sato=None):
+                     over_weight=None, sato=None, gradient_based=True):
     """Do the two measurement paths give the same barrier?
 
     measure_barrier and escape_report both locate a saddle by flooding, but
@@ -1862,6 +1890,7 @@ def agreement_report(physics, relax=False, mixing=None, power=None,
         found = measure_barrier(
             physics, name, relax=relax, mixing=mixing, power=power,
             over_weight=over_weight, sato=sato,
+            gradient_based=gradient_based,
             donor_step=donor_step, transfer_step=transfer_step,
         )
 
@@ -1878,6 +1907,7 @@ def agreement_report(physics, relax=False, mixing=None, power=None,
         grid = surface(
             sim, donor_lengths, transfer_lengths, relax=relax,
             progress=relax, progress_label=f"{name} direct", physics=physics,
+            gradient_based=gradient_based,
             build_kwargs=dict(
                 mixing=mixing, depth_power=power, over_weight=over_weight,
                 sato=sato,
@@ -1934,8 +1964,10 @@ def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
         satos = (0.0,)
 
     print("barrier and error against the computed reference, in eV")
-    print("reference midpoints: " + ", ".join(
-        f"{name} {0.5 * sum(REFERENCE_BARRIERS[name]):.3f}"
+    print("references: " + ", ".join(
+        f"{name} {REFERENCE_BARRIERS[name][0]:.3f}"
+        + ("" if REFERENCE_BARRIERS[name][0] == REFERENCE_BARRIERS[name][1]
+           else f"-{REFERENCE_BARRIERS[name][1]:.3f}")
         for name in systems if name in REFERENCE_BARRIERS
     ))
     print("power 1.00 with mixing 0.63 is the current model\n")
@@ -1982,7 +2014,18 @@ def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
 
                 barriers.append(height)
                 low, high = REFERENCE_BARRIERS[name]
-                error = height - 0.5 * (low + high)
+
+                # Distance to the reference range rather than to a midpoint.
+                # A barrier inside the range has no error to report: where
+                # the two ends are different reference states rather than
+                # rival estimates, landing between them is not a miss.
+                if height < low:
+                    error = height - low
+                elif height > high:
+                    error = height - high
+                else:
+                    error = 0.0
+
                 errors.append(abs(error))
                 cells.append(f"{height:8.3f} {error:+9.3f}")
 
@@ -2014,7 +2057,8 @@ def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
             for line in lines:
                 print(line)
 
-    print("\neach cell is  barrier / error against the reference midpoint")
+    print("\neach cell is  barrier / distance outside the reference range,")
+    print("which is zero for a barrier that lands inside it")
     print("spread is the widest gap between systems; it should grow as the")
     print("power falls, since the references span 0.27 to 0.59 eV")
     print("worst is the largest single error, which is the number to minimise")
@@ -2091,9 +2135,11 @@ def knob_map(physics, transfer_lengths, mixings, satos, flatten=0.0):
     print("wanted: barrier near 0.17-0.20, trap >= 0")
 
 
-def measure(sim, donor_lengths, transfer_lengths, relax=False):
+def measure(sim, donor_lengths, transfer_lengths, relax=False,
+            gradient_based=True):
     """Saddle position, activation energy and reaction energy for one model."""
-    grid = surface(sim, donor_lengths, transfer_lengths, relax=relax)
+    grid = surface(sim, donor_lengths, transfer_lengths, relax=relax,
+                   gradient_based=gradient_based)
 
     reactant, product = basin_seeds(grid, donor_lengths, transfer_lengths)
     if reactant is None:
@@ -2114,7 +2160,8 @@ def measure(sim, donor_lengths, transfer_lengths, relax=False):
     }
 
 
-def sweep(physics, donor_lengths, transfer_lengths, values, relax=False):
+def sweep(physics, donor_lengths, transfer_lengths, values, relax=False,
+          gradient_based=True):
     """How does the barrier respond to the state-mixing fraction?
 
     At the saddle the two valence states are near degenerate, so the mixed
@@ -2134,7 +2181,10 @@ def sweep(physics, donor_lengths, transfer_lengths, values, relax=False):
 
     for value in values:
         sim = build(physics, mixing=value)
-        found = measure(sim, donor_lengths, transfer_lengths, relax=relax)
+        found = measure(
+            sim, donor_lengths, transfer_lengths, relax=relax,
+            gradient_based=gradient_based,
+        )
         if found is None:
             print(f"{value:8.3f} {'no route':>10}")
             continue
@@ -2146,6 +2196,7 @@ def sweep(physics, donor_lengths, transfer_lengths, values, relax=False):
 
 
 def report(physics, donor_lengths, transfer_lengths, relax=False, plot=None,
+           gradient_based=True,
            mixing=None, sato=None, flatten=None, cap=None, pair_depths=None,
            softening=None):
     sim = build(physics, mixing=mixing, sato=sato, flatten=flatten,
@@ -2158,7 +2209,8 @@ def report(physics, donor_lengths, transfer_lengths, relax=False, plot=None,
         print(f"state mixing fraction: {mixing} (overridden)")
     print()
 
-    grid = surface(sim, donor_lengths, transfer_lengths, relax=relax)
+    grid = surface(sim, donor_lengths, transfer_lengths, relax=relax,
+                   gradient_based=gradient_based)
 
     reactant, product = basin_seeds(grid, donor_lengths, transfer_lengths)
     if reactant is None:
@@ -2476,6 +2528,7 @@ def main():
     if options.agreement:
         agreement_report(
             options.physics, relax=options.relax, mixing=options.mixing,
+            gradient_based=gradient_based,
             power=options.depth_power,
             over_weight=(
                 float(options.over_weights.split(",")[0])
@@ -2524,7 +2577,7 @@ def main():
             options.physics, donor_lengths, transfer_lengths,
             mixing=options.mixing, cap=options.cap, relax=options.relax,
             pair_depths=options.pair_depths, softening=options.softening,
-            depth_power=options.depth_power,
+            depth_power=options.depth_power, gradient_based=gradient_based,
         )
         return
 
@@ -2534,6 +2587,7 @@ def main():
             caps=[-1.0, 1.45, 1.36, 1.32, 1.29, 1.20],
             mixing=options.mixing, relax=options.relax,
             pair_depths=options.pair_depths,
+            gradient_based=gradient_based,
         )
         return
 
@@ -2559,6 +2613,7 @@ def main():
             options.physics, donor_lengths, transfer_lengths,
             relax=options.relax, mixing=options.mixing, sato=options.sato,
             flatten=options.flatten, cap=options.cap,
+            gradient_based=gradient_based,
         )
         return
 
@@ -2582,6 +2637,7 @@ def main():
         cap=options.cap,
         pair_depths=options.pair_depths,
         softening=options.softening,
+        gradient_based=gradient_based,
     )
 
 
