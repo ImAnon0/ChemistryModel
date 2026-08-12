@@ -44,10 +44,10 @@ ANGLE_STIFFNESS = {"C": 3.0, "N": 2.6, "O": 2.6, "H": 0.0}
 # (length in angstroms, dissociation energy in kJ/mol, Morse width)
 
 BOND_TABLE = {
-    ("H", "H"): (0.74, 436.0, 1.94),
-    ("C", "H"): (1.09, 414.0, 1.80),
-    ("N", "H"): (1.01, 391.0, 1.95),
-    ("O", "H"): (0.96, 463.0, 2.18),
+    ("H", "H"): (0.74, 435.0, 1.94),
+    ("C", "H"): (1.09, 439.0, 1.80),
+    ("N", "H"): (1.01, 449.0, 1.95),
+    ("O", "H"): (0.96, 498.0, 2.18),
     ("C", "C"): (1.54, 348.0, 1.85),
     ("C", "N"): (1.47, 305.0, 1.90),
     ("C", "O"): (1.43, 358.0, 1.95),
@@ -132,7 +132,7 @@ OUTER_ELECTRON_ARRAY = np.array(
 # 0.0 disables it and reproduces the older behaviour exactly. It touches
 # every molecule holding a double or triple bond, so measure the effect
 # before raising it: the formaldehyde abstraction should reach -0.718 eV.
-ENVIRONMENT_SOFTENING = 0.124
+ENVIRONMENT_SOFTENING = 0.174
 
 # Width of the smoothing on the two-ended maximum in that softening, as a
 # squared commitment value. A bare max() is continuous but not

@@ -330,7 +330,7 @@ ACTIVE_SYSTEM = "formaldehyde"
 SYSTEM_START = {
     "formaldehyde": (1.09, 1.60),
     "water": (0.98, 1.80),
-    "methane": (1.09, 1.60),
+    "methane": (0.480, 0.520),
 }
 
 
@@ -1219,23 +1219,36 @@ def proton_transfer_report(physics, separations=(2.60, 2.70, 2.80, 3.00),
     print("any departure is the correction failing to vanish on one side.")
 
 
-# Computed classical barriers, in eV, for the three systems the scanner can
-# build. These are what the model is being asked to reproduce.
+# Computed barriers, in eV, for the three systems the scanner can build.
+# These are what the model is being asked to reproduce.
 #
-#   formaldehyde  Siai, Oueslati and Kerkeni 2016, ZPE-corrected 5.85 to
-#                 6.69 kcal/mol
-#   water         Schaefer and co-workers 2016, classical 8.4 kcal/mol for
-#                 the symmetric OH + H2O exchange; the adiabatic value is
-#                 roughly a kcal/mol lower
-#   methane       the textbook H + CH4 barrier, near 14 kcal/mol
+# All three are CLASSICAL barriers: the bare height of the potential surface,
+# saddle minus reactants, with no vibrational zero point energy anywhere.
+# That is the same quantity the scanner measures, since it floods a grid of
+# static geometries, and the model integrates Newton's equations on a static
+# surface with no vibrational levels of its own.
 #
-# The model carries zero point energy inside its well depths, because
-# BOND_DEPTH holds dissociation energies, so the adiabatic column is the
-# like-for-like comparison and the classical one is listed for context.
+# The literature also quotes adiabatic barriers, which subtract the zero
+# point difference between the transition state and the reactants and run
+# roughly 0.05 to 0.13 eV lower. Mixing the two conventions is easy and was
+# done here twice: it made methane look about 0.09 eV worse than it is.
+# Every value below is quoted directly from a source rather than converted,
+# so there is no arithmetic here to get wrong.
+#
+#   formaldehyde  6.69 kcal/mol, CCSD(T)/cc-pVTZ//MP2/cc-pVTZ, Siai,
+#                 Oueslati and Kerkeni 2016, Chem. Phys. 474, 44-51
+#   water         8.4 kcal/mol, symmetric OH + H2O exchange, CCSD(T) with
+#                 CCSDT(Q) corrections, Schaefer and co-workers 2016
+#   methane       14.1 kcal/mol, PES-2014 fitted to CCSD(T)=FULL/aug-cc-pVQZ
+#
+# A single value rather than a range, because these are specific published
+# numbers and a range would suggest a spread of estimates that does not
+# exist. Different methods disagree by a few tenths of a kcal/mol, which is
+# far below the errors being measured.
 REFERENCE_BARRIERS = {
-    "formaldehyde": (0.254, 0.290),
-    "water": (0.290, 0.330),
-    "methane": (0.560, 0.620),
+    "formaldehyde": (0.290, 0.290),
+    "water": (0.364, 0.364),
+    "methane": (0.611, 0.611),
 }
 
 
@@ -1258,8 +1271,19 @@ def measure_barrier(physics, name, mixing=None, power=None, over_weight=None,
         sato=sato,
     )
 
-    donor_lengths = np.arange(1.00, 1.90, donor_step)
-    transfer_lengths = np.arange(0.65, 1.60, transfer_step)
+    # Window from the system, not hardcoded. These were formaldehyde's
+    # bounds, which meant water was scanned from donor 1.00 when its O-H sits
+    # at 0.96, clipping the reactant minimum off the edge of the grid, and
+    # down to transfer 0.65, deep inside O-H repulsion. Its basin thresholds
+    # came from apply_system regardless, so the reactant seed was chosen from
+    # one or two columns at the very edge. Every water figure in a slope
+    # table before this was measured that way.
+    probe = SYSTEM_PROBES[name]
+    donor_low, donor_high, _ = probe["donor"]
+    transfer_low, transfer_high, _ = probe["transfer"]
+
+    donor_lengths = np.arange(donor_low, donor_high, donor_step)
+    transfer_lengths = np.arange(transfer_low, transfer_high, transfer_step)
 
     found = locate_saddle(sim, donor_lengths, transfer_lengths)
     if found is None:
