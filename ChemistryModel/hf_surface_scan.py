@@ -230,11 +230,19 @@ def water_geometry(donor_length, transfer_length, spectators=None):
             np.sin(radians) * np.sin(tilt),
         ])
 
-    # The spectator hydrogens are placed off axis and out of plane so the
-    # arrangement is a real pair of waters rather than a flat contrivance.
+    # Both spectators take the same tilt, so the arrangement is its own
+    # mirror image about the midpoint of the O-O axis.
+    #
+    # They did not: the donor's spoke used tilt 0 and the acceptor's used
+    # pi/2, left over from when this builder returned six atoms and one spoke
+    # was dropped from each list without checking the remaining pair still
+    # matched. The surface was then asymmetric for a reaction that is
+    # symmetric by construction, so E(a, b) did not equal E(b, a) and the
+    # flood could take different routes depending on which side it came from.
+    # That is the likeliest source of water's erratic barriers.
     donor_spokes = [
         spoke(donor_oxygen, donor_oh, donor_angle, -1.0, angle)
-        for angle in (0.0, np.pi)
+        for angle in (np.pi / 2, -np.pi / 2)
     ]
     acceptor_spokes = [
         spoke(acceptor_oxygen, acceptor_oh, acceptor_angle, 1.0, angle)
@@ -359,9 +367,46 @@ def active_limits():
     return SYSTEMS[ACTIVE_SYSTEM]["limits"]
 
 
+def check_water_symmetry(points=((1.00, 1.40), (1.10, 1.30), (1.20, 1.20),
+                                 (0.95, 1.75))):
+    """The water builder must produce its own mirror image.
+
+    H2O + OH is symmetric, so the surface has to satisfy E(a, b) == E(b, a)
+    exactly. It did not: the two spectator hydrogens were placed with
+    different tilts, one in the plane and one out of it, so the arrangement
+    was asymmetric by construction and the flood could route differently
+    depending on which side it approached from.
+
+    Geometry rather than energy, because it is a property of the builder and
+    can be checked without a simulation. Returns the points that fail.
+    """
+    previous = ACTIVE_SYSTEM
+    apply_system("water")
+
+    failed = []
+    try:
+        for donor, transfer in points:
+            _, forward = water_geometry(donor, transfer)
+            _, reverse = water_geometry(transfer, donor)
+
+            middle = 0.5 * np.linalg.norm(reverse[3] - reverse[0])
+            mirrored = reverse.copy()
+            mirrored[:, 0] = 2.0 * middle - mirrored[:, 0]
+
+            one = np.array(sorted(map(tuple, np.round(forward, 6))))
+            two = np.array(sorted(map(tuple, np.round(mirrored, 6))))
+            if not np.allclose(one, two, atol=1e-6):
+                failed.append((donor, transfer))
+    finally:
+        apply_system(previous)
+
+    return failed
+
+
 def build(physics="high_fidelity", mixing=None, sato=None,
-          flatten=None, cap=None, ch_depth=None, softening=None,
-          depth_power=None, over_weight=None):
+          flatten=None, cap=None, softening=None,
+          depth_power=None, over_weight=None, pair_depths=None,
+          boxes=None):
     cls = (
         HighFidelityBatchedReactiveSimulation if physics == "high_fidelity"
         else BatchedReactiveSimulation
@@ -386,7 +431,6 @@ def build(physics="high_fidelity", mixing=None, sato=None,
         ),
         "cap": getattr(high_fidelity_torch, "H_TRANSFER_LOWERING_CAP", None),
         "softening": R.ENVIRONMENT_SOFTENING,
-        "ch_depth": None,
     }
 
     if mixing is not None:
@@ -450,31 +494,36 @@ def build(physics="high_fidelity", mixing=None, sato=None,
         import reactive as R
         R.ENVIRONMENT_SOFTENING = float(softening)
 
-    if ch_depth is not None:
-        # Diagnostic only. The C-H entry is a single generic depth shared by
-        # every carbon, so an aldehydic value here is wrong for methane and
-        # everything else. The point is to ask whether the spurious minimum
-        # is a separate defect or just this number showing up as a structure,
-        # not to propose it as a fix.
+    if pair_depths:
+        # Diagnostic only. Each entry is a single generic depth shared by
+        # every atom of that pair, so overriding one asks what the barrier
+        # does when a bond is stronger or weaker -- not what the depth ought
+        # to be. The table values are dissociation energies checked against
+        # CRC, so a value that improves a barrier here is evidence about the
+        # barrier's dependence on depth, not evidence the table is wrong.
         #
-        # The simulation copies the tables at construction, so this is set
+        # The simulation copies the tables at construction, so these are set
         # before the object is built and restored immediately afterwards,
         # leaving the module untouched for anything else in the process.
         import reactive as R
 
-        hydrogen = int(R.ELEMENT_INDEX["H"])
-        carbon = int(R.ELEMENT_INDEX["C"])
-        saved = (
-            R.BOND_DEPTH[carbon, hydrogen],
-            R.BOND_DEPTH[hydrogen, carbon],
-        )
-        R.BOND_DEPTH[carbon, hydrogen] = float(ch_depth)
-        R.BOND_DEPTH[hydrogen, carbon] = float(ch_depth)
+        restore = []
+        for pair, value in pair_depths.items():
+            first, second = (part.strip() for part in pair.split("-"))
+            i = int(R.ELEMENT_INDEX[first])
+            j = int(R.ELEMENT_INDEX[second])
+            restore.append((i, j, R.BOND_DEPTH[i, j], R.BOND_DEPTH[j, i]))
+            R.BOND_DEPTH[i, j] = float(value)
+            R.BOND_DEPTH[j, i] = float(value)
 
-        symbols, positions = active_geometry(*SYSTEM_START[ACTIVE_SYSTEM])
+        prepared = boxes if boxes is not None else [
+            (lambda pair: (pair[0], pair[1] + CENTRE))(
+                active_geometry(*SYSTEM_START[ACTIVE_SYSTEM])
+            )
+        ]
         try:
             return cls(
-                boxes=[(symbols, positions + CENTRE)],
+                boxes=prepared,
                 box_size=BOX,
                 random_seed=0,
                 relax_on_start=False,
@@ -482,13 +531,18 @@ def build(physics="high_fidelity", mixing=None, sato=None,
                 dtype=SCAN_DTYPE,
             )
         finally:
-            R.BOND_DEPTH[carbon, hydrogen] = saved[0]
-            R.BOND_DEPTH[hydrogen, carbon] = saved[1]
+            for i, j, first_value, second_value in restore:
+                R.BOND_DEPTH[i, j] = first_value
+                R.BOND_DEPTH[j, i] = second_value
 
-    symbols, positions = active_geometry(*SYSTEM_START[ACTIVE_SYSTEM])
+    prepared = boxes if boxes is not None else [
+        (lambda pair: (pair[0], pair[1] + CENTRE))(
+            active_geometry(*SYSTEM_START[ACTIVE_SYSTEM])
+        )
+    ]
     try:
         return cls(
-            boxes=[(symbols, positions + CENTRE)],
+            boxes=prepared,
             box_size=BOX,
             random_seed=0,
             relax_on_start=False,
@@ -558,8 +612,74 @@ def relaxed_energy(sim, donor_length, transfer_length, start=None):
     return float(result.fun), np.asarray(result.x, float)
 
 
+BATCH_SIZE = 256
+
+
+def batched_surface(physics, donor_lengths, transfer_lengths, progress=True,
+                    progress_label="", batch_size=BATCH_SIZE, **build_kwargs):
+    """Frozen energy grid, evaluated many geometries at a time.
+
+    The simulation already carries several boxes at once -- that is what the
+    characterisation runs use to get eight trajectories for the price of
+    rather less than eight. The same machinery works for a scan: each grid
+    cell becomes a box, and a whole chunk of the grid is one evaluation
+    instead of one per cell.
+
+    The neighbour table is built box by box and the indices shifted, so boxes
+    never see each other despite sharing coordinates. Nothing here relies on
+    that beyond the class already guaranteeing it.
+
+    Frozen only. Relaxation needs a minimisation per cell, and the whole
+    point of batching is that every cell is evaluated at the same time, so
+    the two do not compose.
+    """
+    cells = [
+        (i, j, donor, transfer)
+        for i, donor in enumerate(donor_lengths)
+        for j, transfer in enumerate(transfer_lengths)
+    ]
+
+    grid = np.empty((len(donor_lengths), len(transfer_lengths)))
+    started = time.monotonic()
+
+    for start in range(0, len(cells), batch_size):
+        chunk = cells[start:start + batch_size]
+
+        boxes = []
+        for _, _, donor, transfer in chunk:
+            symbols, positions = active_geometry(donor, transfer)
+            boxes.append((symbols, positions + CENTRE))
+
+        sim = build(physics, boxes=boxes, **build_kwargs)
+        energies = sim.potential_per_box
+
+        for (i, j, _, _), value in zip(chunk, energies):
+            grid[i, j] = float(value)
+
+        if progress:
+            done = start + len(chunk)
+            width = 28
+            filled = int(width * done / len(cells))
+            elapsed = time.monotonic() - started
+            remaining = elapsed * (len(cells) - done) / max(done, 1)
+            print(
+                f"\r  {progress_label:<14}"
+                f"[{'#' * filled}{'.' * (width - filled)}] "
+                f"{done:>6}/{len(cells)} cells  "
+                f"{done / max(elapsed, 1e-6):6.0f}/s  "
+                f"{remaining:4.0f}s left ",
+                end="", flush=True,
+            )
+
+    if progress:
+        print(flush=True)
+
+    return grid
+
+
 def surface(sim, donor_lengths, transfer_lengths, relax=False, progress=True,
-            record_spectators=False, progress_label=""):
+            record_spectators=False, progress_label="", physics=None,
+            build_kwargs=None):
     """Energy grid, indexed [donor, transfer].
 
     With record_spectators the relaxed spectator coordinates are kept for
@@ -569,6 +689,24 @@ def surface(sim, donor_lengths, transfer_lengths, relax=False, progress=True,
     the energy there a boundary artefact rather than a minimum.
     """
     started = time.monotonic()
+
+    # Frozen grids go through the batched evaluator, which sends a few
+    # hundred geometries per call instead of one. Relaxed grids cannot: each
+    # cell needs its own minimisation, so there is nothing to batch.
+    if not relax and physics is not None:
+        grid = batched_surface(
+            physics, donor_lengths, transfer_lengths,
+            progress=progress, progress_label=progress_label,
+            **(build_kwargs or {}),
+        )
+        if record_spectators:
+            frozen = np.asarray(active_frozen(), dtype=float)
+            spectators = np.broadcast_to(
+                frozen,
+                (len(donor_lengths), len(transfer_lengths), len(frozen)),
+            ).copy()
+            return grid, spectators
+        return grid
 
     grid = np.empty((len(donor_lengths), len(transfer_lengths)))
     spectators = (
@@ -1040,7 +1178,7 @@ def saddle_character(sim, donor=TRAP_DONOR, transfer=TRAP_TRANSFER,
 
 
 def saddle_report(physics, donor_lengths, transfer_lengths, caps,
-                  mixing=None, relax=False, ch_depth=None):
+                  mixing=None, relax=False, pair_depths=None):
     """Locate the saddle at each cap, then check it against the reference.
 
     Three things have to be right at once, and only the first is a fit:
@@ -1065,7 +1203,7 @@ def saddle_report(physics, donor_lengths, transfer_lengths, caps,
           f"{'offset':>9}  character")
 
     for cap in caps:
-        sim = build(physics, mixing=mixing, cap=cap, ch_depth=ch_depth)
+        sim = build(physics, mixing=mixing, cap=cap, pair_depths=pair_depths)
 
         found = locate_saddle(sim, donor_lengths, transfer_lengths, relax=relax)
         label = "none" if cap < 0 else f"{cap:.2f}"
@@ -1135,7 +1273,7 @@ def locate_trap(grid, donor_lengths, transfer_lengths, saddle_cell,
 
 
 def escape_report(physics, donor_lengths, transfer_lengths, mixing=None,
-                  cap=None, relax=False, ch_depth=None, softening=None,
+                  cap=None, relax=False, pair_depths=None, softening=None,
                   depth_power=None):
     """How deep is the trap, and how hard is it to get out?
 
@@ -1152,10 +1290,17 @@ def escape_report(physics, donor_lengths, transfer_lengths, mixing=None,
     at any temperature this model runs at.  The escape barrier is the number
     that says which of those you have, and it is the one to fix against.
     """
-    sim = build(physics, mixing=mixing, cap=cap, ch_depth=ch_depth,
+    sim = build(physics, mixing=mixing, cap=cap, pair_depths=pair_depths,
                 softening=softening, depth_power=depth_power)
 
-    grid = surface(sim, donor_lengths, transfer_lengths, relax=relax)
+    grid = surface(
+        sim, donor_lengths, transfer_lengths, relax=relax, physics=physics,
+        progress=True, progress_label=ACTIVE_SYSTEM,
+        build_kwargs=dict(
+            mixing=mixing, cap=cap, pair_depths=pair_depths,
+            softening=softening, depth_power=depth_power,
+        ),
+    )
     reactant, product = basin_seeds(grid, donor_lengths, transfer_lengths)
     if reactant is None:
         print("could not identify both basins - widen the scan window")
@@ -1386,7 +1531,11 @@ def measure_barrier(physics, name, mixing=None, power=None, over_weight=None,
 
     result = surface(
         sim, donor_lengths, transfer_lengths, relax=relax, progress=relax,
-        record_spectators=True, progress_label=name,
+        record_spectators=True, progress_label=name, physics=physics,
+        build_kwargs=dict(
+            mixing=mixing, depth_power=power, over_weight=over_weight,
+            sato=sato,
+        ),
     )
     grid, spectators = result
 
@@ -1472,7 +1621,11 @@ def agreement_report(physics, relax=False, mixing=None, power=None,
         )
         grid = surface(
             sim, donor_lengths, transfer_lengths, relax=relax,
-            progress=relax, progress_label=f"{name} direct",
+            progress=relax, progress_label=f"{name} direct", physics=physics,
+            build_kwargs=dict(
+                mixing=mixing, depth_power=power, over_weight=over_weight,
+                sato=sato,
+            ),
         )
         reactant, product = basin_seeds(
             grid, donor_lengths, transfer_lengths
@@ -1734,10 +1887,10 @@ def sweep(physics, donor_lengths, transfer_lengths, values, relax=False):
 
 
 def report(physics, donor_lengths, transfer_lengths, relax=False, plot=None,
-           mixing=None, sato=None, flatten=None, cap=None, ch_depth=None,
+           mixing=None, sato=None, flatten=None, cap=None, pair_depths=None,
            softening=None):
     sim = build(physics, mixing=mixing, sato=sato, flatten=flatten,
-                cap=cap, ch_depth=ch_depth, softening=softening)
+                cap=cap, pair_depths=pair_depths, softening=softening)
 
     print(f"physics: {getattr(sim, 'physics_model_name', 'reactive base')}")
     print(f"grid: {len(donor_lengths)} x {len(transfer_lengths)} points")
@@ -1863,10 +2016,13 @@ def main():
         ),
     )
     parser.add_argument(
-        "--ch-depth", type=float, default=None,
+        "--pair-depth", action="append", default=None,
+        metavar="PAIR=eV",
         help=(
-            "override the C-H bond depth in eV for this run only; "
-            "3.760 is the aldehydic value against the table's generic 4.291"
+            "override one bond depth for this run only, e.g. O-H=4.799. "
+            "Repeatable. Diagnostic: the table holds checked dissociation "
+            "energies, so this asks how the barrier depends on depth rather "
+            "than what the depth should be"
         ),
     )
     parser.add_argument(
@@ -1988,6 +2144,12 @@ def main():
     SCAN_DEVICE = options.device
     SCAN_DTYPE = torch.float32 if options.fast else torch.float64
 
+    pair_depths = {}
+    for item in (options.pair_depth or []):
+        pair, _, value = item.partition("=")
+        pair_depths[pair] = float(value)
+    options.pair_depths = pair_depths or None
+
     probe = apply_system(options.system)
 
     # Relaxing costs a constrained minimisation per cell, so the default grid
@@ -2069,7 +2231,7 @@ def main():
         escape_report(
             options.physics, donor_lengths, transfer_lengths,
             mixing=options.mixing, cap=options.cap, relax=options.relax,
-            ch_depth=options.ch_depth, softening=options.softening,
+            pair_depths=options.pair_depths, softening=options.softening,
             depth_power=options.depth_power,
         )
         return
@@ -2079,7 +2241,7 @@ def main():
             options.physics, donor_lengths, transfer_lengths,
             caps=[-1.0, 1.45, 1.36, 1.32, 1.29, 1.20],
             mixing=options.mixing, relax=options.relax,
-            ch_depth=options.ch_depth,
+            pair_depths=options.pair_depths,
         )
         return
 
@@ -2126,7 +2288,7 @@ def main():
         sato=options.sato,
         flatten=options.flatten,
         cap=options.cap,
-        ch_depth=options.ch_depth,
+        pair_depths=options.pair_depths,
         softening=options.softening,
     )
 

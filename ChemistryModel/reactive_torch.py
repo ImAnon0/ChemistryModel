@@ -700,6 +700,14 @@ class ReactiveSimulation:
 
         angle_per_atom = torch.sum(angle_energy, dim=(1, 2))
 
+        # Temporary: stash the pieces so a scratch script can see which term
+        # a barrier is made of. Delete once measured.
+        self._energy_parts = {
+            "bond": bond_per_atom.detach(),
+            "over": over_per_atom.detach(),
+            "angle": angle_per_atom.detach(),
+        }
+
         return bond_per_atom + over_per_atom + angle_per_atom
 
     def replace_atoms(self, slots, symbols, positions):
