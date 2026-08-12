@@ -1145,9 +1145,28 @@ class Lab(QtWidgets.QWidget):
         research_splitter.addWidget(selected_panel)
 
         # New controlled experiment controls.
+        #
+        # The form has grown past the height the splitter usually gives it,
+        # so the run buttons could end up below the fold with no way to reach
+        # them. The controls live inside a scroll area; the panel itself stays
+        # a plain widget so the splitter keeps behaving as before.
         test_panel = QtWidgets.QWidget()
-        test_layout = QtWidgets.QVBoxLayout(test_panel)
-        test_layout.setContentsMargins(0, 4, 0, 4)
+        test_panel_layout = QtWidgets.QVBoxLayout(test_panel)
+        test_panel_layout.setContentsMargins(0, 0, 0, 0)
+
+        test_scroll = QtWidgets.QScrollArea()
+        test_scroll.setWidgetResizable(True)
+        test_scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        test_scroll.setHorizontalScrollBarPolicy(
+            QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        test_panel_layout.addWidget(test_scroll)
+
+        test_contents = QtWidgets.QWidget()
+        test_scroll.setWidget(test_contents)
+
+        test_layout = QtWidgets.QVBoxLayout(test_contents)
+        test_layout.setContentsMargins(0, 4, 8, 4)
 
         new_title = QtWidgets.QLabel("new controlled test")
         new_title.setStyleSheet("font-weight: bold;")
@@ -1229,6 +1248,23 @@ class Lab(QtWidgets.QWidget):
         )
         form.addRow("duration (ps)", self.character_duration)
 
+        # A collision is over in tens of femtoseconds, so the default soup
+        # cadence of 40 steps (10 fs a frame) captures the whole reaction in
+        # about four frames. 4 steps is 1 fs a frame at the 0.25 fs time step,
+        # which resolves the C-H stretch that gates the transfer. Larger
+        # values are still useful for long runs where only the outcome
+        # matters and the trajectory file would otherwise be enormous.
+        self.character_capture = self.choice(
+            [2, 4, 10, 20, 40, 80], 4, 1
+        )
+        self.character_capture.setToolTip(
+            "Frames are written every N integration steps. At the 0.25 fs "
+            "time step, 4 gives a frame every femtosecond. The encounter "
+            "itself lasts roughly 20 to 40 fs, so coarse values record the "
+            "outcome but not the mechanism."
+        )
+        form.addRow("capture every N steps", self.character_capture)
+
         self.character_box = self.choice(
             [10, 12, 15, 19, 24, 30], 12, 1
         )
@@ -1266,6 +1302,7 @@ class Lab(QtWidgets.QWidget):
         row.addWidget(self.character_run_button)
         row.addWidget(self.character_all_button)
         test_layout.addLayout(row)
+        test_layout.addStretch(1)
 
         research_splitter.addWidget(test_panel)
 
@@ -1791,6 +1828,7 @@ class Lab(QtWidgets.QWidget):
 
         temperature = float(self.character_temperature.value())
         duration = float(self.character_duration.value())
+        capture_every = int(self.character_capture.value())
         box = float(self.character_box.value())
         repeats = max(1, int(self.character_repeats.value()))
         approach = float(self.character_approach.value())
@@ -1872,6 +1910,7 @@ class Lab(QtWidgets.QWidget):
             "--physics", physics_mode,
             "--temperature", f"{temperature:g}",
             "--ps", f"{duration:g}",
+            "--capture-every", str(int(capture_every)),
             "--box", f"{box:g}",
             "--repeats", str(repeats),
             "--seed-list", ",".join(str(seed) for seed in planned),
@@ -3185,6 +3224,7 @@ class Lab(QtWidgets.QWidget):
             "first_strike": self.first_strike.value(),
             "strike_interval": self.strike_interval.value(),
             "capture_every": self.capture_every.value(),
+            "character_capture": self.character_capture.value(),
             "grouped": self.grouped.isChecked(),
             "folder_name": self.folder_name.text(),
         }
@@ -3212,6 +3252,7 @@ class Lab(QtWidgets.QWidget):
             (self.first_strike, "first_strike"),
             (self.strike_interval, "strike_interval"),
             (self.capture_every, "capture_every"),
+            (self.character_capture, "character_capture"),
         ]
 
         for widget, key in pairs:

@@ -40,8 +40,8 @@ import reactive as R
 from batched_torch import BatchedReactiveSimulation
 
 
-HF_MODEL_NAME = "reactive_v1+h_transfer_competition_v5"
-HF_MODEL_REVISION = 5
+HF_MODEL_NAME = "reactive_v1+h_transfer_competition_v6"
+HF_MODEL_REVISION = 6
 
 # A transfer correction needs both a heavy-atom donor contact and a second
 # partner contact. There is deliberately no hard taper threshold: the energy
