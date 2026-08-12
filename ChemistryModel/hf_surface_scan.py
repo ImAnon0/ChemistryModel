@@ -724,30 +724,132 @@ def energy_at(sim, donor_length, transfer_length, spectators=None):
     return energy_of(sim, positions)
 
 
-def relaxed_energy(sim, donor_length, transfer_length, start=None):
-    """Minimise over the spectator coordinates at fixed r(C-H) and r(H-H).
+def energy_and_position_gradient(sim, positions):
+    """Total energy and its gradient with respect to every coordinate.
 
-    Powell rather than a gradient method: the cost is a handful of scalars,
-    the surface has flat regions where a numeric gradient is mostly noise,
-    and there is no analytic derivative for the constrained coordinates.
-    Warm starting from a neighbouring grid point cuts the evaluation count
-    sharply, which is what makes a relaxed grid affordable at all.
+    The gradient is autograd's, so it is exact rather than a difference, and
+    it costs one evaluation rather than one per coordinate.
     """
-    from scipy.optimize import minimize
+    moved = torch.tensor(
+        positions + CENTRE, device=sim.device, dtype=sim.dtype,
+        requires_grad=True,
+    )
 
+    # The neighbour table is built from detached positions, as elsewhere: it
+    # is a discrete choice of which pairs to include, not part of the energy
+    # expression, and differentiating through the search would be both
+    # meaningless and expensive.
+    sim.positions = moved.detach()
+    sim.build_neighbours()
+
+    total = torch.sum(sim.energy_per_atom(moved))
+    gradient, = torch.autograd.grad(total, moved)
+
+    # Detached before the conversion: torch warns about turning a tensor
+    # that still carries its graph into a scalar, and the gradient has
+    # already been taken by this point so there is nothing to keep.
+    return float(total.detach()), gradient.detach().cpu().numpy()
+
+
+def spectator_jacobian(donor_length, transfer_length, spectators, step=1e-5):
+    """How every atom moves when each spectator coordinate is nudged.
+
+    Finite difference, but only on the geometry builder, which is pure
+    arithmetic with no simulation in it. So this costs a handful of numpy
+    calls rather than a handful of energy evaluations, and the expensive
+    derivative -- the energy's -- comes from autograd instead.
+
+    Returns an array indexed [spectator, atom, axis].
+    """
+    spectators = np.asarray(spectators, dtype=float)
+
+    columns = []
+    for index in range(len(spectators)):
+        forward = spectators.copy()
+        backward = spectators.copy()
+        forward[index] += step
+        backward[index] -= step
+
+        _, ahead = active_geometry(donor_length, transfer_length, forward)
+        _, behind = active_geometry(donor_length, transfer_length, backward)
+
+        columns.append((ahead - behind) / (2.0 * step))
+
+    return np.stack(columns)
+
+
+def relaxed_energy(sim, donor_length, transfer_length, start=None,
+                   gradient_based=True):
+    """Minimise over the spectator coordinates at fixed donor and transfer.
+
+    Two methods, because they answer to different constraints.
+
+    Powell needs no derivatives and copes with a surface that has flat
+    directions, which is why it was here first. It pays for that in
+    evaluations: fifty to two hundred per cell, and a relaxed grid is a
+    thousand cells, so a single system takes minutes and a four system
+    sweep takes most of an hour.
+
+    The gradient method is far cheaper, and its derivative is not a finite
+    difference on the energy. Autograd gives the exact gradient with respect
+    to atom positions for the price of one evaluation, and the remaining
+    piece -- how atoms move when a spectator coordinate changes -- is a
+    difference on the geometry builder alone, which is arithmetic with no
+    simulation in it. Chaining the two gives an essentially exact gradient
+    for one energy evaluation rather than one per coordinate.
+
+    Powell is kept and reachable because the two disagreeing is
+    informative: on a flat surface they can settle in different local
+    minima, and which one is lower says which converged better rather than
+    which is right.
+    """
     if start is None:
         start = active_frozen()
 
-    def cost(spectators):
-        for value, (low, high) in zip(spectators, active_limits()):
-            if not low <= value <= high:
-                return 1e6
-        return energy_at(sim, donor_length, transfer_length, spectators)
+    start = np.clip(
+        np.asarray(start, dtype=float),
+        [low for low, _ in active_limits()],
+        [high for _, high in active_limits()],
+    )
+
+    if not gradient_based:
+        from scipy.optimize import minimize
+
+        def cost(spectators):
+            for value, (low, high) in zip(spectators, active_limits()):
+                if not low <= value <= high:
+                    return 1e6
+            return energy_at(sim, donor_length, transfer_length, spectators)
+
+        result = minimize(
+            cost, start, method="Powell",
+            options={"xtol": 1e-3, "ftol": 1e-5, "maxiter": 2000},
+        )
+        return float(result.fun), np.asarray(result.x, float)
+
+    from scipy.optimize import minimize
+
+    def cost_and_gradient(spectators):
+        _, positions = active_geometry(
+            donor_length, transfer_length, spectators
+        )
+        total, position_gradient = energy_and_position_gradient(
+            sim, positions
+        )
+
+        jacobian = spectator_jacobian(
+            donor_length, transfer_length, spectators
+        )
+        gradient = np.einsum("kij,ij->k", jacobian, position_gradient)
+
+        return total, gradient
 
     result = minimize(
-        cost, np.asarray(start, float), method="Powell",
-        options={"xtol": 1e-3, "ftol": 1e-5, "maxiter": 2000},
+        cost_and_gradient, start, method="L-BFGS-B", jac=True,
+        bounds=active_limits(),
+        options={"ftol": 1e-10, "gtol": 1e-7, "maxiter": 200},
     )
+
     return float(result.fun), np.asarray(result.x, float)
 
 
@@ -818,7 +920,7 @@ def batched_surface(physics, donor_lengths, transfer_lengths, progress=True,
 
 def surface(sim, donor_lengths, transfer_lengths, relax=False, progress=True,
             record_spectators=False, progress_label="", physics=None,
-            build_kwargs=None):
+            build_kwargs=None, gradient_based=True):
     """Energy grid, indexed [donor, transfer].
 
     With record_spectators the relaxed spectator coordinates are kept for
@@ -864,7 +966,8 @@ def surface(sim, donor_lengths, transfer_lengths, relax=False, progress=True,
         for j, transfer in enumerate(transfer_lengths):
             if relax:
                 value, row_start = relaxed_energy(
-                    sim, donor, transfer, start=row_start
+                    sim, donor, transfer, start=row_start,
+                    gradient_based=gradient_based,
                 )
                 if j == 0:
                     carried = row_start
@@ -1645,6 +1748,7 @@ def describe_spectators(name, values, tolerance=1e-3):
 
 def measure_barrier(physics, name, mixing=None, power=None, over_weight=None,
                     sato=None, sato_pairs=None, relax=False,
+                    gradient_based=True,
                     donor_step=BARRIER_DONOR_STEP,
                     transfer_step=BARRIER_TRANSFER_STEP):
     """Barrier, reaction energy and saddle geometry for one setting.
@@ -1683,6 +1787,7 @@ def measure_barrier(physics, name, mixing=None, power=None, over_weight=None,
     result = surface(
         sim, donor_lengths, transfer_lengths, relax=relax, progress=relax,
         record_spectators=True, progress_label=name, physics=physics,
+        gradient_based=gradient_based,
         build_kwargs=dict(
             mixing=mixing, depth_power=power, over_weight=over_weight,
             sato=sato, sato_pairs=sato_pairs,
@@ -1795,7 +1900,7 @@ def agreement_report(physics, relax=False, mixing=None, power=None,
 
 def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
                  mixings=None, over_weights=None, satos=None,
-                 sato_pairs=None, relax=False,
+                 sato_pairs=None, relax=False, gradient_based=True,
                  systems=("formaldehyde", "water", "methane")):
     """Sweep both coupling knobs against every system with a known barrier.
 
@@ -1855,6 +1960,7 @@ def slope_report(physics, powers=(1.00, 0.75, 0.50, 0.25, 0.00),
                     physics, name, mixing=mixing, power=power,
                     over_weight=over_weight, sato=sato,
                     sato_pairs=sato_pairs, relax=relax,
+                    gradient_based=gradient_based,
                 )
                 if found is None:
                     cells.append(f"{'no route':>20}")
@@ -2131,6 +2237,16 @@ def main():
         choices=["high_fidelity", "base"],
     )
     parser.add_argument(
+        "--powell", action="store_true",
+        help=(
+            "relax with Powell instead of the gradient method. Slower by a "
+            "large factor and kept because the two disagreeing is "
+            "informative: on a flat surface they can settle in different "
+            "local minima, and whichever finds the lower energy converged "
+            "better"
+        ),
+    )
+    parser.add_argument(
         "--relax", action="store_true",
         help="minimise the spectator coordinates at every grid point",
     )
@@ -2369,6 +2485,8 @@ def main():
         )
         return
 
+    gradient_based = not options.powell
+
     if options.slope:
         slope_report(
             options.physics,
@@ -2389,7 +2507,7 @@ def main():
                 if options.satos else None
             ),
             sato_pairs=options.sato_pairs,
-            relax=options.relax,
+            relax=options.relax, gradient_based=gradient_based,
         )
         return
 
