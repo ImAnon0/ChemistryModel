@@ -139,7 +139,18 @@ WATER_SYMBOLS = ["O", "H", "H", "O", "H"]
 # angle each makes with the transfer axis.
 WATER_FROZEN = np.array([0.96, 0.96, 104.5, 104.5])
 
-WATER_LIMITS = [(0.85, 1.15), (0.85, 1.15), (90.0, 130.0), (90.0, 130.0)]
+# The angle floor was 90 degrees and the relaxed saddle sat exactly on it,
+# which meant the barrier reported there was the edge of the search box
+# rather than a minimum. Widened to 60 so the optimiser can find whatever it
+# actually wants.
+#
+# 60 degrees is chosen to be permissive rather than physical: a water
+# molecule does not have a 60 degree H-O-H angle, so if the relaxed saddle
+# lands near this floor as well, the answer is not that the bound is still
+# too tight but that the minimisation is running away into geometries the
+# angle term does not properly penalise. Those two cases look identical from
+# the barrier alone, which is why the bound is reported.
+WATER_LIMITS = [(0.85, 1.15), (0.85, 1.15), (60.0, 150.0), (60.0, 150.0)]
 
 
 def water_pair_geometry(oxygen_separation, offset, spectators=None):
@@ -1419,6 +1430,15 @@ def agreement_report(physics, relax=False):
         probe = apply_system(name)
         donor_low, donor_high, donor_step = probe["donor"]
         transfer_low, transfer_high, transfer_step = probe["transfer"]
+
+        # Coarsen when relaxing, exactly as measure_barrier does. Without
+        # this the check ran on the fine per-system step -- 45 rows rather
+        # than 23, six grids of it, hours rather than minutes -- and worse,
+        # it compared measure_barrier's coarse grid against a fine one, so a
+        # difference in grid would have shown up as a difference in path.
+        if relax:
+            donor_step = max(donor_step, BARRIER_DONOR_STEP)
+            transfer_step = max(transfer_step, 0.02)
 
         found = measure_barrier(
             physics, name, relax=relax,
