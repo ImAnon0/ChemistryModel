@@ -66,3 +66,46 @@ hydrazine coordinate and NVE probe.
 Recommendation: accept 1.446 A. It corrects the table to the directly measured
 hydrazine geometry, is locally stable and produces no material normal-mixture
 regression. Treat N-N curvature as a separate experiment.
+
+## Separate width experiment
+
+At the retained 167 kJ/mol effective depth, the raw N-N pair diagnostic is
+733.24 cm-1, well below hydrazine's 1077.24 cm-1 assigned N-N fundamental.
+Applying the model's verified Morse curvature convention gives a provisional
+width near 2.938 inverse A. This is tested separately with length and depth
+fixed. It is a high-risk candidate because it increases local curvature by
+about 116% and may stiffen short-range N-N encounters; the polyatomic
+fundamental is not assumed to be an exact diatomic target.
+
+The candidate passed all deterministic suites. It moved the raw diagnostic to
+1077.13 cm-1, kept the controlled coordinate smooth and gave a 400-step
+hydrazine NVE drift of `+4.51e-5 eV` with zero move caps.
+
+Matched carbon-rich CUDA batches compared `nn_length_candidate` (width 2.00)
+with `nn_width_2938_candidate` (width 2.938), seeds 17000--17015.
+
+| Quantity | Width 2.00 control | Width 2.938 candidate | Difference |
+| --- | ---: | ---: | ---: |
+| finished / stable | 16 / 16 | 16 / 16 | 0 |
+| strikes / energy jumps / move caps | 0 / 0 / 0 | 0 / 0 / 0 | 0 |
+| mean heavy bonds formed | 60.438 | 59.438 | -1.000 |
+| mean largest structure (atoms) | 12.188 | 12.375 | +0.187 |
+| mean largest heavy-atom count | 6.625 | 6.688 | +0.063 |
+| mean largest carbon count | 4.875 | 4.875 | 0.000 |
+| mean best carbon chain | 3.500 | 3.438 | -0.062 |
+| mean species count | 51.000 | 49.875 | -1.125 |
+| mean final temperature (K) | 556.87 | 548.67 | -8.20 |
+| mean final potential (eV) | -1093.68 | -1089.45 | +4.23 |
+
+The normal-mixture result is numerically clean and structurally neutral, but
+neither set recorded an N-N-containing species at any point. It therefore does
+not exercise the parameter whose 47% increase is under review. Exact agreement
+with the 1077.24 cm-1 fundamental is not independent validation because the
+candidate was derived from that same polyatomic normal mode, not a harmonic
+internal-coordinate force constant or reference potential curve.
+
+Recommendation: reject width 2.938 for now and retain 2.00. The experiment
+shows that the steeper width can run safely, but not that it is physically more
+accurate overall. Revisit only with an independent hydrazine harmonic force
+constant/reference potential and a validation that directly exercises N-N
+formation and dissociation.
