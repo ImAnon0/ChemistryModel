@@ -750,7 +750,7 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
 
                 entry = summarise_run(
                     recorder, simulation, seed, each, strikes_done,
-                    options, analysis,
+                    options, analysis, box=box,
                 )
                 entry["finished"] = False
 
@@ -805,13 +805,22 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
 
 
 def summarise_run(recorder, simulation, seed, seconds, strikes,
-                  options, analysis):
+                  options, analysis, box=None):
     # Everything written about one finished run, whether it was
     # computed alone or alongside others.
 
     result = analysis.analyse(
         recorder, stride=options.stride, structures=False
     )
+
+    if box is None:
+        move_cap_events = int(simulation.capped_steps)
+    else:
+        start = box * simulation.per_box
+        stop = start + simulation.per_box
+        move_cap_events = int(np.sum(
+            simulation.capped_atom_counts[start:stop]
+        ))
 
     return {
         "number": 0,
@@ -872,6 +881,7 @@ def summarise_run(recorder, simulation, seed, seconds, strikes,
         "largest_energy_jump": result.get(
             "largest_energy_jump", 0.0
         ),
+        "move_cap_events": move_cap_events,
         "final_temperature": result["temperature"]["final"],
         "final_potential": result["potential"]["final"],
     }
@@ -927,7 +937,7 @@ def run_grouped(planned, mixture, options, progress):
 
             entry = summarise_run(
                 recorder, simulation, seed, each, strikes,
-                options, analysis,
+                options, analysis, box=index,
             )
             entry["finished"] = True
 
@@ -2342,6 +2352,7 @@ def run_all(planned, mixture, options, index, index_path, progress):
             "stable": result.get("stable", True),
             "energy_jumps": result.get("energy_jumps", 0),
             "largest_energy_jump": result.get("largest_energy_jump", 0.0),
+            "move_cap_events": int(simulation.capped_steps),
             "isomers": result.get("isomers", {}),
             "final_temperature": result["temperature"]["final"],
             "final_potential": result["potential"]["final"],

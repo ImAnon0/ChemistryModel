@@ -163,6 +163,77 @@ def test_numpy_bond_order_is_symmetric_and_bounded():
         assert np.allclose(coordination, taper.sum(axis=1))
 
 
+def test_emerging_contact_has_no_spare_valence_force_spike():
+    # One established C-C bond and a third carbon crossing the outer cutoff.
+    # The old totals>1e-9 branch normalized the vanishing new contact in one
+    # jump, producing tens of thousands of eV/A in a real carbon-rich run.
+    outer = float(R.CUTOFF_OUTER[R.ELEMENT_INDEX["C"], R.ELEMENT_INDEX["C"]])
+    symbols = ["C", "C", "C"]
+    forces = []
+    for offset in np.linspace(-3e-4, 3e-4, 25):
+        positions = np.array([
+            [5.0, 5.0, 5.0],
+            [6.525, 5.0, 5.0],
+            [5.0, 5.0 + outer + offset, 5.0],
+        ])
+        simulation = ReactiveSimulation(
+            symbols, positions, BOX, random_seed=0, relax_on_start=False,
+            device="cpu", dtype=torch.float64,
+        )
+        forces.append(float(torch.linalg.norm(simulation.forces[2])))
+    assert np.all(np.isfinite(forces))
+    assert max(forces) < 100.0, max(forces)
+
+
+def test_uncapped_velocity_verlet_update_is_unchanged():
+    simulation = ReactiveSimulation(
+        ["H"], np.array([[6.0, 6.0, 6.0]]), BOX,
+        random_seed=0, relax_on_start=False, device="cpu", dtype=DTYPE,
+    )
+    simulation.thermostat_is_on = False
+    simulation.velocities[:] = torch.tensor([[0.02, -0.01, 0.03]], dtype=DTYPE)
+    simulation.forces[:] = torch.tensor([[0.4, -0.2, 0.1]], dtype=DTYPE)
+    original_velocity = simulation.velocities.clone()
+    original_force = simulation.forces.clone()
+
+    new_force = torch.tensor([[-0.1, 0.3, 0.2]], dtype=DTYPE)
+
+    def controlled_forces():
+        return new_force.clone(), torch.tensor(0.0, dtype=DTYPE)
+
+    simulation.compute_forces = controlled_forces
+    simulation.step()
+    conversion = 1.0 / 103.642
+    expected = original_velocity + 0.5 * (
+        original_force + new_force
+    ) * conversion / simulation.masses[:, None] * simulation.time_step
+    assert torch.equal(simulation.velocities, expected)
+    assert simulation.last_capped_atoms == ()
+
+
+def test_move_cap_rejects_unresolved_force_impulse():
+    simulation = ReactiveSimulation(
+        ["H"], np.array([[6.0, 6.0, 6.0]]), BOX,
+        random_seed=0, relax_on_start=False, device="cpu", dtype=DTYPE,
+    )
+    simulation.thermostat_is_on = False
+    simulation.velocities[:] = torch.tensor([[0.02, -0.01, 0.0]], dtype=DTYPE)
+    starting_velocity = simulation.velocities.clone()
+    simulation.forces[:] = torch.tensor([[200000.0, 0.0, 0.0]], dtype=DTYPE)
+    start = simulation.positions.clone()
+
+    def zero_forces():
+        return torch.zeros_like(simulation.forces), torch.tensor(0.0, dtype=DTYPE)
+
+    simulation.compute_forces = zero_forces
+    simulation.step()
+    movement = simulation.positions - start
+    assert abs(float(torch.linalg.norm(movement[0])) - simulation.maximum_step) < 1e-12
+    assert torch.equal(simulation.velocities, starting_velocity)
+    assert simulation.last_capped_atoms == (0,)
+    assert simulation.capped_steps == 1
+
+
 if __name__ == "__main__":
     tests = [
         test_partial_cc_angle_does_not_recreate_capture_wall,
@@ -170,6 +241,9 @@ if __name__ == "__main__":
         test_batched_matches_single_after_angle_change,
         test_batched_reporting_reuses_current_energy_and_invalidates_safely,
         test_numpy_bond_order_is_symmetric_and_bounded,
+        test_emerging_contact_has_no_spare_valence_force_spike,
+        test_uncapped_velocity_verlet_update_is_unchanged,
+        test_move_cap_rejects_unresolved_force_impulse,
     ]
     failures = 0
     for test in tests:

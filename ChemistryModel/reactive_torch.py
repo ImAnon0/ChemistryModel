@@ -67,6 +67,9 @@ class ReactiveSimulation:
 
         self.maximum_step = 0.15
         self.capped_steps = 0
+        self.capped_atom_counts = np.zeros(len(self.symbols), dtype=np.uint64)
+        self.last_capped_atoms = ()
+        self._last_move_capped_mask = None
 
         self.random_generator = np.random.default_rng(random_seed)
 
@@ -558,18 +561,26 @@ class ReactiveSimulation:
 
         totals_other = totals[neighbours]
 
-        share_out = torch.where(
-            totals[:, None] > 1e-9,
+        onset = 1e-4
+        share_fraction = torch.clamp(totals / onset, 0.0, 1.0)
+        share_gate = share_fraction ** 2 * (3.0 - 2.0 * share_fraction)
+        share_out = (
             spare[:, None] * weighted
-            / torch.clamp(totals[:, None], min=1e-9),
-            torch.zeros_like(weighted)
+            / torch.clamp(totals[:, None], min=1e-12)
+            * share_gate[:, None]
         )
 
-        share_back = torch.where(
-            totals_other > 1e-9,
+        share_fraction_other = torch.clamp(
+            totals_other / onset, 0.0, 1.0
+        )
+        share_gate_other = (
+            share_fraction_other ** 2
+            * (3.0 - 2.0 * share_fraction_other)
+        )
+        share_back = (
             spare_other * (taper * spare[:, None])
-            / torch.clamp(totals_other, min=1e-9),
-            torch.zeros_like(weighted)
+            / torch.clamp(totals_other, min=1e-12)
+            * share_gate_other
         )
 
         extra = torch.minimum(share_out, share_back) * taper
@@ -868,6 +879,10 @@ class ReactiveSimulation:
         # a far better approximation than an explosion.
 
         if self.maximum_step <= 0:
+            self.last_capped_atoms = ()
+            self._last_move_capped_mask = torch.zeros(
+                len(movement), device=movement.device, dtype=torch.bool
+            )
             return movement
 
         distances = torch.linalg.norm(movement, dim=1)
@@ -878,10 +893,18 @@ class ReactiveSimulation:
             max=1.0,
         )
 
-        caught = int(torch.count_nonzero(scale < 1.0))
+        caught_mask = scale < 1.0
+        self._last_move_capped_mask = caught_mask
+        caught = int(torch.count_nonzero(caught_mask))
+
+        self.last_capped_atoms = tuple(
+            torch.nonzero(caught_mask, as_tuple=False)
+            .flatten().detach().cpu().tolist()
+        )
 
         if caught:
             self.capped_steps += caught
+            self.capped_atom_counts[np.asarray(self.last_capped_atoms)] += 1
 
         return movement * scale[:, None]
 
@@ -1012,9 +1035,20 @@ class ReactiveSimulation:
 
             new_acceleration = new_forces * conversion / masses
 
-            self.velocities = self.velocities + 0.5 * (
+            ordinary_velocity = self.velocities + 0.5 * (
                 acceleration + new_acceleration
             ) * dt
+            # A capped move means this timestep did not resolve the force
+            # impulse. Do not turn either the rejected old force or the still
+            # potentially steep new force into kinetic energy. Keep the
+            # pre-step velocity and let the freshly evaluated force act from
+            # the separated position on the next ordinary step.
+            capped_velocity = self.velocities
+            self.velocities = torch.where(
+                self._last_move_capped_mask[:, None],
+                capped_velocity,
+                ordinary_velocity,
+            )
 
             self.forces = new_forces
             self._potential_energy = potential

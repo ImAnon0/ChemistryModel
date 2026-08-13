@@ -268,14 +268,18 @@ def bond_orders(taper, types):
 
     totals = np.sum(weighted, axis=1)
 
-    with np.errstate(divide="ignore", invalid="ignore"):
-        share = np.where(
-            totals[:, None] > 1e-9,
-            spare[:, None] * weighted / np.maximum(
-                totals[:, None], 1e-9
-            ),
-            0.0
-        )
+    # Normalizing a vanishing contact gives a finite share whose derivative is
+    # ill-conditioned. Fade that allocation in with a C1 smoothstep. Above the
+    # tiny onset region the gate is exactly one and the established bond-order
+    # calculation is unchanged in both value and force.
+    onset = 1e-4
+    share_fraction = np.clip(totals / onset, 0.0, 1.0)
+    share_gate = share_fraction ** 2 * (3.0 - 2.0 * share_fraction)
+    share = (
+        spare[:, None] * weighted
+        / np.maximum(totals[:, None], 1e-12)
+        * share_gate[:, None]
+    )
 
     # A bond can only be as strong as the poorer partner allows.
 
