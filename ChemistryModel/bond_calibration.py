@@ -250,6 +250,60 @@ def ethane_cc_coordinate(samples=401):
     }
 
 
+def methylamine_geometry(cn_distance=1.47):
+    """Approximate CH3NH2 geometry for a controlled C-N coordinate."""
+    tetrahedral = math.radians(180.0 - 109.47)
+    atoms = [np.array([0.0, 0.0, 0.0])]
+    for index in range(3):
+        turn = 2.0 * math.pi * index / 3.0
+        atoms.append(1.086 * np.array([
+            math.sin(tetrahedral) * math.cos(turn),
+            math.sin(tetrahedral) * math.sin(turn),
+            -math.cos(tetrahedral),
+        ]))
+    nitrogen = np.array([0.0, 0.0, cn_distance])
+    atoms.append(nitrogen)
+    # Experimental methylamine is pyramidal at nitrogen.  Place the N-H bonds
+    # at approximately H-N-C = 111 degrees and H-N-H = 106 degrees rather
+    # than putting them opposite one another around the C-N axis.
+    nh_polar = math.radians(180.0 - 111.0)
+    hnh_angle = math.radians(106.0)
+    cos_turn_separation = (
+        math.cos(hnh_angle) - math.cos(nh_polar) ** 2
+    ) / math.sin(nh_polar) ** 2
+    turn_separation = math.acos(np.clip(cos_turn_separation, -1.0, 1.0))
+    for turn in (-0.5 * turn_separation, 0.5 * turn_separation):
+        atoms.append(nitrogen + 1.0109 * np.array([
+            math.sin(nh_polar) * math.cos(turn),
+            math.sin(nh_polar) * math.sin(turn),
+            math.cos(nh_polar),
+        ]))
+    return ["C", "H", "H", "H", "N", "H", "H"], np.asarray(atoms)
+
+
+def methylamine_cn_coordinate(samples=401):
+    """Move fixed CH3 and NH2 fragments along their C-N coordinate."""
+    distances = np.linspace(1.0, 3.2, samples)
+    symbols, _ = methylamine_geometry()
+    types = R.types_from_symbols(symbols)
+    energies = []
+    for distance in distances:
+        _, positions = methylamine_geometry(distance)
+        energies.append(R.potential_energy(positions, types))
+    energies = np.asarray(energies)
+    minimum = int(np.argmin(energies))
+    derivative = np.diff(energies)
+    return {
+        "sampled_minimum_A": float(distances[minimum]),
+        "dissociation_coordinate_eV": float(energies[-1] - energies[minimum]),
+        "short_range_energy_eV": float(energies[0] - energies[-1]),
+        "capture_region_falling_steps": int(np.count_nonzero(
+            derivative[minimum:] < -1e-8
+        )),
+        "table": pair_local_diagnostic("C", "N"),
+    }
+
+
 def molecule_nve(name, steps=400, temperature=100.0):
     symbols, positions = build_box.BUILDERS[name]()
     positions = np.asarray(positions) + 5.0
@@ -275,6 +329,30 @@ def molecule_nve(name, steps=400, temperature=100.0):
 
 def ethane_nve(steps=400, temperature=100.0):
     symbols, positions = ethane_geometry(float(pair_local_diagnostic("C", "C")["re_A"]))
+    simulation = ReactiveSimulation(
+        symbols, positions + 5.0, 14.0, target_temperature=temperature,
+        friction=0.0, device="cpu", random_seed=19,
+    )
+    simulation.thermostat_is_on = False
+    start = float(simulation.potential_energy + simulation.kinetic_energy)
+    initial = simulation.positions_numpy.copy()
+    simulation.step(steps)
+    end = float(simulation.potential_energy + simulation.kinetic_energy)
+    displacement = simulation.positions_numpy - initial
+    displacement -= simulation.box_size * np.round(displacement / simulation.box_size)
+    return {
+        "energy_start_eV": start,
+        "energy_end_eV": end,
+        "drift_eV": end - start,
+        "max_displacement_A": float(np.linalg.norm(displacement, axis=1).max()),
+        "capped_steps": int(simulation.capped_steps),
+    }
+
+
+def methylamine_nve(steps=400, temperature=100.0):
+    symbols, positions = methylamine_geometry(
+        float(pair_local_diagnostic("C", "N")["re_A"])
+    )
     simulation = ReactiveSimulation(
         symbols, positions + 5.0, 14.0, target_temperature=temperature,
         friction=0.0, device="cpu", random_seed=19,
