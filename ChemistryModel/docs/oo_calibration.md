@@ -65,3 +65,25 @@ preserved, and hydrogen peroxide was not suppressed.
 Recommendation: accept 1.475 A. It improves the directly measured peroxide
 geometry without changing curvature or depth and introduces no controlled or
 reactive regression.
+
+## Separate depth experiment
+
+After committing length, an isolated candidate changes the single O-O depth
+from 146 to 210.4 kJ/mol, using the experimental hydrogen-peroxide dissociation
+enthalpy while holding `re = 1.475 A` and width `2.05 inverse A`. This is an
+empirical test rather than an assertion that the molecular BDE is exactly the
+model pair De. O=O remains unchanged. Because the change is large, controlled
+stability and matched reactive peroxide formation are required before it can
+be accepted.
+
+The controlled peroxide coordinate remained smooth and NVE drift stayed small
+at `+5.91e-5 eV`, but the independent high-fidelity suite failed 6/7. The
+stronger O-O depth opened a bound three-centre well: adding a third contact
+lowered the energy 0.25 eV below the intended two-contact geometry. This is a
+whole-model reaction-surface regression, not a statistical batch fluctuation.
+
+Recommendation: reject 210.4 kJ/mol without a reactive batch and retain the
+146 kJ/mol effective depth. The molecular HOOH dissociation enthalpy cannot be
+inserted directly into the baseline pair term without overbinding competing
+three-centre environments. Any future attempt would require an environment
+correction rather than a simple table replacement.
