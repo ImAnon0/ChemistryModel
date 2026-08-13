@@ -63,6 +63,14 @@ def test_ammonia_nh_coordinate_has_stable_minimum_and_capture_path():
     assert result["capture_region_falling_steps"] == 0
 
 
+def test_water_oh_coordinate_has_stable_minimum_and_capture_path():
+    result = calibration.water_oh_coordinate()
+    assert abs(result["sampled_minimum_A"] - result["table"]["re_A"]) < 0.01
+    assert result["dissociation_coordinate_eV"] > 4.5
+    assert result["short_range_energy_eV"] > 0.0
+    assert result["capture_region_falling_steps"] == 0
+
+
 def test_small_molecule_nve_baselines_remain_numerically_stable():
     for name in ("H2", "CH4", "NH3", "H2O"):
         result = calibration.molecule_nve(name, steps=200)
