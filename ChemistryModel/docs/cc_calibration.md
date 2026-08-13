@@ -78,3 +78,44 @@ equilibrium geometry, preserves methyl capture and aggregate carbon chemistry,
 and was numerically clean. Keep depth 348 kJ/mol and width 1.85 unchanged until
 the dissociation-energy and internal-coordinate-curvature questions are tested
 independently.
+
+## Separate depth experiment
+
+After committing the accepted length, a second isolated experiment tests the
+supplied CH3-CH3 value by changing depth `348 -> 377 kJ/mol` while holding
+`re = 1.525 A` and width `1.85 inverse A`. This is an empirical candidate, not
+an assertion that the finite-temperature dissociation enthalpy equals Morse
+`De`. Because width is held fixed, the deeper well also raises local curvature
+and frequency; both must be considered in the acceptance decision.
+
+The 377 kJ/mol candidate passed all deterministic suites and preserved methyl
+capture, but raised the controlled well from 3.651 to 3.951 eV and the raw
+local-frequency diagnostic from 1057 to 1100 cm-1, farther from the provisional
+993 cm-1 ethane mode.
+
+Matched 16-seed carbon-rich CUDA batches then isolated the depth change at the
+accepted 1.525 A length:
+
+| Quantity | 348 kJ/mol control | 377 kJ/mol candidate |
+| --- | ---: | ---: |
+| finished | 16 / 16 | 16 / 16 |
+| stable | 16 / 16 | 15 / 16 |
+| energy jumps | 0 | 1 |
+| mean heavy bonds formed | 59.500 | 60.688 |
+| mean largest structure (atoms) | 11.438 | 11.438 |
+| mean largest carbon count | 4.750 | 4.625 |
+| mean best carbon chain | 3.188 | 3.188 |
+| mean species count | 50.312 | 52.188 |
+
+Candidate seed 17005 produced a 69,917.6 eV total-energy jump and ended at
+2747.6 K. The exact matched 348 kJ/mol run was stable, with a largest energy
+change of only 1.3 eV. Recorded frames show kinetic energy jumping from 23.3
+to 69,936.4 eV while potential changed by only 4.6 eV; this is a numerical
+impulse, not plausible C-C dissociation energy.
+
+Recommendation: reject 377 kJ/mol and retain the committed 348 kJ/mol effective
+depth. It worsens the provisional curvature comparison and caused a matched
+numerical regression without improving largest-structure or chain output.
+The failure also exposes a separate integrator safeguard issue: capped position
+moves still receive the full uncapped Velocity-Verlet velocity update. That
+general failure mechanism should be corrected independently from calibration.
