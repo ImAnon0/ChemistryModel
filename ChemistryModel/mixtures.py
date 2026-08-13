@@ -39,6 +39,15 @@ BUILT_IN = {
     "carbon rich": ("atoms", {"C": 80, "H": 200, "N": 20, "O": 30}),
     "[calibration] NH2 radicals": ("molecules", {"NH2": 24}),
     "[calibration] OH radicals": ("molecules", {"OH": 24}),
+    "[validation] stable small molecules": (
+        "molecules", {"H2": 4, "CH4": 4, "NH3": 4, "H2O": 4}
+    ),
+    "[validation] nitrogen radicals": (
+        "molecules", {"NH3": 8, "NH2": 8, "H2": 4}
+    ),
+    "[validation] oxygen radicals": (
+        "molecules", {"H2O": 8, "OH": 8, "H2": 4}
+    ),
 }
 
 
