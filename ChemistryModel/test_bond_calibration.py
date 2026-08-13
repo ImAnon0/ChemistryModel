@@ -87,6 +87,14 @@ def test_methylamine_cn_coordinate_has_stable_minimum_and_capture_path():
     assert result["capture_region_falling_steps"] == 0
 
 
+def test_methanol_co_coordinate_has_stable_minimum_and_capture_path():
+    result = calibration.methanol_co_coordinate()
+    assert abs(result["sampled_minimum_A"] - result["table"]["re_A"]) < 0.04
+    assert result["dissociation_coordinate_eV"] > 3.0
+    assert result["short_range_energy_eV"] > 0.0
+    assert result["capture_region_falling_steps"] == 0
+
+
 def test_small_molecule_nve_baselines_remain_numerically_stable():
     for name in ("H2", "CH4", "NH3", "H2O"):
         result = calibration.molecule_nve(name, steps=200)
@@ -100,6 +108,10 @@ def test_small_molecule_nve_baselines_remain_numerically_stable():
     methylamine = calibration.methylamine_nve(steps=200)
     assert abs(methylamine["drift_eV"]) < 0.05, methylamine
     assert methylamine["capped_steps"] == 0, methylamine
+
+    methanol = calibration.methanol_nve(steps=200)
+    assert abs(methanol["drift_eV"]) < 0.05, methanol
+    assert methanol["capped_steps"] == 0, methanol
 
 
 if __name__ == "__main__":
