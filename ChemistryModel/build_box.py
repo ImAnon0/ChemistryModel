@@ -63,6 +63,14 @@ def amidogen():
     ])
 
 
+def hydroxyl():
+    """OH radical geometry used by focused O-O calibration runs."""
+    return np.array([
+        [0.0, 0.0, 0.0],
+        [0.96, 0.0, 0.0],
+    ])
+
+
 BUILDERS = {
     "H2": lambda: (["H", "H"],
                    np.array([[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]])),
@@ -70,6 +78,7 @@ BUILDERS = {
     "CH4": lambda: (["C", "H", "H", "H", "H"], methane()),
     "NH3": lambda: (["N", "H", "H", "H"], ammonia()),
     "NH2": lambda: (["N", "H", "H"], amidogen()),
+    "OH": lambda: (["O", "H"], hydroxyl()),
 }
 
 

@@ -87,3 +87,42 @@ Recommendation: reject 210.4 kJ/mol without a reactive batch and retain the
 inserted directly into the baseline pair term without overbinding competing
 three-centre environments. Any future attempt would require an environment
 correction rather than a simple table replacement.
+
+## Focused width validation
+
+The raw pair diagnostic at the retained depth and width is 657.53 cm-1. A
+width near 2.735 inverse A would reproduce the 877 cm-1 peroxide fundamental,
+but this is a large change derived from a polyatomic normal mode. A dedicated
+`[calibration] OH radicals` mixture is used to compare peroxide formation and
+persistence directly before deciding whether that width is viable.
+
+The width-2.05 focused control used 24 OH radicals, seeds 19000--19015, 5 ps
+and a 10 A fixed box. All 16 runs formed and retained O2H2 as their largest
+closed-shell product and were stable with zero strikes, energy jumps or move
+caps. Width 2.735 is therefore tested against a direct, fully successful
+peroxide-formation baseline.
+
+The matched width-2.735 candidate also formed and retained O2H2 in all 16
+runs. Every final headline matched the control and all runs were stable with
+zero strikes, energy jumps or move caps.
+
+| Quantity | Width 2.05 control | Width 2.735 candidate | Difference |
+| --- | ---: | ---: | ---: |
+| runs forming and retaining O2H2 | 16 / 16 | 16 / 16 | 0 |
+| mean heavy bonds formed | 10.375 | 10.062 | -0.313 |
+| mean largest structure (atoms) | 4.000 | 4.000 | 0.000 |
+| mean largest heavy-atom count | 2.000 | 2.000 | 0.000 |
+| mean species count | 2.000 | 2.000 | 0.000 |
+| mean final temperature (K) | 259.05 | 253.91 | -5.14 |
+| mean final potential (eV) | -139.97 | -139.57 | +0.40 |
+| mean wall time per seed (s) | 8.8 | 9.1 | +0.3 |
+
+The candidate changes the raw pair diagnostic from 657.53 to 877.24 cm-1,
+matching the observed 877 cm-1 peroxide stretch. The controlled curve remains
+smooth, 400-step NVE drift remains `+5.38e-5 eV`, and direct OH+OH capture is
+unchanged. The small runtime difference is within run-to-run overhead and the
+pair equation has identical computational cost.
+
+Recommendation: accept width 2.735. It materially improves O-O curvature,
+preserves peroxide formation and persistence exactly in the focused test, and
+introduces no numerical or whole-model regression.

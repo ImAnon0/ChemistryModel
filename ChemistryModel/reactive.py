@@ -53,7 +53,7 @@ BOND_TABLE = {
     ("C", "O"): (1.427, 358.0, 1.95),
     ("N", "N"): (1.446, 167.0, 2.00),
     ("N", "O"): (1.453, 201.0, 2.00),
-    ("O", "O"): (1.475, 146.0, 2.05),
+    ("O", "O"): (1.475, 146.0, 2.735),
 }
 
 # Double and triple bonds. Where a pair has no multiple bond the

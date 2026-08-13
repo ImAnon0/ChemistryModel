@@ -128,6 +128,13 @@ def test_amidogen_calibration_builder_has_expected_bent_geometry():
                        1.0109)
 
 
+def test_hydroxyl_calibration_builder_has_expected_geometry():
+    symbols, positions = build_box.BUILDERS["OH"]()
+    assert symbols == ["O", "H"]
+    assert positions.shape == (2, 3)
+    assert np.isclose(np.linalg.norm(positions[1] - positions[0]), 0.96)
+
+
 def test_small_molecule_nve_baselines_remain_numerically_stable():
     for name in ("H2", "CH4", "NH3", "H2O"):
         result = calibration.molecule_nve(name, steps=200)

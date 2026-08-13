@@ -38,6 +38,7 @@ BUILT_IN = {
     "H rich x5": ("atoms", {"C": 40, "H": 300, "N": 30, "O": 40}),
     "carbon rich": ("atoms", {"C": 80, "H": 200, "N": 20, "O": 30}),
     "[calibration] NH2 radicals": ("molecules", {"NH2": 24}),
+    "[calibration] OH radicals": ("molecules", {"OH": 24}),
 }
 
 
