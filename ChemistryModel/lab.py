@@ -225,6 +225,82 @@ class Choice(QtWidgets.QComboBox):
         return self.currentTextChanged
 
 
+class SectionCard(QtWidgets.QFrame):
+    """Shared titled surface used throughout the workbench."""
+
+    def __init__(self, title, subtitle=""):
+        super().__init__()
+        self.setObjectName("sectionCard")
+        self.layout = QtWidgets.QVBoxLayout(self)
+        self.layout.setContentsMargins(18, 16, 18, 18)
+        self.layout.setSpacing(10)
+
+        heading = QtWidgets.QLabel(title)
+        heading.setObjectName("sectionTitle")
+        self.layout.addWidget(heading)
+
+        if subtitle:
+            note = QtWidgets.QLabel(subtitle)
+            note.setObjectName("sectionSubtitle")
+            note.setWordWrap(True)
+            self.layout.addWidget(note)
+
+    def addWidget(self, widget, stretch=0):
+        self.layout.addWidget(widget, stretch)
+
+    def addLayout(self, layout, stretch=0):
+        self.layout.addLayout(layout, stretch)
+
+
+class CollapsibleCard(SectionCard):
+    """A card that keeps uncommon scientific controls out of the way."""
+
+    def __init__(self, title, subtitle="", expanded=False):
+        QtWidgets.QFrame.__init__(self)
+        self.setObjectName("sectionCard")
+        outer = QtWidgets.QVBoxLayout(self)
+        outer.setContentsMargins(18, 12, 18, 14)
+        outer.setSpacing(8)
+
+        self.toggle = QtWidgets.QToolButton()
+        self.toggle.setObjectName("sectionToggle")
+        self.toggle.setText(title)
+        self.toggle.setCheckable(True)
+        self.toggle.setChecked(expanded)
+        self.toggle.setToolButtonStyle(
+            QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+        )
+        outer.addWidget(self.toggle)
+
+        if subtitle:
+            note = QtWidgets.QLabel(subtitle)
+            note.setObjectName("sectionSubtitle")
+            note.setWordWrap(True)
+            outer.addWidget(note)
+
+        self.body = QtWidgets.QWidget()
+        self.body_layout = QtWidgets.QVBoxLayout(self.body)
+        self.body_layout.setContentsMargins(0, 6, 0, 0)
+        self.body_layout.setSpacing(10)
+        self.body.setVisible(expanded)
+        outer.addWidget(self.body)
+        self.toggle.toggled.connect(self.body.setVisible)
+        self.toggle.toggled.connect(self._update_arrow)
+        self._update_arrow(expanded)
+
+    def _update_arrow(self, expanded):
+        self.toggle.setArrowType(
+            QtCore.Qt.ArrowType.DownArrow
+            if expanded else QtCore.Qt.ArrowType.RightArrow
+        )
+
+    def addWidget(self, widget, stretch=0):
+        self.body_layout.addWidget(widget, stretch)
+
+    def addLayout(self, layout, stretch=0):
+        self.body_layout.addLayout(layout, stretch)
+
+
 class Job:
 
     def __init__(self, name, arguments, out, runs, seeds=None,
@@ -410,6 +486,8 @@ class Lab(QtWidgets.QWidget):
 
         self.setWindowTitle("Chemistry lab")
         self.resize(1500, 900)
+        self.setObjectName("chemistryWorkbench")
+        self.apply_workbench_style()
 
         layout = QtWidgets.QVBoxLayout(self)
 
@@ -432,6 +510,140 @@ class Lab(QtWidgets.QWidget):
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.tick)
         self.timer.start(POLL_MILLISECONDS)
+
+    def apply_workbench_style(self):
+        self.setStyleSheet("""
+            QWidget#chemistryWorkbench {
+                background: #15181d;
+                color: #e6eaf0;
+                font-family: "Segoe UI";
+                font-size: 10pt;
+            }
+            QTabWidget::pane {
+                border: 0;
+                border-top: 1px solid #303640;
+                background: #15181d;
+            }
+            QTabBar::tab {
+                background: transparent;
+                color: #929cab;
+                padding: 12px 18px;
+                margin-right: 2px;
+                font-weight: 600;
+            }
+            QTabBar::tab:selected {
+                color: #f4f7fb;
+                border-bottom: 3px solid #4ca6ff;
+            }
+            QFrame#sectionCard {
+                background: #20242b;
+                border: 1px solid #303640;
+                border-radius: 9px;
+            }
+            QLabel#sectionTitle {
+                color: #f6f8fb;
+                font-size: 12pt;
+                font-weight: 650;
+            }
+            QLabel#sectionSubtitle, QLabel#muted {
+                color: #98a2b1;
+            }
+            QLabel#eyebrow {
+                color: #67b4ff;
+                font-size: 9pt;
+                font-weight: 700;
+            }
+            QLabel#heroTitle {
+                color: #ffffff;
+                font-size: 20pt;
+                font-weight: 700;
+            }
+            QLabel#metricValue {
+                color: #ffffff;
+                font-size: 15pt;
+                font-weight: 650;
+            }
+            QLabel#statusGood { color: #67d79b; }
+            QLabel#statusWarn { color: #f2bd62; }
+            QLabel#statusBad { color: #ff7373; }
+            QToolButton#sectionToggle {
+                border: 0;
+                color: #f6f8fb;
+                font-size: 11pt;
+                font-weight: 650;
+                text-align: left;
+                padding: 2px;
+            }
+            QPushButton {
+                background: #2a3039;
+                border: 1px solid #3a424e;
+                border-radius: 6px;
+                padding: 7px 12px;
+            }
+            QPushButton:hover { background: #343c47; }
+            QPushButton:disabled { color: #69717d; background: #22262c; }
+            QPushButton#primaryAction {
+                background: #1685e5;
+                border-color: #2898f5;
+                color: white;
+                font-size: 11pt;
+                font-weight: 700;
+                padding: 12px 18px;
+            }
+            QPushButton#primaryAction:hover { background: #2695f3; }
+            QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox, QPlainTextEdit,
+            QListWidget, QTableWidget, QTreeWidget {
+                background: #191d22;
+                border: 1px solid #353c46;
+                border-radius: 5px;
+                selection-background-color: #176cae;
+                padding: 5px;
+            }
+            QComboBox::drop-down { border: 0; width: 24px; }
+            QHeaderView::section {
+                background: #242a32;
+                color: #aeb7c4;
+                border: 0;
+                border-bottom: 1px solid #3a414c;
+                padding: 7px;
+                font-weight: 600;
+            }
+            QScrollArea, QScrollArea > QWidget,
+            QScrollArea > QWidget > QWidget {
+                border: 0;
+                background: #15181d;
+            }
+            QScrollBar:vertical, QScrollBar:horizontal {
+                background: #171b20;
+                border: 0;
+                margin: 0;
+            }
+            QScrollBar::handle:vertical, QScrollBar::handle:horizontal {
+                background: #414a57;
+                border-radius: 5px;
+                min-height: 28px;
+                min-width: 28px;
+            }
+            QScrollBar::add-line, QScrollBar::sub-line {
+                width: 0;
+                height: 0;
+            }
+            QProgressBar {
+                background: #171a1f;
+                border: 0;
+                border-radius: 5px;
+                min-height: 10px;
+                text-align: center;
+            }
+            QProgressBar::chunk { background: #3b9cf0; border-radius: 5px; }
+            QSplitter::handle { background: #15181d; width: 5px; height: 5px; }
+            QToolTip {
+                background: #2b313a;
+                color: #f0f3f7;
+                border: 1px solid #505967;
+                padding: 6px;
+            }
+        """)
 
     # --------------------------------------------------------
     # Replay tab
@@ -457,203 +669,267 @@ class Lab(QtWidgets.QWidget):
 
     def build_run_tab(self):
         page = QtWidgets.QWidget()
-        columns = QtWidgets.QHBoxLayout(page)
+        page_layout = QtWidgets.QVBoxLayout(page)
+        page_layout.setContentsMargins(12, 12, 12, 12)
 
-        left = QtWidgets.QFormLayout()
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        content = QtWidgets.QWidget()
+        columns = QtWidgets.QHBoxLayout(content)
+        columns.setContentsMargins(6, 6, 6, 18)
+        columns.setSpacing(14)
+        scroll.setWidget(content)
+        page_layout.addWidget(scroll)
 
-        # Two ways to make runs: start fresh ones, or take an
-        # existing batch and carry every run in it further. The
-        # second reuses everything already computed, which matters
-        # when a twenty picosecond run is still producing
-        # molecules at nineteen.
+        designer = QtWidgets.QVBoxLayout()
+        designer.setSpacing(12)
+        review = QtWidgets.QVBoxLayout()
+        review.setSpacing(12)
+        columns.addLayout(designer, 3)
+        columns.addLayout(review, 2)
 
-        self.mode_box = QtWidgets.QComboBox()
-        self.mode_box.addItems([
-            "new runs",
-            "continue an existing batch",
-        ])
-        self.mode_box.currentIndexChanged.connect(self.on_mode)
-        left.addRow("what to do", self.mode_box)
+        hero = SectionCard("Design an experiment")
+        eyebrow = QtWidgets.QLabel("NEW EXPERIMENT")
+        eyebrow.setObjectName("eyebrow")
+        hero.layout.insertWidget(0, eyebrow)
+        self.run_hero_title = QtWidgets.QLabel("Configure a chemistry run")
+        self.run_hero_title.setObjectName("heroTitle")
+        hero.addWidget(self.run_hero_title)
+        self.run_hero_summary = QtWidgets.QLabel("")
+        self.run_hero_summary.setObjectName("sectionSubtitle")
+        self.run_hero_summary.setWordWrap(True)
+        hero.addWidget(self.run_hero_summary)
+        designer.addWidget(hero)
 
-        self.source_box = QtWidgets.QComboBox()
-        self.source_row = left.rowCount()
-        left.addRow("batch to continue", self.source_box)
-        self.source_box.currentTextChanged.connect(
-            self.refresh_existing
+        mode = SectionCard(
+            "Experiment mode",
+            "Start independent seeds, or extend every usable trajectory in an existing batch.",
         )
+        mode_buttons = QtWidgets.QHBoxLayout()
+        self.mode_box = QtWidgets.QComboBox()
+        self.mode_box.addItems(["New runs", "Continue existing batch"])
+        self.mode_box.currentIndexChanged.connect(self.on_mode)
+        mode_buttons.addWidget(self.mode_box)
+        mode.addLayout(mode_buttons)
+        self.source_box = QtWidgets.QComboBox()
+        self.source_box.currentTextChanged.connect(self.refresh_existing)
+        source_form = QtWidgets.QFormLayout()
+        source_form.addRow("Source batch", self.source_box)
+        self.source_panel = self.wrap(source_form)
+        mode.addWidget(self.source_panel)
+        designer.addWidget(mode)
 
+        mixture = SectionCard(
+            "Mixture",
+            "Choose the starting composition. Atom count and density update with the selected box.",
+        )
+        mix_row = QtWidgets.QHBoxLayout()
         self.mixture_box = QtWidgets.QComboBox()
         self.reload_mixtures()
-        self.mixture_box.currentTextChanged.connect(
-            self.refresh_existing
-        )
-        left.addRow("mixture", self.mixture_box)
-
-        row = QtWidgets.QHBoxLayout()
-        row.addWidget(
-            self.button("New mixture...", self.on_new_mixture)
-        )
-        row.addWidget(
-            self.button("Reload list", self.reload_mixtures)
-        )
-        left.addRow("", self.wrap(row))
-
-        self.box_size = self.choice(
-            [12, 15, 17, 19, 21, 24, 28, 34], 19, 1
-        )
-        left.addRow("box size (A)", self.box_size)
-
+        self.mixture_box.currentTextChanged.connect(self.refresh_existing)
+        mix_row.addWidget(self.mixture_box, 1)
+        mix_row.addWidget(self.button("Create / edit", self.on_new_mixture))
+        mix_row.addWidget(self.button("Reload", self.reload_mixtures))
+        mixture.addLayout(mix_row)
         self.atom_note = QtWidgets.QLabel("")
-        self.atom_note.setStyleSheet("color: #666;")
-        left.addRow("", self.atom_note)
+        self.atom_note.setObjectName("sectionSubtitle")
+        self.atom_note.setWordWrap(True)
+        mixture.addWidget(self.atom_note)
+        self.mixture_panel = mixture
+        designer.addWidget(mixture)
 
-        self.picoseconds = self.choice(
-            [5, 10, 20, 40, 60, 100], 20, 1
+        core = SectionCard("Core simulation conditions")
+        core_form = QtWidgets.QFormLayout()
+        core_form.setHorizontalSpacing(18)
+        self.box_size = self.choice([12, 15, 17, 19, 21, 24, 28, 34], 19, 1)
+        self.box_size.setToolTip(
+            "Fixed periodic-cell width selected before the simulation starts. The box does not resize during a run."
         )
-        left.addRow("duration (ps)", self.picoseconds)
-
+        self.picoseconds = self.choice([5, 10, 20, 40, 60, 100], 20, 1)
+        self.picoseconds.setToolTip("Physical duration simulated independently for every seed.")
         self.seeds = self.choice([1, 3, 5, 10, 15, 20, 30, 50], 10, 0)
-        left.addRow("how many runs", self.seeds)
-
+        self.seeds.setToolTip("Number of independent initial random seeds to simulate.")
         self.first_seed = QtWidgets.QComboBox()
         self.first_seed.setEditable(True)
-        self.first_seed.setInsertPolicy(
-            QtWidgets.QComboBox.InsertPolicy.NoInsert
+        self.first_seed.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
+        self.first_seed.addItems(["continue automatically", "0", "100", "700", "800"])
+        self.first_seed.setToolTip(
+            "Automatic allocation skips seeds already present in the matching batch. Enter a number to choose the sequence explicitly."
         )
-        self.first_seed.addItems(
-            ["continue automatically", "0", "100", "700", "800"]
-        )
-        left.addRow("first seed", self.first_seed)
+        core_form.addRow("Fixed box size (Å)", self.box_size)
+        core_form.addRow("Duration per run (ps)", self.picoseconds)
+        core_form.addRow("Independent runs", self.seeds)
+        core_form.addRow("First seed", self.first_seed)
+        core.addLayout(core_form)
+        self.core_panel = core
+        designer.addWidget(core)
 
-        self.hot_temperature = self.choice(
-            [250, 350, 500, 700, 1000, 1500], 500, 0
+        thermal = SectionCard(
+            "Thermal schedule",
+            "Temperature targets guide the thermostat; they do not change the integration timestep.",
         )
-        left.addRow("starting temp (K)", self.hot_temperature)
-
-        self.hot_until = self.choice(
-            [0, 500, 1000, 2000, 4000, 8000], 2000, 0
+        thermal_form = QtWidgets.QFormLayout()
+        self.hot_temperature = self.choice([250, 350, 500, 700, 1000, 1500], 500, 0)
+        self.hot_until = self.choice([0, 500, 1000, 2000, 4000, 8000], 2000, 0)
+        self.cool_temperature = self.choice([100, 250, 350, 500, 700, 1000], 250, 0)
+        self.hot_temperature.setToolTip("Thermostat target at the beginning of the simulation.")
+        self.hot_until.setToolTip("Time in femtoseconds before switching to the trapping temperature.")
+        self.cool_temperature.setToolTip("Thermostat target after the initial warm period, used to trap products.")
+        thermal_form.addRow("Starting temperature (K)", self.hot_temperature)
+        thermal_form.addRow("Hold until (fs)", self.hot_until)
+        thermal_form.addRow("Trap temperature (K)", self.cool_temperature)
+        thermal.addLayout(thermal_form)
+        self.thermal_preview = pg.PlotWidget()
+        self.thermal_preview.setMaximumHeight(145)
+        self.thermal_preview.setMouseEnabled(x=False, y=False)
+        self.thermal_preview.hideButtons()
+        self.thermal_preview.setLabel("left", "target K")
+        self.thermal_preview.setLabel("bottom", "simulation time", units="ps")
+        self.thermal_curve = self.thermal_preview.plot(
+            pen=pg.mkPen("#67b4ff", width=2)
         )
-        left.addRow("hold until (fs)", self.hot_until)
-
-        self.cool_temperature = self.choice(
-            [100, 250, 350, 500, 700, 1000], 250, 0
+        self.thermal_points = pg.ScatterPlotItem(
+            size=7, brush=pg.mkBrush("#67b4ff"), pen=pg.mkPen(None)
         )
-        left.addRow("trap temp (K)", self.cool_temperature)
+        self.thermal_preview.addItem(self.thermal_points)
+        thermal.addWidget(self.thermal_preview)
+        self.thermal_panel = thermal
+        designer.addWidget(thermal)
 
+        lightning = CollapsibleCard(
+            "Lightning / energy events",
+            "Optional local heating and dissociation events. Set strikes to zero to disable.",
+            expanded=False,
+        )
+        lightning_form = QtWidgets.QFormLayout()
         self.strikes = self.choice([0, 1, 2, 3, 5, 8, 10, 20], 0, 0)
-        left.addRow("lightning strikes", self.strikes)
-
-        self.strike_temperature = self.choice(
-            [5000, 10000, 20000, 25000, 30000, 50000], 30000, 0
+        self.strike_temperature = self.choice([5000, 10000, 20000, 25000, 30000, 50000], 30000, 0)
+        self.strike_dissociation = self.choice([0, 0.2, 0.4, 0.6, 1.0, 1.5], 0.6, 2)
+        self.first_strike = self.choice([500, 1000, 2500, 5000], 2500, 0)
+        self.strike_interval = self.choice([1000, 2000, 3500, 5000, 10000], 3500, 0)
+        self.strike_dissociation.setToolTip(
+            "Electron-impact proxy controlling direct bond disruption inside the channel; this is separate from temperature."
         )
-        left.addRow("channel temp (K)", self.strike_temperature)
+        lightning_form.addRow("Number of strikes", self.strikes)
+        lightning_form.addRow("First strike (fs)", self.first_strike)
+        lightning_form.addRow("Interval (fs)", self.strike_interval)
+        lightning_form.addRow("Channel temperature (K)", self.strike_temperature)
+        lightning_form.addRow("Dissociation setting", self.strike_dissociation)
+        lightning.addLayout(lightning_form)
+        self.lightning_preview = QtWidgets.QLabel("")
+        self.lightning_preview.setObjectName("sectionSubtitle")
+        lightning.addWidget(self.lightning_preview)
+        designer.addWidget(lightning)
 
-        self.strike_dissociation = self.choice(
-            [0, 0.2, 0.4, 0.6, 1.0, 1.5], 0.6, 2
+        recording = CollapsibleCard(
+            "Recording and crash protection",
+            "Recorder v2 observes the simulation without changing its physics.",
+            expanded=True,
         )
-        left.addRow("bonds broken", self.strike_dissociation)
-
-        self.first_strike = self.choice(
-            [500, 1000, 2500, 5000], 2500, 0
-        )
-        left.addRow("first strike (fs)", self.first_strike)
-
-        self.strike_interval = self.choice(
-            [1000, 2000, 3500, 5000, 10000], 3500, 0
-        )
-        left.addRow("strike every (fs)", self.strike_interval)
-
+        recording_form = QtWidgets.QFormLayout()
         self.capture_every = self.choice([10, 20, 40, 80, 200], 40, 0)
-        left.addRow("capture every N steps", self.capture_every)
-
-        # The runner has always supported this; it was simply not exposed.
-        # Without it a twenty picosecond run leaves nothing on disk until it
-        # finishes, so a crash or a stop loses the lot. With it the recording
-        # and its index entry are rewritten at the interval, and grouped runs
-        # checkpoint every box in the group rather than waiting for all of
-        # them.
-        #
-        # Zero keeps the old behaviour of writing only at the end.
+        self.capture_every.setToolTip(
+            "Simulation steps between ordinary trajectory frames. Smaller values improve temporal resolution and replay smoothness but increase storage and recording work."
+        )
         self.save_every = self.choice([0, 1, 2, 5, 10, 20], 5, 0)
         self.save_every.setToolTip(
-            "Write the recording and its index entry this often, in "
-            "picoseconds, rather than only when the run finishes. A stopped "
-            "or crashed run then leaves usable progress on disk. Zero writes "
-            "at the end only."
+            "Checkpoint the recording and index this often in picoseconds. This affects crash recovery and disk writes, not trajectory sampling or chemistry. Zero saves only at completion."
         )
-        left.addRow("save every (ps)", self.save_every)
+        recording_form.addRow("Ordinary capture interval (steps)", self.capture_every)
+        recording_form.addRow("Checkpoint interval (ps)", self.save_every)
+        recording.addLayout(recording_form)
+        self.recording_note = QtWidgets.QLabel("")
+        self.recording_note.setObjectName("sectionSubtitle")
+        self.recording_note.setWordWrap(True)
+        recording.addWidget(self.recording_note)
+        designer.addWidget(recording)
 
-        self.grouped = QtWidgets.QCheckBox(
-            f"{GROUP_SIZE} boxes at once, one group at a time"
-        )
+        execution = SectionCard("Execution")
+        self.grouped = QtWidgets.QCheckBox(f"Grouped GPU — up to {GROUP_SIZE} simulations together")
         self.grouped.setChecked(True)
         self.grouped.setToolTip(
-            "Use batch_runner.py's grouped GPU mode with the lab default: "
-            f"up to {GROUP_SIZE} boxes are advanced together, and the next group starts "
-            "only after the current group has completely finished."
+            "Advance several independent periodic boxes together to use the GPU efficiently. Each seed keeps independent state and physics."
         )
         self.grouped.stateChanged.connect(self.refresh_existing)
-        left.addRow("group runs", self.grouped)
+        execution.addWidget(self.grouped)
+        self.execution_preview = QtWidgets.QLabel("")
+        self.execution_preview.setObjectName("sectionSubtitle")
+        execution.addWidget(self.execution_preview)
+        designer.addWidget(execution)
 
-        self.folder_name = QtWidgets.QLineEdit()
-        self.folder_name.setPlaceholderText(
-            "leave blank to name it from the conditions"
-        )
-        left.addRow("output folder", self.folder_name)
+        overview = SectionCard("Experiment overview")
+        metrics = QtWidgets.QGridLayout()
+        self.run_metric_mixture = QtWidgets.QLabel("—")
+        self.run_metric_runs = QtWidgets.QLabel("—")
+        self.run_metric_duration = QtWidgets.QLabel("—")
+        self.run_metric_box = QtWidgets.QLabel("—")
+        for column, (label, widget) in enumerate((
+            ("MIXTURE", self.run_metric_mixture), ("RUNS", self.run_metric_runs),
+            ("DURATION", self.run_metric_duration), ("BOX", self.run_metric_box),
+        )):
+            caption = QtWidgets.QLabel(label)
+            caption.setObjectName("eyebrow")
+            widget.setObjectName("metricValue")
+            metrics.addWidget(caption, 0, column)
+            metrics.addWidget(widget, 1, column)
+        overview.addLayout(metrics)
+        review.addWidget(overview)
 
-        for widget in (
-            self.box_size, self.picoseconds, self.seeds,
-            self.cool_temperature, self.strikes,
-        ):
-            widget.valueChanged.connect(self.refresh_existing)
-
-        columns.addLayout(left, stretch=3)
-
-        right = QtWidgets.QVBoxLayout()
-
+        status = SectionCard("Validation and destination")
+        self.validation_label = QtWidgets.QLabel("")
+        self.validation_label.setWordWrap(True)
+        status.addWidget(self.validation_label)
         self.existing_note = QtWidgets.QLabel("")
         self.existing_note.setWordWrap(True)
-        self.existing_note.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignTop
-        )
-        self.existing_note.setStyleSheet(
-            "font-family: Consolas, monospace; font-size: 12px;"
-        )
-        right.addWidget(self.existing_note)
+        self.existing_note.setObjectName("sectionSubtitle")
+        status.addWidget(self.existing_note)
+        review.addWidget(status)
 
-        right.addWidget(self.divider())
-
-        right.addWidget(QtWidgets.QLabel("templates"))
-
+        templates = CollapsibleCard("Experiment templates", expanded=True)
         self.template_box = QtWidgets.QComboBox()
-        right.addWidget(self.template_box)
-
-        row = QtWidgets.QHBoxLayout()
-        row.addWidget(self.button("Load", self.on_load_template))
-        row.addWidget(self.button("Save as...", self.on_save_template))
-        row.addWidget(self.button("Delete", self.on_delete_template))
-        right.addLayout(row)
-
+        templates.addWidget(self.template_box)
+        template_actions = QtWidgets.QHBoxLayout()
+        template_actions.addWidget(self.button("Load", self.on_load_template))
+        template_actions.addWidget(self.button("Save current…", self.on_save_template))
+        template_actions.addWidget(self.button("Delete", self.on_delete_template))
+        templates.addLayout(template_actions)
         self.reload_templates()
+        review.addWidget(templates)
 
-        right.addStretch(1)
-
-        self.queue_button = self.button(
-            "Add to queue", self.on_queue
-        )
-        self.queue_button.setMinimumHeight(38)
-        right.addWidget(self.queue_button)
-
+        advanced = CollapsibleCard("Advanced output and command", expanded=False)
+        output_form = QtWidgets.QFormLayout()
+        self.folder_name = QtWidgets.QLineEdit()
+        self.folder_name.setPlaceholderText("Automatic, based on experiment conditions")
+        output_form.addRow("Custom output folder", self.folder_name)
+        advanced.addLayout(output_form)
         self.preview = QtWidgets.QPlainTextEdit()
         self.preview.setReadOnly(True)
-        self.preview.setMaximumHeight(120)
-        self.preview.setStyleSheet(
-            "font-family: Consolas, monospace; font-size: 11px;"
-        )
-        right.addWidget(QtWidgets.QLabel("command"))
-        right.addWidget(self.preview)
+        self.preview.setMaximumHeight(110)
+        self.preview.setStyleSheet("font-family: Consolas, monospace; font-size: 9pt;")
+        advanced.addWidget(self.preview)
+        review.addWidget(advanced)
 
-        columns.addLayout(right, stretch=2)
+        final = SectionCard("Ready to queue")
+        self.final_summary = QtWidgets.QLabel("")
+        self.final_summary.setWordWrap(True)
+        final.addWidget(self.final_summary)
+        self.queue_button = self.button("ADD EXPERIMENT TO QUEUE", self.on_queue)
+        self.queue_button.setObjectName("primaryAction")
+        self.queue_button.setMinimumHeight(46)
+        final.addWidget(self.queue_button)
+        review.addWidget(final)
+        review.addStretch(1)
+
+        for widget in (
+            self.box_size, self.picoseconds, self.seeds, self.hot_temperature,
+            self.hot_until, self.cool_temperature, self.strikes,
+            self.strike_temperature, self.strike_dissociation,
+            self.first_strike, self.strike_interval, self.capture_every,
+            self.save_every,
+        ):
+            widget.valueChanged.connect(self.refresh_existing)
+        self.first_seed.currentTextChanged.connect(self.refresh_existing)
+        self.folder_name.textChanged.connect(self.refresh_existing)
 
         return page
 
@@ -714,6 +990,10 @@ class Lab(QtWidgets.QWidget):
             widget.setEnabled(not continuing)
 
         self.source_box.setEnabled(continuing)
+        self.source_panel.setVisible(continuing)
+        self.mixture_panel.setVisible(not continuing)
+        self.core_panel.setVisible(not continuing)
+        self.thermal_panel.setVisible(not continuing)
 
         if continuing:
             self.reload_sources()
@@ -762,6 +1042,141 @@ class Lab(QtWidgets.QWidget):
             self.existing_note.setText(
                 f"waiting for a valid value\n\n{problem}"
             )
+        self.update_experiment_overview()
+
+    def estimated_atom_count(self):
+        entry = self.available.get(self.mixture_box.currentText())
+        if not entry:
+            return 0
+        kind, contents = entry
+        if kind == "atoms":
+            return int(sum(contents.values()))
+        sizes = {"H2": 2, "H2O": 3, "NH3": 4, "CH4": 5}
+        return int(sum(
+            sizes.get(molecule, 3) * number
+            for molecule, number in contents.items()
+        ))
+
+    def update_experiment_overview(self):
+        continuing = self.mode_box.currentIndex() == 1
+        mixture = self.mixture_box.currentText() or "No mixture"
+        runs = max(int(self.seeds.value()), 0)
+        duration = max(float(self.picoseconds.value()), 0.0)
+        box = max(float(self.box_size.value()), 0.0)
+        atoms = self.estimated_atom_count()
+
+        self.run_metric_mixture.setText(
+            self.source_box.currentText() if continuing else mixture
+        )
+        self.run_metric_runs.setText("batch" if continuing else str(runs))
+        self.run_metric_duration.setText(f"+{duration:g} ps" if continuing else f"{duration:g} ps")
+        self.run_metric_box.setText("existing" if continuing else f"{box:g} Å")
+
+        density = atoms / box ** 3 if atoms and box > 0 else 0.0
+        self.run_hero_title.setText(
+            "Continue an existing experiment" if continuing
+            else (mixture or "Configure a chemistry run")
+        )
+        self.run_hero_summary.setText(
+            f"{runs} independent runs  •  {duration:g} ps each  •  "
+            f"{box:g} Å fixed box  •  approximately {atoms} atoms  •  "
+            f"density {density:.4f} atoms/Å³"
+            if not continuing else
+            f"Extend the usable runs in {self.source_box.currentText() or 'the selected batch'} by {duration:g} ps."
+        )
+
+        hot = self.hot_temperature.value()
+        cool = self.cool_temperature.value()
+        hold_ps = self.hot_until.value() / 1000.0
+        middle_ps = min(hold_ps * 2.0, duration)
+        middle_temperature = (hot + cool) / 2.0
+        thermal_x = np.array([
+            0.0, min(hold_ps, duration), min(hold_ps, duration),
+            middle_ps, middle_ps, duration,
+        ])
+        thermal_y = np.array([
+            hot, hot, middle_temperature,
+            middle_temperature, cool, cool,
+        ])
+        self.thermal_curve.setData(thermal_x, thermal_y)
+        self.thermal_points.setData(
+            [0.0, min(hold_ps, duration), middle_ps, duration],
+            [hot, middle_temperature, cool, cool],
+        )
+
+        strike_count = max(int(self.strikes.value()), 0)
+        if strike_count:
+            moments = [
+                (self.first_strike.value() + index * self.strike_interval.value()) / 1000.0
+                for index in range(strike_count)
+            ]
+            visible = ", ".join(f"{value:g}" for value in moments[:6])
+            if len(moments) > 6:
+                visible += ", …"
+            self.lightning_preview.setText(
+                f"⚡ at {visible} ps  •  {self.strike_temperature.value():g} K channel"
+            )
+        else:
+            self.lightning_preview.setText("Disabled — no external energy events")
+
+        capture = max(int(self.capture_every.value()), 0)
+        if capture <= 20:
+            quality = "Detailed"
+        elif capture <= 80:
+            quality = "Balanced"
+        else:
+            quality = "Compact"
+        self.recording_note.setText(
+            f"{quality} ordinary capture ({capture} steps). Recorder v2 also protects reaction and failure context. "
+            + (f"Crash-recovery checkpoint every {self.save_every.value():g} ps."
+               if self.save_every.value() else "Recording is written only when a run finishes.")
+        )
+
+        group = self.group_size() if self.grouped.isChecked() else 1
+        pieces = []
+        left = runs
+        while left > 0:
+            take = min(group, left)
+            pieces.append(str(take))
+            left -= take
+        self.execution_preview.setText(
+            ("Grouped GPU: " if self.grouped.isChecked() else "Standard: ")
+            + (" + ".join(pieces) if pieces else "no runs")
+            + " simulations, groups run sequentially"
+        )
+
+        checks = []
+        valid = True
+        if continuing:
+            source_ok = bool(self.source_box.currentText())
+            checks.append((source_ok, "source batch selected"))
+            valid &= source_ok
+        else:
+            mixture_ok = mixture in self.available
+            checks.append((mixture_ok, "valid mixture"))
+            checks.append((box > 0, "fixed box size is valid"))
+            checks.append((runs > 0, "at least one run requested"))
+            checks.append((duration > 0, "simulation duration is valid"))
+            valid &= mixture_ok and box > 0 and runs > 0 and duration > 0
+            if density > 0.12:
+                checks.append((None, f"unusually high starting density ({density:.3f})"))
+            if capture >= 200:
+                checks.append((None, "very sparse ordinary recording"))
+
+        lines = []
+        for state, text in checks:
+            lines.append(("✓ " if state else "✕ " if state is False else "⚠ ") + text)
+        self.validation_label.setText("\n".join(lines))
+        self.queue_button.setEnabled(bool(valid))
+
+        thermal_text = f"{hot:g} K → {cool:g} K"
+        self.final_summary.setText(
+            f"Extend {self.source_box.currentText()} by {duration:g} ps"
+            if continuing else
+            f"{runs} × {duration:g} ps  •  {mixture}  •  ~{atoms} atoms  •  "
+            f"{thermal_text}  •  "
+            + ("Grouped GPU " + (" + ".join(pieces)) if self.grouped.isChecked() else "Standard execution")
+        )
 
     def describe_settings(self):
         name = self.mixture_box.currentText()
@@ -1170,8 +1585,21 @@ class Lab(QtWidgets.QWidget):
 
     def build_molecules_tab(self):
         page = QtWidgets.QWidget()
-        outer = QtWidgets.QHBoxLayout(page)
-        outer.setContentsMargins(8, 8, 8, 8)
+        outer = QtWidgets.QVBoxLayout(page)
+        outer.setContentsMargins(18, 18, 18, 18)
+        outer.setSpacing(10)
+
+        eyebrow = QtWidgets.QLabel("CHEMISTRY LIBRARY")
+        eyebrow.setObjectName("eyebrow")
+        outer.addWidget(eyebrow)
+        title = QtWidgets.QLabel("Molecule workbench")
+        title.setObjectName("heroTitle")
+        outer.addWidget(title)
+        subtitle = QtWidgets.QLabel(
+            "Inspect discovered structures, review formation evidence, and send molecules into controlled experiments."
+        )
+        subtitle.setObjectName("sectionSubtitle")
+        outer.addWidget(subtitle)
 
         font = QtGui.QFont("Consolas")
         font.setPointSize(10)
@@ -1184,14 +1612,15 @@ class Lab(QtWidgets.QWidget):
 
         main_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
         main_splitter.setChildrenCollapsible(False)
-        outer.addWidget(main_splitter)
+        outer.addWidget(main_splitter, 1)
 
         # ----------------------------------------------------
         # Left: selected molecule + controlled experiments
 
         research_widget = QtWidgets.QWidget()
+        research_widget.setObjectName("sectionCard")
         research_layout = QtWidgets.QVBoxLayout(research_widget)
-        research_layout.setContentsMargins(0, 0, 0, 0)
+        research_layout.setContentsMargins(14, 14, 14, 14)
 
         research_splitter = QtWidgets.QSplitter(
             QtCore.Qt.Orientation.Vertical
@@ -1529,12 +1958,22 @@ class Lab(QtWidgets.QWidget):
         # Right: automatic discovery/library panel
 
         library_widget = QtWidgets.QWidget()
+        library_widget.setObjectName("sectionCard")
         library = QtWidgets.QVBoxLayout(library_widget)
-        library.setContentsMargins(0, 0, 0, 0)
+        library.setContentsMargins(14, 14, 14, 14)
 
-        title = QtWidgets.QLabel("molecule library")
-        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        title = QtWidgets.QLabel("Discovered structures")
+        title.setObjectName("sectionTitle")
         library.addWidget(title)
+
+        self.molecule_search = QtWidgets.QLineEdit()
+        self.molecule_search.setPlaceholderText(
+            "Search by formula, structure ID, or elements…"
+        )
+        self.molecule_search.textChanged.connect(
+            self.filter_molecule_library
+        )
+        library.addWidget(self.molecule_search)
 
         self.molecule_scan_all_button = self.button(
             "Scan recordings", self.on_scan_recordings
@@ -1574,21 +2013,27 @@ class Lab(QtWidgets.QWidget):
         )
         library_splitter.addWidget(self.molecule_library_list)
 
+        from lab_renderer import MolecularScene
+        self.molecule_preview = MolecularScene()
+        self.molecule_preview.setMinimumHeight(190)
+        library_splitter.addWidget(self.molecule_preview)
+
         self.molecule_details = QtWidgets.QPlainTextEdit()
         self.molecule_details.setReadOnly(True)
         self.molecule_details.setLineWrapMode(
-            QtWidgets.QPlainTextEdit.LineWrapMode.NoWrap
+            QtWidgets.QPlainTextEdit.LineWrapMode.WidgetWidth
         )
         self.molecule_details.setFont(font)
         library_splitter.addWidget(self.molecule_details)
 
-        library_splitter.setStretchFactor(0, 3)
-        library_splitter.setStretchFactor(1, 2)
-        library_splitter.setSizes([430, 300])
+        library_splitter.setStretchFactor(0, 2)
+        library_splitter.setStretchFactor(1, 3)
+        library_splitter.setStretchFactor(2, 2)
+        library_splitter.setSizes([230, 390, 220])
         library.addWidget(library_splitter, stretch=1)
 
         self.molecule_open_source = self.button(
-            "Open first source in viewer", self.on_molecule_open_source
+            "Open formation source in Replay", self.on_molecule_open_source
         )
         self.molecule_open_source.setEnabled(False)
         library.addWidget(self.molecule_open_source)
@@ -1596,7 +2041,7 @@ class Lab(QtWidgets.QWidget):
         main_splitter.addWidget(library_widget)
         main_splitter.setStretchFactor(0, 5)
         main_splitter.setStretchFactor(1, 2)
-        main_splitter.setSizes([1180, 460])
+        main_splitter.setSizes([980, 660])
 
         # Remember the user's splitter positions. The defaults above make the
         # results pane larger than before, but after the first drag the page
@@ -1867,6 +2312,20 @@ class Lab(QtWidgets.QWidget):
         self.on_character_molecule_changed(
             self.character_molecule.currentIndex()
         )
+
+        if hasattr(self, "molecule_search"):
+            self.filter_molecule_library(self.molecule_search.text())
+
+    def filter_molecule_library(self, text):
+        wanted = "".join(text.lower().split())
+        for row, item in enumerate(self.library_molecules):
+            searchable = " ".join((
+                str(item.get("id", "")),
+                str(item.get("formula", "")),
+                " ".join(item.get("elements", []) or []),
+            )).lower()
+            match = not wanted or wanted in "".join(searchable.split())
+            self.molecule_library_list.item(row).setHidden(not match)
 
     def on_character_test_mode(self, index):
         partner_mode = index == 1
@@ -2352,6 +2811,25 @@ class Lab(QtWidgets.QWidget):
         stats = item.get("stats", {})
         sources = item.get("sources", {})
 
+        try:
+            molecule = molecule_store.load_molecule(item)
+            positions = np.asarray(molecule.get("positions", []), dtype=float)
+            extent = np.ptp(positions, axis=0) if len(positions) else np.ones(3)
+            box_size = max(float(np.max(extent)) + 6.0, 8.0)
+            shifted = positions - np.min(positions, axis=0) + (
+                box_size - extent
+            ) / 2.0
+            bonds = np.asarray(molecule.get("bonds", []), dtype=int).reshape(-1, 2)
+            first = bonds[:, 0] if len(bonds) else np.array([], dtype=int)
+            second = bonds[:, 1] if len(bonds) else np.array([], dtype=int)
+            self.molecule_preview.set_state(
+                shifted, molecule.get("symbols", []), box_size,
+                (first, second),
+            )
+            self.molecule_preview.recentre()
+        except Exception:
+            pass
+
         lines = [
             f"{item.get('id', '?')}  {item.get('formula', '?')}",
             "=" * 52,
@@ -2455,10 +2933,7 @@ class Lab(QtWidgets.QWidget):
         if not path or not os.path.exists(path):
             return
 
-        subprocess.Popen([
-            sys.executable, "run_reactive_gl.py",
-            "--load", os.path.abspath(path),
-        ])
+        self.open_replay(path)
 
     # --------------------------------------------------------
     # Batches tab
@@ -2466,10 +2941,22 @@ class Lab(QtWidgets.QWidget):
     def build_batches_tab(self):
         page = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(page)
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        header = QtWidgets.QHBoxLayout()
+        title_stack = QtWidgets.QVBoxLayout()
+        eyebrow = QtWidgets.QLabel("SIMULATION CONTROL ROOM")
+        eyebrow.setObjectName("eyebrow")
+        title_stack.addWidget(eyebrow)
+        title = QtWidgets.QLabel("Batches and live runs")
+        title.setObjectName("heroTitle")
+        title_stack.addWidget(title)
+        header.addLayout(title_stack)
+        header.addStretch(1)
 
         controls = QtWidgets.QHBoxLayout()
-
-        controls.addWidget(QtWidgets.QLabel("run at once"))
+        controls.addWidget(QtWidgets.QLabel("Concurrent jobs"))
 
         self.concurrency_box = QtWidgets.QSpinBox()
         self.concurrency_box.setRange(1, 8)
@@ -2493,16 +2980,40 @@ class Lab(QtWidgets.QWidget):
         )
 
         controls.addStretch(1)
+        header.addLayout(controls)
+        layout.addLayout(header)
 
-        layout.addLayout(controls)
+        summary = SectionCard("Queue overview")
+        summary_grid = QtWidgets.QGridLayout()
+        self.batch_summary_labels = {}
+        for column, key in enumerate(("RUNNING", "QUEUED", "COMPLETED", "FAILED")):
+            caption = QtWidgets.QLabel(key)
+            caption.setObjectName("eyebrow")
+            value = QtWidgets.QLabel("0")
+            value.setObjectName("metricValue")
+            summary_grid.addWidget(caption, 0, column)
+            summary_grid.addWidget(value, 1, column)
+            self.batch_summary_labels[key.lower()] = value
+        summary.addLayout(summary_grid)
+        self.queue_state_label = QtWidgets.QLabel("Queue running")
+        self.queue_state_label.setObjectName("statusGood")
+        summary.addWidget(self.queue_state_label)
+        layout.addWidget(summary)
 
         self.jobs_table = QtWidgets.QTableWidget()
-        self.jobs_table.setColumnCount(8)
+        self.jobs_table.setColumnCount(7)
         self.jobs_table.setHorizontalHeaderLabels([
             "batch", "state", "active group", "overall",
-            "finished", "elapsed", "estimated left", "live chemistry / results",
+            "finished", "elapsed", "estimated left",
         ])
-        self.jobs_table.horizontalHeader().setStretchLastSection(True)
+        jobs_header = self.jobs_table.horizontalHeader()
+        jobs_header.setSectionResizeMode(
+            0, QtWidgets.QHeaderView.ResizeMode.Stretch
+        )
+        for column in range(1, 7):
+            jobs_header.setSectionResizeMode(
+                column, QtWidgets.QHeaderView.ResizeMode.ResizeToContents
+            )
         self.jobs_table.setSelectionBehavior(
             QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows
         )
@@ -2514,10 +3025,19 @@ class Lab(QtWidgets.QWidget):
         splitter = QtWidgets.QSplitter(
             QtCore.Qt.Orientation.Vertical
         )
-        splitter.addWidget(self.jobs_table)
+        jobs_card = SectionCard(
+            "Experiment queue",
+            "Select a batch to inspect its active seed group and current chemistry below.",
+        )
+        jobs_card.addWidget(self.jobs_table)
+        jobs_card.setMaximumHeight(270)
+        splitter.addWidget(jobs_card)
 
-        live_panel = QtWidgets.QWidget()
-        live_layout = QtWidgets.QVBoxLayout(live_panel)
+        live_panel = SectionCard(
+            "Selected batch",
+            "Live chemistry snapshots are intentionally sparse and observational.",
+        )
+        live_layout = live_panel.layout
 
         self.live_batch_title = QtWidgets.QLabel(
             "Live chemistry — select a running batch"
@@ -2534,27 +3054,104 @@ class Lab(QtWidgets.QWidget):
         self.live_batch_summary.setWordWrap(True)
         live_layout.addWidget(self.live_batch_summary)
 
+        actions = QtWidgets.QHBoxLayout()
+        self.batch_view_results = self.button(
+            "View results", self.on_batch_view_results
+        )
+        self.batch_open_replay = self.button(
+            "Open latest replay", self.on_batch_open_replay
+        )
+        self.batch_continue = self.button(
+            "Continue batch", self.on_batch_continue
+        )
+        for action in (
+            self.batch_view_results, self.batch_open_replay,
+            self.batch_continue,
+        ):
+            action.setEnabled(False)
+            actions.addWidget(action)
+        actions.addStretch(1)
+        live_layout.addLayout(actions)
+
         self.live_seed_table = QtWidgets.QTableWidget()
         self.live_seed_table.setColumnCount(8)
         self.live_seed_table.setHorizontalHeaderLabels([
             "seed", "largest structure", "atoms", "heavy atoms",
             "carbon", "heavy molecules", "C-C bonds", "temperature K",
         ])
-        self.live_seed_table.horizontalHeader().setStretchLastSection(True)
+        live_header = self.live_seed_table.horizontalHeader()
+        live_header.setSectionsClickable(True)
+        live_header.sectionClicked.connect(
+            self.on_live_seed_header_clicked
+        )
+        live_header.setSectionResizeMode(
+            1, QtWidgets.QHeaderView.ResizeMode.Stretch
+        )
+        for column in (0, 2, 3, 4, 5, 6, 7):
+            live_header.setSectionResizeMode(
+                column, QtWidgets.QHeaderView.ResizeMode.ResizeToContents
+            )
         self.live_seed_table.verticalHeader().setVisible(False)
         self.live_seed_table.setEditTriggers(
             QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
         )
+        self.live_seed_display_rows = []
+        self.live_seed_sort_column = None
+        self.live_seed_sort_stage = 0
         live_layout.addWidget(self.live_seed_table, stretch=1)
 
         splitter.addWidget(live_panel)
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 3)
-        splitter.setSizes([220, 650])
+        splitter.setSizes([250, 650])
 
         layout.addWidget(splitter, stretch=1)
 
         return page
+
+    def selected_batch_job(self):
+        selected = self.jobs_table.selectionModel().selectedRows()
+        if not selected:
+            return None
+        row = selected[0].row()
+        return self.jobs[row] if 0 <= row < len(self.jobs) else None
+
+    def on_batch_view_results(self):
+        job = self.selected_batch_job()
+        if not job:
+            return
+        self.tabs.setCurrentIndex(2)
+        self.reload_results()
+        label = os.path.basename(os.path.normpath(job.out))
+        position = self.results_batch.findText(label)
+        if position >= 0:
+            self.results_batch.setCurrentIndex(position)
+
+    def on_batch_open_replay(self):
+        job = self.selected_batch_job()
+        if not job:
+            return
+        index = read_index(job.out)
+        candidates = []
+        for entry in index:
+            name = entry.get("file")
+            if name:
+                path = name if os.path.isabs(name) else os.path.join(job.out, name)
+                if os.path.exists(path):
+                    candidates.append(path)
+        if candidates:
+            self.open_replay(candidates[-1])
+
+    def on_batch_continue(self):
+        job = self.selected_batch_job()
+        if not job:
+            return
+        self.tabs.setCurrentIndex(0)
+        self.mode_box.setCurrentIndex(1)
+        label = os.path.basename(os.path.normpath(job.out))
+        position = self.source_box.findText(label)
+        if position >= 0:
+            self.source_box.setCurrentIndex(position)
 
     def on_concurrency(self, value):
         self.concurrency = int(value)
@@ -2744,6 +3341,27 @@ class Lab(QtWidgets.QWidget):
         self.draw_jobs()
 
     def draw_jobs(self):
+        counts = {
+            "running": sum(job.state == "running" for job in self.jobs),
+            "queued": sum(job.state == "queued" for job in self.jobs),
+            "completed": sum(job.state == "done" for job in self.jobs),
+            "failed": sum(
+                job.state in ("failed", "stopped") for job in self.jobs
+            ),
+        }
+        if hasattr(self, "batch_summary_labels"):
+            for key, value in counts.items():
+                self.batch_summary_labels[key].setText(str(value))
+            self.queue_state_label.setText(
+                "Queue paused" if self.queue_paused else
+                f"Queue running  •  concurrency {self.concurrency}"
+            )
+            self.queue_state_label.setObjectName(
+                "statusWarn" if self.queue_paused else "statusGood"
+            )
+            self.queue_state_label.style().unpolish(self.queue_state_label)
+            self.queue_state_label.style().polish(self.queue_state_label)
+
         self.jobs_table.setRowCount(len(self.jobs))
 
         for row, job in enumerate(self.jobs):
@@ -2806,13 +3424,12 @@ class Lab(QtWidgets.QWidget):
                 f"{job.completed}/{job.runs}",
                 clock(job.elapsed) if job.started else "-",
                 remaining,
-                live_text,
             ]
 
             for column, value in enumerate(values):
                 item = QtWidgets.QTableWidgetItem(str(value))
 
-                if column in (2, 3, 7):
+                if column in (2, 3):
                     item.setFont(QtGui.QFont("Consolas", 9))
 
                 if job.state == "failed":
@@ -2824,7 +3441,6 @@ class Lab(QtWidgets.QWidget):
 
                 self.jobs_table.setItem(row, column, item)
 
-        self.jobs_table.resizeColumnsToContents()
         self.draw_live_batch_details()
 
     def draw_live_batch_details(self):
@@ -2854,18 +3470,50 @@ class Lab(QtWidgets.QWidget):
             return
 
         job = self.jobs[row]
+        batch_index = read_index(job.out)
+        has_recording = any(
+            entry.get("file") and os.path.exists(
+                entry["file"] if os.path.isabs(entry["file"])
+                else os.path.join(job.out, entry["file"])
+            )
+            for entry in batch_index
+        )
+        self.batch_view_results.setEnabled(bool(batch_index))
+        self.batch_open_replay.setEnabled(has_recording)
+        self.batch_continue.setEnabled(
+            bool(batch_index) and job.state != "running"
+        )
         self.live_batch_title.setText(f"Live chemistry — {job.name}")
         live = job.live_chemistry
 
         if not live:
+            unstable = sum(
+                entry.get("stable") is False for entry in batch_index
+            )
             message = (
                 "Waiting for the next live chemistry update. Updates are "
                 "sparse so this panel does not add meaningful simulation load."
                 if job.state == "running"
-                else "No live chemistry snapshot is available for this batch."
+                else f"{len(batch_index)} recorded runs • "
+                     f"{len(batch_index) - unstable} usable • "
+                     f"{unstable} unstable"
             )
             self.live_batch_summary.setText(message)
-            self.live_seed_table.setRowCount(0)
+            self.live_seed_display_rows = []
+            for table_row, entry in enumerate(batch_index):
+                values = [
+                    entry.get("seed", "?"),
+                    ("✓ " if entry.get("stable") is not False else "⚠ ")
+                    + str(entry.get("headline", "")),
+                    entry.get("atoms", 0),
+                    entry.get("largest_any_heavy", 0),
+                    entry.get("most_carbon", 0),
+                    entry.get("species_count", 0),
+                    entry.get("heavy_bonds_formed", 0),
+                    f"{float(entry.get('final_temperature', 0) or 0):.0f}",
+                ]
+                self.live_seed_display_rows.append(values)
+            self.populate_live_seed_table()
             return
 
         largest = live.get("largest")
@@ -2888,7 +3536,7 @@ class Lab(QtWidgets.QWidget):
         )
 
         rows = list(live.get("per_seed", []))
-        self.live_seed_table.setRowCount(len(rows))
+        self.live_seed_display_rows = []
         for table_row, record in enumerate(rows):
             structure = record.get("largest") or {}
             values = [
@@ -2901,25 +3549,127 @@ class Lab(QtWidgets.QWidget):
                 record.get("cc_bonds", 0),
                 record.get("temperature_K", 0),
             ]
-            for column, value in enumerate(values):
+            self.live_seed_display_rows.append(values)
+        self.populate_live_seed_table()
+
+    def on_live_seed_header_clicked(self, column):
+        if self.live_seed_sort_column != column:
+            self.live_seed_sort_column = column
+            self.live_seed_sort_stage = 1
+        else:
+            self.live_seed_sort_stage = (self.live_seed_sort_stage + 1) % 3
+            if self.live_seed_sort_stage == 0:
+                self.live_seed_sort_column = None
+        self.populate_live_seed_table()
+
+    @staticmethod
+    def live_sort_value(value):
+        try:
+            return 0, float(value)
+        except (TypeError, ValueError):
+            return 1, str(value).lower()
+
+    def populate_live_seed_table(self):
+        rows = list(getattr(self, "live_seed_display_rows", []))
+        column = self.live_seed_sort_column
+        if column is not None and self.live_seed_sort_stage:
+            rows.sort(
+                key=lambda row: self.live_sort_value(row[column]),
+                reverse=self.live_seed_sort_stage == 1,
+            )
+        self.live_seed_table.setRowCount(len(rows))
+        for table_row, values in enumerate(rows):
+            for cell_column, value in enumerate(values):
                 self.live_seed_table.setItem(
-                    table_row, column,
+                    table_row, cell_column,
                     QtWidgets.QTableWidgetItem(str(value)),
                 )
-
-        self.live_seed_table.resizeColumnsToContents()
 
     # --------------------------------------------------------
     # Results tab
 
     def build_results_tab(self):
         page = QtWidgets.QWidget()
-        columns = QtWidgets.QHBoxLayout(page)
+        outer = QtWidgets.QVBoxLayout(page)
+        outer.setContentsMargins(18, 18, 18, 18)
+        outer.setSpacing(12)
 
-        left = QtWidgets.QVBoxLayout()
+        eyebrow = QtWidgets.QLabel("SCIENTIFIC RESULTS")
+        eyebrow.setObjectName("eyebrow")
+        outer.addWidget(eyebrow)
+        title = QtWidgets.QLabel("Compare runs and discover chemistry")
+        title.setObjectName("heroTitle")
+        outer.addWidget(title)
+
+        headline = SectionCard("Selected batch")
+        headline_grid = QtWidgets.QGridLayout()
+        self.result_metric_labels = {}
+        for index, (key, caption) in enumerate((
+            ("usable", "USABLE RUNS"), ("unstable", "UNSTABLE"),
+            ("species", "MAX SPECIES"), ("largest", "LARGEST STRUCTURE"),
+        )):
+            label = QtWidgets.QLabel(caption)
+            label.setObjectName("eyebrow")
+            value = QtWidgets.QLabel("—")
+            value.setObjectName("metricValue")
+            grid_row = (index // 2) * 2
+            grid_column = index % 2
+            headline_grid.addWidget(label, grid_row, grid_column)
+            headline_grid.addWidget(value, grid_row + 1, grid_column)
+            self.result_metric_labels[key] = value
+        headline.addLayout(headline_grid)
+        self.results_batch_context = QtWidgets.QLabel(
+            "Choose a batch to inspect its conditions and runs."
+        )
+        self.results_batch_context.setObjectName("sectionSubtitle")
+        headline.addWidget(self.results_batch_context)
+        plot_controls = QtWidgets.QHBoxLayout()
+        plot_controls.addWidget(QtWidgets.QLabel("Compare"))
+        self.results_x_metric = QtWidgets.QComboBox()
+        self.results_y_metric = QtWidgets.QComboBox()
+        result_metrics = [
+            ("Heavy bonds formed", "heavy_bonds_formed"),
+            ("Late bonds formed", "late_formed"),
+            ("Bond turnovers", "turnovers"),
+            ("Largest closed shell", "largest_closed"),
+            ("Largest structure", "largest_any"),
+            ("Largest carbon count", "most_carbon"),
+            ("Species count", "species_count"),
+            ("Final potential energy", "final_potential"),
+            ("Final temperature", "final_temperature"),
+        ]
+        for label, key in result_metrics:
+            self.results_x_metric.addItem(label, key)
+            self.results_y_metric.addItem(label, key)
+        self.results_y_metric.setCurrentIndex(4)
+        self.results_x_metric.currentIndexChanged.connect(
+            self.draw_result_scatter
+        )
+        self.results_y_metric.currentIndexChanged.connect(
+            self.draw_result_scatter
+        )
+        plot_controls.addWidget(self.results_x_metric)
+        plot_controls.addWidget(QtWidgets.QLabel("against"))
+        plot_controls.addWidget(self.results_y_metric)
+        plot_controls.addStretch(1)
+        headline.addLayout(plot_controls)
+        splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
+        outer.addWidget(splitter, 1)
+
+        left_column = QtWidgets.QWidget()
+        left_column_layout = QtWidgets.QVBoxLayout(left_column)
+        left_column_layout.setContentsMargins(0, 0, 0, 0)
+        left_column_layout.setSpacing(10)
+        left_column_layout.addWidget(headline)
+
+        browser = SectionCard(
+            "Runs",
+            "Unstable runs are marked clearly. Select a run to analyse it; open it in Replay for event-level inspection.",
+        )
+        left = browser.layout
 
         row = QtWidgets.QHBoxLayout()
-        row.addWidget(QtWidgets.QLabel("batch"))
+        row.addWidget(QtWidgets.QLabel("Batch"))
 
         self.results_batch = QtWidgets.QComboBox()
         self.results_batch.currentIndexChanged.connect(
@@ -2928,6 +3678,11 @@ class Lab(QtWidgets.QWidget):
         row.addWidget(self.results_batch, stretch=1)
 
         left.addLayout(row)
+
+        self.results_search = QtWidgets.QLineEdit()
+        self.results_search.setPlaceholderText("Filter by seed, headline, or status…")
+        self.results_search.textChanged.connect(self.filter_result_runs)
+        left.addWidget(self.results_search)
 
         self.results_list = QtWidgets.QListWidget()
         self.results_list.currentRowChanged.connect(
@@ -2977,9 +3732,11 @@ class Lab(QtWidgets.QWidget):
         )
         left.addLayout(row)
 
-        columns.addLayout(left, stretch=2)
+        left_column_layout.addWidget(browser, 1)
+        splitter.addWidget(left_column)
 
-        right = QtWidgets.QVBoxLayout()
+        analysis_card = SectionCard("Run analysis")
+        right = analysis_card.layout
 
         self.results_title = QtWidgets.QLabel("select a run")
         right.addWidget(self.results_title)
@@ -2990,18 +3747,25 @@ class Lab(QtWidgets.QWidget):
             QtWidgets.QPlainTextEdit.LineWrapMode.NoWrap
         )
         self.results_report.setFont(font)
+        self.results_report.setMinimumHeight(280)
 
-        right.addWidget(self.results_report, stretch=1)
+        right.addWidget(self.results_report, stretch=2)
 
         self.results_plot = pg.PlotWidget()
-        self.results_plot.setLabel("left", "potential energy (eV)")
-        self.results_plot.setLabel("bottom", "fs")
-        self.results_plot.setMaximumHeight(180)
-        self.results_curve = self.results_plot.plot(pen="#2f6f9f")
+        self.results_plot.setMinimumHeight(240)
+        self.results_scatter = self.results_plot
+        self.results_scatter_item = pg.ScatterPlotItem(size=10)
+        self.results_scatter_item.sigClicked.connect(
+            self.on_result_scatter_clicked
+        )
+        self.results_plot.addItem(self.results_scatter_item)
 
-        right.addWidget(self.results_plot)
+        right.addWidget(self.results_plot, stretch=3)
 
-        columns.addLayout(right, stretch=3)
+        splitter.addWidget(analysis_card)
+        splitter.setStretchFactor(0, 2)
+        splitter.setStretchFactor(1, 3)
+        splitter.setSizes([460, 860])
 
         self.want_structures = False
         self.results_paths = []
@@ -3009,6 +3773,43 @@ class Lab(QtWidgets.QWidget):
         self.reload_results()
 
         return page
+
+    def filter_result_runs(self, text):
+        wanted = text.strip().lower()
+        for row in range(self.results_list.count()):
+            item = self.results_list.item(row)
+            item.setHidden(bool(wanted and wanted not in item.text().lower()))
+
+    def draw_result_scatter(self):
+        if not hasattr(self, "results_scatter_item"):
+            return
+        entries = getattr(self, "current_results_index", [])
+        x_key = self.results_x_metric.currentData()
+        y_key = self.results_y_metric.currentData()
+        spots = []
+        for row, entry in enumerate(entries):
+            x = entry.get(x_key)
+            y = entry.get(y_key)
+            if x is None or y is None:
+                continue
+            stable = entry.get("stable") is not False
+            spots.append({
+                "pos": (float(x), float(y)),
+                "data": row,
+                "brush": pg.mkBrush("#4ca6ff" if stable else "#ff7373"),
+                "pen": pg.mkPen(None),
+            })
+        self.results_scatter_item.setData(spots)
+        self.results_scatter.setLabel(
+            "bottom", self.results_x_metric.currentText()
+        )
+        self.results_scatter.setLabel(
+            "left", self.results_y_metric.currentText()
+        )
+
+    def on_result_scatter_clicked(self, _plot, points, _event=None):
+        if points:
+            self.results_list.setCurrentRow(int(points[0].data()))
 
     def on_toggle_structures(self):
         self.want_structures = not self.want_structures
@@ -3049,9 +3850,37 @@ class Lab(QtWidgets.QWidget):
             return
 
         label, path = self.batches[position]
+        batch_index = read_index(path)
+        self.current_results_index = batch_index
+        usable = [
+            entry for entry in batch_index
+            if entry.get("stable") is not False
+        ]
+        unstable = len(batch_index) - len(usable)
+        self.result_metric_labels["usable"].setText(
+            f"{len(usable)} / {len(batch_index)}"
+        )
+        self.result_metric_labels["unstable"].setText(str(unstable))
+        self.result_metric_labels["species"].setText(str(max(
+            (int(entry.get("species_count", 0) or 0) for entry in usable),
+            default=0,
+        )))
+        self.result_metric_labels["largest"].setText(str(max(
+            (int(entry.get("largest_any", 0) or 0) for entry in usable),
+            default=0,
+        )))
+        if batch_index:
+            first = batch_index[0]
+            self.results_batch_context.setText(
+                f"{first.get('mixture', label)}  •  {first.get('box', '?')} Å  •  "
+                f"{first.get('picoseconds', '?')} ps  •  "
+                f"{first.get('hot_temperature', '?')} → "
+                f"{first.get('cool_temperature', '?')} K  •  "
+                f"recorder v{first.get('recording_format', 1)}"
+            )
 
-        for entry in read_index(path):
-            mark = " " if entry.get("stable", True) else "!"
+        for entry in batch_index:
+            mark = "✓" if entry.get("stable", True) else "⚠"
 
             self.results_list.addItem(
                 f"{mark} {entry.get('number', 0):03d}  "
@@ -3065,6 +3894,7 @@ class Lab(QtWidgets.QWidget):
 
         if self.results_paths:
             self.results_list.setCurrentRow(0)
+        self.draw_result_scatter()
 
     def on_pick_run(self, row):
         if row < 0 or row >= len(self.results_paths):
@@ -3101,9 +3931,7 @@ class Lab(QtWidgets.QWidget):
 
         self.results_report.setPlainText("\n".join(lines))
 
-        self.results_curve.setData(
-            np.array(recorder.times), np.array(recorder.potential)
-        )
+        self.draw_result_scatter()
 
     def on_open_viewer(self):
         row = self.results_list.currentRow()
