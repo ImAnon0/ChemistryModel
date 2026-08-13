@@ -68,3 +68,42 @@ health were preserved, while structure size rose modestly.
 Recommendation: accept the 1.427 A length. It directly improves methanol
 geometry, leaves curvature and depth untouched, and introduces no controlled
 or reactive regression. Evaluate depth independently after committing length.
+
+## Separate depth experiment
+
+After committing the accepted length, a second isolated candidate changes the
+single C-O depth from 358 to 385 kJ/mol while retaining `re = 1.427 A` and
+width `1.95 inverse A`. This tests the supplied rounded methanol BDE target
+close to ATcT's 384.57 kJ/mol value. It remains an empirical effective-depth
+experiment: neither D298 nor the 376.86 kJ/mol 0 K dissociation enthalpy is
+identical to a bare Morse De. C=O remains unchanged.
+
+The 385 kJ/mol candidate passed all deterministic suites and its controlled
+methanol curve remained smooth. Its NVE drift was `+1.01e-4 eV` with zero
+move caps. However, holding width fixed raised the raw local-frequency
+diagnostic from 1057.58 to 1096.73 cm-1, farther from methanol's assigned
+1033 cm-1 C-O normal mode.
+
+Matched CUDA batches compared `co_length_candidate` (358 kJ/mol) with
+`co_depth_385_candidate` (385 kJ/mol), using carbon-rich seeds 17000--17015.
+
+| Quantity | 358 kJ/mol control | 385 kJ/mol candidate | Difference |
+| --- | ---: | ---: | ---: |
+| finished / stable | 16 / 16 | 16 / 16 | 0 |
+| strikes / energy jumps / move caps | 0 / 0 / 0 | 0 / 0 / 0 | 0 |
+| mean heavy bonds formed | 60.375 | 59.938 | -0.438 |
+| mean largest structure (atoms) | 12.188 | 11.062 | -1.125 |
+| mean largest heavy-atom count | 6.500 | 6.375 | -0.125 |
+| mean largest carbon count | 4.812 | 4.688 | -0.125 |
+| mean best carbon chain | 3.125 | 3.438 | +0.312 |
+| mean species count | 51.125 | 51.625 | +0.500 |
+| mean final oxygen species | 12.125 | 12.312 | +0.187 |
+| mean final C+O species | 9.562 | 9.688 | +0.126 |
+| mean final temperature (K) | 527.70 | 551.62 | +23.92 |
+| mean final potential (eV) | -1090.93 | -1093.88 | -2.95 |
+
+Recommendation: reject 385 kJ/mol and retain 358 kJ/mol as the effective C-O
+depth. The candidate was stable, but it worsened the provisional curvature
+comparison, produced negligible additional C+O chemistry, raised temperature
+and reduced largest-structure size. The experimental molecular BDE alone does
+not justify replacing the established environment-dependent effective depth.
