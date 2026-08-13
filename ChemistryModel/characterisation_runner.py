@@ -21,12 +21,10 @@ import running
 # geometry in a fresh periodic box, and then hands it back to the same
 # reactive Torch engine used by normal batches.
 #
-# Grouping is intentionally fixed: a characterisation request is either one
-# single-box repeat, or a multiple of eight repeats. Multi-repeat work is
-# advanced in exact groups of eight boxes, with only one group active at a
-# time. Partial groups are never launched.
-
-GROUP_SIZE = 8
+# Independent repeats share tensor kernels for throughput. Sixteen is a
+# conservative default on the reference 4060 Ti; the final group may be
+# smaller, and the command line can tune the size for another device.
+DEFAULT_GROUP_SIZE = 16
 ENTRIES = "entries"
 DEFAULT_BOND_THRESHOLD = 0.35
 DEFAULT_FORMATION_TIME_FS = 100.0
@@ -1249,7 +1247,7 @@ def summarise(recorder, molecule, partner, seed, options, wall_seconds,
         "picoseconds": round(final_time_fs / 1000.0, 4),
         "requested_picoseconds": float(options.picoseconds),
         "frames": len(recorder),
-        "group_size": GROUP_SIZE,
+        "group_size": int(options.group),
         "group_stopped_early": bool(stopped_early),
         "wall_seconds": round(float(wall_seconds), 2),
         "characterisation_outcome": outcome,
@@ -1436,34 +1434,37 @@ def run_group(molecule, partner, seeds, options):
         steps_done += this_chunk
         elapsed_sample_fs = this_chunk * float(options.time_step)
 
-        potentials = simulation.potential_per_box
-        kinetics = simulation.kinetic_per_box
-        temperatures = simulation.temperature_per_box
-
-        if partner is not None:
-            for box, diagnostic in enumerate(diagnostics):
-                _update_contact_diagnostic(
-                    diagnostic,
-                    simulation.positions_for(box),
-                    symbol_lists[box],
-                    simulation.box_size,
-                    elapsed_sample_fs,
-                )
-
         capture_now = (
             steps_done % capture_steps == 0
             or steps_done >= total_steps
         )
 
+        positions_per_box = None
+        if partner is not None or capture_now:
+            positions_per_box = simulation.positions_per_box
+
+        if partner is not None:
+            for box, diagnostic in enumerate(diagnostics):
+                _update_contact_diagnostic(
+                    diagnostic,
+                    positions_per_box[box],
+                    symbol_lists[box],
+                    simulation.box_size,
+                    elapsed_sample_fs,
+                )
+
         if capture_now:
+            potentials = simulation.potential_per_box
+            kinetics, temperatures = simulation.thermodynamics_per_box
+            velocities_per_box = simulation.velocities_per_box
             for box, recorder in enumerate(recorders):
                 recorder.capture(
-                    simulation.positions_for(box),
+                    positions_per_box[box],
                     simulation.elapsed_femtoseconds,
                     float(potentials[box]),
                     float(kinetics[box]),
                     float(temperatures[box]),
-                    velocities=simulation.velocities_for(box),
+                    velocities=velocities_per_box[box],
                     box_size=simulation.box_size,
                     symbols=symbol_lists[box],
                     atom_ids=atom_ids[box],
@@ -1543,7 +1544,7 @@ def write_experiment(folder, molecule, partner, options, requested_seeds):
         "time_step_fs": float(options.time_step),
         "friction": float(options.friction),
         "capture_every_steps": int(options.capture_every),
-        "group_size": GROUP_SIZE,
+        "group_size": int(options.group),
         "diagnostic_sample_fs": float(options.diagnostic_sample_fs),
         "diagnostic_fine_window_fs": float(options.diagnostic_fine_window_fs),
         "diagnostic_coarse_sample_fs": float(options.diagnostic_coarse_sample_fs),
@@ -1551,8 +1552,8 @@ def write_experiment(folder, molecule, partner, options, requested_seeds):
         "bond_threshold": float(bonding_settings()[0]),
         "bond_formation_time_fs": float(bonding_settings()[1]),
         "group_policy": (
-            "1 repeat, or exact groups of 8 boxes; exactly one group active "
-            "at a time; no partial groups"
+            f"up to {int(options.group)} boxes per group; exactly one group "
+            "active at a time; a smaller final group is allowed"
         ),
         "requested_seeds": [int(seed) for seed in requested_seeds],
         "library": os.path.normpath(options.library),
@@ -1614,6 +1615,13 @@ def main():
     parser.add_argument("--ps", dest="picoseconds", type=float, default=10.0)
     parser.add_argument("--box", type=float, default=12.0)
     parser.add_argument("--repeats", type=int, default=8)
+    parser.add_argument(
+        "--group", type=int, default=DEFAULT_GROUP_SIZE,
+        help=(
+            "maximum independent boxes advanced together; the final group "
+            "may be smaller"
+        ),
+    )
     parser.add_argument("--seed-list", default=None)
     parser.add_argument("--first-seed", type=int, default=0)
     parser.add_argument("--start-gap", type=float, default=2.5)
@@ -1656,11 +1664,8 @@ def main():
     if options.repeats < 1:
         raise SystemExit("repeats must be at least 1")
 
-    if options.repeats != 1 and options.repeats % GROUP_SIZE != 0:
-        raise SystemExit(
-            "characterisation repeats must be exactly 1 or a multiple of 8; "
-            "partial groups are not allowed"
-        )
+    if options.group < 1:
+        raise SystemExit("group must be at least 1")
 
     molecule = molecule_store.load_molecule(options.molecule, root=options.library)
     partner = None
@@ -1717,21 +1722,24 @@ def main():
                     f"output folder already contains {existing_physics} physics; "
                     f"refusing to mix it with {options.physics}"
                 )
+            existing_group = existing_payload.get("group_size")
+            if existing_group is not None:
+                # Resume interrupted experiments with their original grouping
+                # so completed and rerun seeds keep the same shared RNG stream.
+                options.group = max(1, int(existing_group))
         except json.JSONDecodeError:
             raise SystemExit("existing experiment.json is unreadable")
 
     done = finished_seeds(options.out)
 
-    # Build groups from the full requested experiment, not merely from the
-    # unfinished seeds. If an interrupted 8-box group is partial, rerun that
-    # whole group rather than ever launching a remainder smaller than eight.
-    if int(options.repeats) == 1:
-        requested_groups = [requested]
-    else:
-        requested_groups = [
-            requested[start:start + GROUP_SIZE]
-            for start in range(0, len(requested), GROUP_SIZE)
-        ]
+    # Build groups from the full requested experiment rather than merely the
+    # unfinished seeds. If an interrupted group is partial, rerun that whole
+    # group so its shared random stream and trajectory remain reproducible.
+    group_size = min(int(options.group), len(requested))
+    requested_groups = [
+        requested[start:start + group_size]
+        for start in range(0, len(requested), group_size)
+    ]
 
     groups = []
     for group in requested_groups:
@@ -1785,11 +1793,11 @@ def main():
                 f"{options.approach_factor:g} x thermal RMS, aim "
                 f"{options.impact_target}"
             )
-        if int(options.repeats) == 1:
+        if len(requested) == 1:
             print("fixed grouping: single-box characterisation")
         else:
             print(
-                f"fixed grouping: exactly {GROUP_SIZE} boxes per group, "
+                f"grouping: up to {group_size} boxes per group, "
                 f"{len(groups)} sequential group"
                 + ("s" if len(groups) != 1 else "")
             )

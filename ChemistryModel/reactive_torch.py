@@ -349,6 +349,7 @@ class ReactiveSimulation:
         self.neighbour_mask = torch.tensor(
             mask, device=self.device, dtype=torch.bool
         )
+        self._neighbour_weight = self.neighbour_mask.to(self.dtype)
 
         self.reference_positions = self.positions.clone()
         self.rebuild_count += 1
@@ -498,7 +499,7 @@ class ReactiveSimulation:
         # exactly: every term here was already a sum over atoms.
 
         neighbours = self.neighbours
-        mask = self.neighbour_mask.to(self.dtype)
+        mask = self._neighbour_weight
 
         offsets = positions[neighbours] - positions[:, None, :]
 
@@ -523,6 +524,17 @@ class ReactiveSimulation:
         )
 
         taper = 0.5 * (1.0 + torch.cos(np.pi * fraction)) * mask
+
+        # Read-only diagnostics reuse the exact pair state already evaluated
+        # for forces. Detached views do not retain the autograd graph and are
+        # replaced by the next force calculation.
+        self._chemical_pair_cache = {
+            "neighbours": neighbours,
+            "mask": self.neighbour_mask,
+            "distances": distances.detach(),
+            "inner": pair_inner.detach(),
+            "taper": taper.detach(),
+        }
 
         coordination = torch.sum(taper, dim=1)
 
@@ -612,6 +624,27 @@ class ReactiveSimulation:
             -pair_width * shift
         )
 
+        if getattr(self, "_share_reactive_intermediates", False):
+            self._reactive_intermediates = (positions, {
+                "neighbours": neighbours,
+                "mask": mask,
+                "distances": distances,
+                "centre_types": centre_types,
+                "other_types": other_types,
+                "taper": taper,
+                "coordination": coordination,
+                "valence": valence,
+                "order": order,
+                "lower": lower,
+                "upper": upper,
+                "pair_length": pair_length,
+                "pair_depth": pair_depth,
+                "unsoftened_depth": unsoftened_depth,
+                "pair_width": pair_width,
+                "shift": shift,
+                "repulsive": repulsive,
+            })
+
         pair_energy = taper * (repulsive - attractive)
 
         # Halved because each bond is counted from both ends.
@@ -678,17 +711,50 @@ class ReactiveSimulation:
 
         angle = torch.arccos(cosine)
 
-        weight = taper[:, :, None] * taper[:, None, :]
+        angle_pair_taper = taper[:, :, None] * taper[:, None, :]
 
-        upper_triangle = torch.triu(
-            torch.ones(
-                weight.shape[1],
-                weight.shape[2],
-                device=self.device,
-                dtype=self.dtype
-            ),
-            diagonal=1
+        # A new angle needs both of its bonds to be mature. The old product
+        # made an emerging contact impose geometry too early: in CH3 + CH3,
+        # six H-C-C angles overwhelmed the attractive C-C force at the edge
+        # of the cutoff. Use a smoothly rounded weaker-contact taper so the
+        # angle grows with the less established bond without a force cusp
+        # when the two contacts exchange roles.
+        first_taper = taper[:, :, None]
+        second_taper = taper[:, None, :]
+        taper_difference = first_taper - second_taper
+        weaker_taper = 0.5 * (
+            first_taper
+            + second_taper
+            - torch.sqrt(taper_difference ** 2 + 1e-8)
+            + 1e-4
         )
+
+        # Existing lone-pair directionality already resists extra contacts
+        # around oxygen and, more weakly, nitrogen. Preserve that restraint
+        # while letting centres without lone pairs acquire new geometry only
+        # as the new bond matures. Complete bonds and settled molecules are
+        # unchanged because weaker_taper is one there.
+        lone_pair_directionality = torch.clamp(
+            0.5 * lone_pairs, 0.0, 1.0
+        )[:, None, None]
+        angle_engagement = (
+            weaker_taper
+            + (1.0 - weaker_taper) * lone_pair_directionality
+        )
+        weight = angle_pair_taper * angle_engagement
+
+        upper_triangle = getattr(self, "_angle_upper_triangle", None)
+        if upper_triangle is None:
+            upper_triangle = torch.triu(
+                torch.ones(
+                    weight.shape[1],
+                    weight.shape[2],
+                    device=self.device,
+                    dtype=self.dtype
+                ),
+                diagonal=1
+            )
+            self._angle_upper_triangle = upper_triangle
 
         angle_energy = (
             0.5
@@ -822,11 +888,55 @@ class ReactiveSimulation:
     def compute_forces(self):
         positions = self.positions.detach().requires_grad_(True)
 
-        total = self.energy(positions)
+        per_atom = self.energy_per_atom(positions)
+        total = torch.sum(per_atom)
 
         gradient, = torch.autograd.grad(total, positions)
 
+        # Keep the already-evaluated per-atom energies for batched reporting.
+        # A force calculation necessarily constructs these values, so running
+        # energy_per_atom again just to split the total by box duplicates the
+        # full potential. Track the exact source tensor and its in-place
+        # version so callers that replace or edit positions still get a fresh
+        # evaluation rather than a stale result.
+        self._potential_per_atom = per_atom.detach()
+        self._potential_cache_source = self.positions
+        self._potential_cache_version = self.positions._version
+        self._chemical_pair_cache_source = self.positions
+        self._chemical_pair_cache_version = self.positions._version
+
         return -gradient.detach(), total.detach()
+
+    def chemical_observation(self):
+        """Return compact current pair diagnostics without recomputation."""
+        cache = getattr(self, "_chemical_pair_cache", None)
+        if (
+            cache is None
+            or getattr(self, "_chemical_pair_cache_source", None)
+            is not self.positions
+            or getattr(self, "_chemical_pair_cache_version", None)
+            != self.positions._version
+        ):
+            raise RuntimeError("chemical observation requested before forces")
+        neighbours = cache["neighbours"]
+        centres = torch.arange(
+            len(self.positions), device=self.device, dtype=torch.long
+        )[:, None].expand_as(neighbours)
+        keep = cache["mask"] & (centres < neighbours) & (cache["taper"] > 0)
+        values = torch.stack((
+            centres[keep].to(self.dtype),
+            neighbours[keep].to(self.dtype),
+            cache["distances"][keep],
+            cache["inner"][keep],
+            cache["taper"][keep],
+        ), dim=1).detach().cpu().numpy()
+        return {
+            "first": values[:, 0].astype(np.int32, copy=False),
+            "second": values[:, 1].astype(np.int32, copy=False),
+            "distance": values[:, 2],
+            "inner": values[:, 3],
+            "taper": values[:, 4],
+        }
 
     def relax(self, steps=300, maximum_force=25.0,
               step_size=0.002):

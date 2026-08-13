@@ -10,6 +10,7 @@ import numpy as np
 
 import build_box
 import discharge
+import reactive as R
 import running
 
 
@@ -174,49 +175,9 @@ class Progress:
         sys.stdout.flush()
 
 
-def resize_toward(simulation, target, rate=0.002):
-    # Scale the cell and everything in it a little at a time.
-    #
-    # Compressing raises the density and forces condensation;
-    # expanding afterwards spreads the products out so they can be
-    # told apart. At very high density every atom sits inside its
-    # neighbours' bond range, so a distance-based bond test stops
-    # distinguishing contact from chemistry - which is why the
-    # measurement is taken after the box has been opened up again.
-
-    difference = target - simulation.box_size
-
-    if abs(difference) < 0.01:
-        return False
-
-    step = float(
-        np.clip(
-            difference,
-            -rate * simulation.box_size,
-            rate * simulation.box_size,
-        )
-    )
-
-    new_size = simulation.box_size + step
-
-    factor = new_size / simulation.box_size
-
-    simulation.positions = simulation.positions * factor
-    simulation.box_size = float(new_size)
-
-    simulation.reference_positions = None
-    simulation.build_neighbours()
-
-    simulation.forces, simulation._potential_energy = (
-        simulation.compute_forces()
-    )
-
-    return True
-
-
 def run_one(mixture, seed, options, progress=None,
             folder=None, on_progress_save=None):
-    from recorder import Recorder
+    from recorder import AdaptiveRecorder, Recorder
 
     simulation = build_simulation(
         mixture,
@@ -228,10 +189,28 @@ def run_one(mixture, seed, options, progress=None,
         options.device,
     )
 
-    recorder = Recorder(
-        simulation.symbols,
-        simulation.box_size,
-        maximum_frames=options.max_frames
+    adaptive = bool(getattr(options, "adaptive_recording", False))
+    recorder_class = AdaptiveRecorder if adaptive else Recorder
+    recorder_kwargs = (
+        dict(
+            ordinary_interval_fs=options.capture_every * options.time_step,
+            pre_event_fs=getattr(options, "adaptive_pre_event_fs", 100.0),
+            post_event_fs=getattr(options, "adaptive_post_event_fs", 100.0),
+            energy_jump_ev=getattr(options, "adaptive_energy_jump_ev", 20.0),
+            close_contact_scale=getattr(
+                options, "adaptive_close_contact_scale", 0.35
+            ),
+            reaction_window_fs=getattr(
+                options, "adaptive_reaction_window_fs", 20.0
+            ),
+            chemical_context_fs=getattr(
+                options, "adaptive_chemical_context_fs", 10.0
+            ),
+        ) if adaptive else {}
+    )
+    recorder = recorder_class(
+        simulation.symbols, simulation.box_size,
+        maximum_frames=options.max_frames, **recorder_kwargs
     )
 
     generator = np.random.default_rng(seed + 9001)
@@ -240,7 +219,11 @@ def run_one(mixture, seed, options, progress=None,
         options.picoseconds * 1000.0 / options.time_step
     )
 
-    chunk = options.capture_every
+    chunk = (
+        max(1, min(options.capture_every, int(round(
+            getattr(options, "adaptive_candidate_fs", 2.0) / options.time_step
+        )))) if adaptive else options.capture_every
+    )
 
     next_strike = (
         options.first_strike_fs if options.strikes > 0 else None
@@ -300,7 +283,11 @@ def run_one(mixture, seed, options, progress=None,
                     folder, seed, steps_done, total_steps, started
                 )
 
-        recorder.capture(
+        record = recorder.observe if adaptive else recorder.capture
+        chemical_observation = (
+            simulation.chemical_observation() if adaptive else None
+        )
+        record(
             simulation.positions_numpy,
             simulation.elapsed_femtoseconds,
             simulation.potential_energy,
@@ -312,6 +299,10 @@ def run_one(mixture, seed, options, progress=None,
             box_size=simulation.box_size,
             symbols=symbols,
             atom_ids=atom_ids,
+            **(
+                {"chemical_observation": chemical_observation}
+                if adaptive else {}
+            ),
         )
 
         if opening.active:
@@ -329,15 +320,6 @@ def run_one(mixture, seed, options, progress=None,
                     dtype=np.uint32,
                 )
                 next_atom_id += count
-
-        if (
-            options.expand_to
-            and simulation.elapsed_femtoseconds
-            >= options.expand_at_fs
-        ):
-            resize_toward(
-                simulation, options.expand_to, options.expand_rate
-            )
 
         if (
             next_strike is not None
@@ -523,7 +505,7 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
     # time: each keeps its own cell, its own starting positions,
     # its own recording and its own discharges.
 
-    from recorder import Recorder
+    from recorder import AdaptiveRecorder, Recorder
 
     from batched_torch import BatchedReactiveSimulation
 
@@ -539,11 +521,31 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
         random_seed=seeds[0],
     )
 
+    adaptive = bool(getattr(options, "adaptive_recording", False))
+    recorder_class = AdaptiveRecorder if adaptive else Recorder
+    recorder_kwargs = (
+        dict(
+            ordinary_interval_fs=options.capture_every * options.time_step,
+            pre_event_fs=getattr(options, "adaptive_pre_event_fs", 100.0),
+            post_event_fs=getattr(options, "adaptive_post_event_fs", 100.0),
+            energy_jump_ev=getattr(options, "adaptive_energy_jump_ev", 20.0),
+            close_contact_scale=getattr(
+                options, "adaptive_close_contact_scale", 0.35
+            ),
+            reaction_window_fs=getattr(
+                options, "adaptive_reaction_window_fs", 20.0
+            ),
+            chemical_context_fs=getattr(
+                options, "adaptive_chemical_context_fs", 10.0
+            ),
+        ) if adaptive else {}
+    )
     recorders = [
-        Recorder(
+        recorder_class(
             simulation.symbols_for(box),
             simulation.box_size,
             maximum_frames=options.max_frames,
+            **recorder_kwargs,
         )
         for box in range(len(seeds))
     ]
@@ -556,7 +558,11 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
         options.picoseconds * 1000.0 / options.time_step
     )
 
-    chunk = options.capture_every
+    chunk = (
+        max(1, min(options.capture_every, int(round(
+            getattr(options, "adaptive_candidate_fs", 2.0) / options.time_step
+        )))) if adaptive else options.capture_every
+    )
 
     next_strike = (
         options.first_strike_fs if options.strikes > 0 else None
@@ -569,6 +575,16 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
     steps_done = 0
 
     stopped_early = False
+
+    seed_label = (
+        str(seeds[0]) if len(seeds) == 1
+        else f"{seeds[0]}-{seeds[-1]}"
+    )
+    if folder is not None:
+        write_heartbeat(
+            folder, seed_label, 0, total_steps, started,
+            boxes_in_group=len(seeds),
+        )
 
     # Each box needs its own flow: hydrogen leaving one is
     # nothing to do with another, and a trap catches whatever
@@ -623,31 +639,45 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
 
         steps_done += this_chunk
 
-        if steps_done % (chunk * 20) == 0:
+        heartbeat_now = steps_done % (chunk * 20) == 0
+        if heartbeat_now:
             if progress is not None:
                 progress.show(steps_done)
 
-            if folder is not None:
-                write_heartbeat(
-                    folder, seeds[0], steps_done,
-                    total_steps, started,
-                )
-
         potentials = simulation.potential_per_box
-        kinetics = simulation.kinetic_per_box
-        temperatures = simulation.temperature_per_box
+        kinetics, temperatures = simulation.thermodynamics_per_box
+        positions_per_box = simulation.positions_per_box
+        velocities_per_box = simulation.velocities_per_box
+        chemical_observations = (
+            simulation.chemical_observations() if adaptive else None
+        )
+
+        if heartbeat_now and folder is not None:
+            live = live_chemistry_summary(
+                simulation, seeds, positions_per_box, temperatures
+            )
+            write_heartbeat(
+                folder, seed_label, steps_done,
+                total_steps, started,
+                boxes_in_group=len(seeds), live=live,
+            )
 
         for box, recorder in enumerate(recorders):
-            recorder.capture(
-                simulation.positions_for(box),
+            record = recorder.observe if adaptive else recorder.capture
+            record(
+                positions_per_box[box],
                 simulation.elapsed_femtoseconds,
                 float(potentials[box]),
                 float(kinetics[box]),
                 float(temperatures[box]),
-                velocities=simulation.velocities_for(box),
+                velocities=velocities_per_box[box],
                 box_size=simulation.box_size,
                 symbols=symbol_lists[box],
                 atom_ids=atom_id_lists[box],
+                **(
+                    {"chemical_observation": chemical_observations[box]}
+                    if adaptive else {}
+                ),
             )
 
         if openings and openings[0].active:
@@ -671,15 +701,6 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
                     dtype=np.uint32,
                 )
                 next_atom_ids[box] += count
-
-        if (
-            options.expand_to
-            and simulation.elapsed_femtoseconds
-            >= options.expand_at_fs
-        ):
-            resize_toward(
-                simulation, options.expand_to, options.expand_rate
-            )
 
         if (
             next_strike is not None
@@ -802,6 +823,7 @@ def summarise_run(recorder, simulation, seed, seconds, strikes,
         "picoseconds": round(
             (recorder.times[-1] - recorder.times[0]) / 1000.0, 3
         ),
+        "requested_picoseconds": round(float(options.picoseconds), 3),
         "strikes": strikes,
         "strike_temperature": options.strike_temperature,
         "strike_dissociation": options.strike_dissociation,
@@ -812,6 +834,12 @@ def summarise_run(recorder, simulation, seed, seconds, strikes,
         "hot_temperature": options.hot_temperature,
         "cool_temperature": options.cool_temperature,
         "frames": len(recorder),
+        "recording_format": int(getattr(recorder, "format_version", 1)),
+        "adaptive_recording": bool(getattr(options, "adaptive_recording", False)),
+        "adaptive_candidate_fs": (
+            float(options.adaptive_candidate_fs)
+            if getattr(options, "adaptive_recording", False) else None
+        ),
         "wall_seconds": round(seconds, 1),
         "headline": analysis.headline(result),
         "final_species": sorted({
@@ -1133,7 +1161,123 @@ def heartbeat_path(folder):
     return os.path.join(folder, f".progress_{os.getpid()}.json")
 
 
-def write_heartbeat(folder, seed, done, total, started):
+def live_chemistry_summary(simulation, seeds, positions_per_box,
+                           temperatures):
+    """Compact instantaneous chemistry for the Lab's live batch panel."""
+    positions = np.asarray(positions_per_box).reshape(-1, 3)
+    neighbours = simulation.neighbours.detach().cpu().numpy()
+    mask = simulation.neighbour_mask.detach().cpu().numpy()
+    types = np.asarray(simulation.types_numpy, dtype=int)
+
+    rows = np.broadcast_to(
+        np.arange(len(positions))[:, None], neighbours.shape
+    )
+    keep = mask & (neighbours > rows)
+    first = rows[keep]
+    second = neighbours[keep]
+
+    offsets = positions[second] - positions[first]
+    offsets -= simulation.box_size * np.round(
+        offsets / simulation.box_size
+    )
+    distances = np.linalg.norm(offsets, axis=1)
+    inner = R.CUTOFF_INNER[types[first], types[second]]
+    outer = R.CUTOFF_OUTER[types[first], types[second]]
+    bonded = R.smooth_cutoff(distances, inner, outer) > 0.35
+    first = first[bonded]
+    second = second[bonded]
+
+    parent = np.arange(len(positions))
+
+    def find(index):
+        while parent[index] != index:
+            parent[index] = parent[parent[index]]
+            index = parent[index]
+        return index
+
+    for a, b in zip(first, second):
+        a_root = find(int(a))
+        b_root = find(int(b))
+        if a_root != b_root:
+            parent[b_root] = a_root
+
+    components = {}
+    for atom in range(len(positions)):
+        components.setdefault(find(atom), []).append(atom)
+
+    symbols = np.asarray(R.ELEMENTS, dtype=object)[types]
+    candidates = []
+    for members in components.values():
+        member_symbols = symbols[members]
+        heavy = int(np.count_nonzero(member_symbols != "H"))
+        if heavy < 2:
+            continue
+        counts = {
+            symbol: int(np.count_nonzero(member_symbols == symbol))
+            for symbol in ("C", "N", "O", "H")
+        }
+        formula = "".join(
+            symbol + (str(counts[symbol]) if counts[symbol] > 1 else "")
+            for symbol in ("C", "N", "O", "H")
+            if counts[symbol]
+        )
+        seed_index = int(members[0]) // int(simulation.per_box)
+        candidates.append({
+            "seed": int(seeds[seed_index]),
+            "formula": formula,
+            "atoms": len(members),
+            "heavy": heavy,
+            "carbon": counts["C"],
+        })
+
+    largest = max(
+        candidates,
+        key=lambda item: (item["atoms"], item["heavy"], item["carbon"]),
+        default=None,
+    )
+    carbon = int(R.ELEMENT_INDEX["C"])
+    cc_bonds = int(np.count_nonzero(
+        (types[first] == carbon) & (types[second] == carbon)
+    ))
+    hottest = int(np.argmax(temperatures))
+
+    per_seed = []
+    atoms_per_box = int(simulation.per_box)
+    edge_boxes = first // atoms_per_box
+    for box, seed in enumerate(seeds):
+        here = [item for item in candidates if item["seed"] == int(seed)]
+        seed_largest = max(
+            here,
+            key=lambda item: (item["atoms"], item["heavy"], item["carbon"]),
+            default=None,
+        )
+        seed_edges = edge_boxes == box
+        seed_cc = int(np.count_nonzero(
+            seed_edges
+            & (types[first] == carbon)
+            & (types[second] == carbon)
+        ))
+        per_seed.append({
+            "seed": int(seed),
+            "largest": seed_largest,
+            "heavy_molecules": len(here),
+            "cc_bonds": seed_cc,
+            "temperature_K": round(float(temperatures[box])),
+        })
+
+    return {
+        "time_fs": float(simulation.elapsed_femtoseconds),
+        "largest": largest,
+        "heavy_molecules": len(candidates),
+        "cc_bonds": cc_bonds,
+        "hottest_seed": int(seeds[hottest]),
+        "hottest_K": round(float(temperatures[hottest])),
+        "per_seed": per_seed,
+    }
+
+
+def write_heartbeat(folder, seed, done, total, started, boxes_in_group=1,
+                    live=None):
     # How far through the current run this process is.
     #
     # The control panel cannot see the progress bar printed to the
@@ -1142,15 +1286,21 @@ def write_heartbeat(folder, seed, done, total, started):
     # gives the panel something to show in between.
 
     try:
-        with open(heartbeat_path(folder), "w") as handle:
-            json.dump({
+        temporary = heartbeat_path(folder) + ".part"
+        with open(temporary, "w") as handle:
+            payload = {
                 "pid": os.getpid(),
                 "seed": seed,
                 "steps_done": done,
                 "steps_total": total,
                 "run_started": started,
                 "updated": time.time(),
-            }, handle)
+                "boxes_in_group": int(boxes_in_group),
+            }
+            if live is not None:
+                payload["live"] = live
+            json.dump(payload, handle)
+        os.replace(temporary, heartbeat_path(folder))
     except OSError:
         pass
 
@@ -1324,6 +1474,37 @@ def condition_key(options):
         "expand_to": round(float(options.expand_to), 2),
         "hot_temperature": round(float(options.hot_temperature), 0),
         "cool_temperature": round(float(options.cool_temperature), 0),
+        "adaptive_recording": bool(
+            getattr(options, "adaptive_recording", False)
+        ),
+        "adaptive_candidate_fs": (
+            round(float(options.adaptive_candidate_fs), 3)
+            if getattr(options, "adaptive_recording", False) else 0.0
+        ),
+        "adaptive_pre_event_fs": (
+            round(float(options.adaptive_pre_event_fs), 3)
+            if getattr(options, "adaptive_recording", False) else 0.0
+        ),
+        "adaptive_post_event_fs": (
+            round(float(options.adaptive_post_event_fs), 3)
+            if getattr(options, "adaptive_recording", False) else 0.0
+        ),
+        "adaptive_energy_jump_ev": (
+            round(float(options.adaptive_energy_jump_ev), 6)
+            if getattr(options, "adaptive_recording", False) else 0.0
+        ),
+        "adaptive_close_contact_scale": (
+            round(float(options.adaptive_close_contact_scale), 4)
+            if getattr(options, "adaptive_recording", False) else 0.0
+        ),
+        "adaptive_reaction_window_fs": (
+            round(float(options.adaptive_reaction_window_fs), 3)
+            if getattr(options, "adaptive_recording", False) else 0.0
+        ),
+        "adaptive_chemical_context_fs": (
+            round(float(options.adaptive_chemical_context_fs), 3)
+            if getattr(options, "adaptive_recording", False) else 0.0
+        ),
     }
 
 
@@ -1331,27 +1512,29 @@ def folder_name(options):
     # A readable name that encodes the conditions, so a folder
     # says what it holds without opening it.
 
-    safe = options.mixture.replace(" ", "_").replace("+", "plus")
+    safe = options.mixture.strip().replace("+", "plus")
+    safe = "-".join(safe.replace("_", " ").split())
 
     parts = [
         safe,
-        f"box{options.box:g}",
+        f"{options.box:g}A",
         f"{options.picoseconds:g}ps",
     ]
 
-    if options.expand_to:
-        parts.append(f"to{options.expand_to:g}")
-
     if options.strikes:
         parts.append(
-            f"{options.strikes}strikes"
-            f"{options.strike_temperature / 1000:g}k"
+            f"lightning{options.strikes}x"
+            f"{options.strike_temperature / 1000:g}kK"
         )
-    else:
-        parts.append("quiet")
 
     if options.cool_temperature != 250.0:
-        parts.append(f"cool{options.cool_temperature:g}")
+        parts.append(f"cool{options.cool_temperature:g}K")
+
+    if getattr(options, "adaptive_recording", False):
+        candidate = float(options.adaptive_candidate_fs)
+        parts.append("v2" if candidate == 2.0 else f"v2-{candidate:g}fs")
+    else:
+        parts.append("v1")
 
     return "_".join(parts)
 
@@ -1385,7 +1568,9 @@ def existing_batch(directory):
     found = {
         "mixture": first.get("mixture"),
         "box": round(float(first.get("box", 0)), 2),
-        "picoseconds": round(float(first.get("picoseconds", 0)), 3),
+        "picoseconds": round(float(
+            first.get("requested_picoseconds", first.get("picoseconds", 0))
+        ), 3),
         "strikes": strikes,
         "strike_temperature": (
             round(float(first.get("strike_temperature", 0) or 0), 0)
@@ -1402,6 +1587,33 @@ def existing_batch(directory):
         "cool_temperature": round(
             float(first.get("cool_temperature", 250) or 250), 0
         ),
+        # Indexes written before version-2 recording existed are legacy by
+        # definition. Missing adaptive fields must compare as disabled rather
+        # than making an old folder unreadable or raising a KeyError.
+        "adaptive_recording": bool(
+            first.get("adaptive_recording", False)
+        ),
+        "adaptive_candidate_fs": round(float(
+            first.get("adaptive_candidate_fs", 0) or 0
+        ), 3),
+        "adaptive_pre_event_fs": round(float(
+            first.get("adaptive_pre_event_fs", 0) or 0
+        ), 3),
+        "adaptive_post_event_fs": round(float(
+            first.get("adaptive_post_event_fs", 0) or 0
+        ), 3),
+        "adaptive_energy_jump_ev": round(float(
+            first.get("adaptive_energy_jump_ev", 0) or 0
+        ), 6),
+        "adaptive_close_contact_scale": round(float(
+            first.get("adaptive_close_contact_scale", 0) or 0
+        ), 4),
+        "adaptive_reaction_window_fs": round(float(
+            first.get("adaptive_reaction_window_fs", 0) or 0
+        ), 3),
+        "adaptive_chemical_context_fs": round(float(
+            first.get("adaptive_chemical_context_fs", 0) or 0
+        ), 3),
     }
 
     return index, found
@@ -1538,6 +1750,14 @@ def run_continuation(options):
             "number": number,
             "file": name,
             "frames": len(recorder),
+            "recording_format": int(getattr(recorder, "format_version", 1)),
+            "adaptive_recording": bool(
+                getattr(options, "adaptive_recording", False)
+            ),
+            "adaptive_candidate_fs": (
+                float(options.adaptive_candidate_fs)
+                if getattr(options, "adaptive_recording", False) else None
+            ),
             "picoseconds": round(
                 (recorder.times[-1] - recorder.times[0]) / 1000.0, 3
             ),
@@ -1631,6 +1851,37 @@ def main():
     parser.add_argument("--friction", type=float, default=0.01)
     parser.add_argument("--capture-every", type=int, default=40,
                         help="simulation steps between recorded frames")
+    recording_mode = parser.add_mutually_exclusive_group()
+    recording_mode.add_argument(
+        "--adaptive-recording", dest="adaptive_recording",
+        action="store_true",
+        help="use version-2 event-aware recording (the default)",
+    )
+    recording_mode.add_argument(
+        "--legacy-recording", dest="adaptive_recording",
+        action="store_false",
+        help="write the original version-1 fixed-cadence format",
+    )
+    parser.set_defaults(adaptive_recording=True)
+    parser.add_argument(
+        "--adaptive-candidate-fs", type=float, default=2.0,
+        help="physical-time interval between adaptive candidate observations",
+    )
+    parser.add_argument("--adaptive-pre-event-fs", type=float, default=100.0)
+    parser.add_argument("--adaptive-post-event-fs", type=float, default=100.0)
+    parser.add_argument("--adaptive-energy-jump-ev", type=float, default=20.0)
+    parser.add_argument(
+        "--adaptive-close-contact-scale", type=float, default=0.35,
+        help="fraction of pair inner cutoff considered unusually compressed",
+    )
+    parser.add_argument(
+        "--adaptive-reaction-window-fs", type=float, default=20.0,
+        help="coalesce adjacent chemical changes into one protected window",
+    )
+    parser.add_argument(
+        "--adaptive-chemical-context-fs", type=float, default=10.0,
+        help="dense context before/after chemical reaction-window starts",
+    )
     parser.add_argument("--max-frames", type=int, default=40000)
     parser.add_argument("--strikes", type=int, default=0)
     parser.add_argument("--first-strike-fs", type=float, default=3000.0)
@@ -1650,15 +1901,15 @@ def main():
     )
     parser.add_argument(
         "--expand-to", type=float, default=0.0,
-        help=(
-            "grow the box to this size once expand-at-fs has "
-            "passed; 0 leaves it alone"
-        )
+        help=argparse.SUPPRESS,
     )
-    parser.add_argument("--expand-at-fs", type=float, default=2000.0)
+    parser.add_argument(
+        "--expand-at-fs", type=float, default=2000.0,
+        help=argparse.SUPPRESS,
+    )
     parser.add_argument(
         "--expand-rate", type=float, default=0.002,
-        help="fraction of the box size changed per captured chunk"
+        help=argparse.SUPPRESS,
     )
     parser.add_argument(
         "--continue-from", default=None,
@@ -1704,11 +1955,11 @@ def main():
         )
     )
     parser.add_argument(
-        "--group", type=int, default=1,
+        "--group", type=int, default=16,
         help=(
             "how many boxes to advance together in one process. "
-            "A single box leaves the card mostly idle, so eight "
-            "at once cost about twice one rather than eight times"
+            "A single box leaves the card mostly idle; use 1 for "
+            "legacy single-box scheduling"
         )
     )
     parser.add_argument("--verbose", action="store_true")
@@ -1739,7 +1990,40 @@ def main():
     parser.add_argument("--stride", type=int, default=2,
                         help="frame stride used when analysing")
 
+    adaptive_explicit = "--adaptive-recording" in sys.argv[1:]
     options = parser.parse_args()
+
+    if options.expand_to:
+        raise SystemExit(
+            "mid-simulation box expansion has been removed. Choose the "
+            "desired fixed size with --box before starting the run."
+        )
+
+    if options.adaptive_recording:
+        incompatible = []
+        if options.escape_per_ps or options.trap_per_ps or options.feed:
+            incompatible.append("open-box feed/escape/trapping")
+        if options.strikes:
+            incompatible.append("lightning strikes")
+        if options.continue_from:
+            incompatible.append("continuation")
+        if incompatible:
+            explanation = ", ".join(incompatible)
+            if adaptive_explicit:
+                raise SystemExit(
+                    "adaptive recording is not yet cadence-safe with "
+                    + explanation
+                )
+            options.adaptive_recording = False
+            print(
+                "using legacy recording for " + explanation,
+                file=sys.stderr,
+            )
+        if options.adaptive_candidate_fs <= 0:
+            raise SystemExit("adaptive-candidate-fs must be positive")
+
+    if options.group < 1:
+        raise SystemExit("group must be at least 1")
 
     from mixtures import STARTS
 
@@ -1803,21 +2087,30 @@ def main():
 
     wanted = condition_key(options)
 
-    if found is not None and found != wanted:
+    if found is not None:
+        def condition_differs(key):
+            existing = found.get(key)
+            requested = wanted[key]
+            if key == "picoseconds":
+                # Older indexes stored first-to-last-frame span, which is one
+                # capture interval shorter than the requested run duration.
+                return abs(float(existing) - float(requested)) > 0.011
+            return existing != requested
+
         differences = [
-            f"{key}: existing {found[key]} vs requested "
+            f"{key}: existing {found.get(key)} vs requested "
             f"{wanted[key]}"
             for key in wanted
-            if found.get(key) != wanted[key]
+            if condition_differs(key)
         ]
-
-        raise SystemExit(
-            "This folder already holds runs made under different "
-            "conditions:\n  "
-            + "\n  ".join(differences)
-            + "\n\nPooling them would produce averages that "
-            "describe neither. Use --out to write somewhere else."
-        )
+        if differences:
+            raise SystemExit(
+                "This folder already holds runs made under different "
+                "conditions:\n  "
+                + "\n  ".join(differences)
+                + "\n\nPooling them would produce averages that "
+                "describe neither. Use --out to write somewhere else."
+            )
 
     used = existing_seeds(options.out)
 

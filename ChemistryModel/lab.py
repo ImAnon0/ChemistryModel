@@ -44,7 +44,7 @@ TEMPLATE_FILE = "lab_templates.json"
 POLL_MILLISECONDS = 1500
 
 DEFAULT_CONCURRENCY = 3
-GROUP_SIZE = 8
+GROUP_SIZE = 16
 CHARACTERISATION_ROOT = "characterisation"
 
 
@@ -98,13 +98,20 @@ def entry_seeds(folder):
         for name in os.listdir(directory):
             if name.startswith("seed_") and name.endswith(".json"):
                 try:
-                    seeds.add(int(name[5:-5]))
-                except ValueError:
+                    path = os.path.join(directory, name)
+                    with open(path, encoding="utf-8") as handle:
+                        entry = json.load(handle)
+                    if entry.get("finished", True):
+                        seeds.add(int(name[5:-5]))
+                except (ValueError, json.JSONDecodeError, OSError):
                     continue
 
     if not seeds:
         for entry in read_index(folder):
-            if entry.get("seed") is not None:
+            if (
+                entry.get("seed") is not None
+                and entry.get("finished", True)
+            ):
                 seeds.add(int(entry["seed"]))
 
     return seeds
@@ -153,8 +160,8 @@ def matching_folder(root, wanted):
             "cool_temperature": round(
                 float(first.get("cool_temperature", 250) or 250), 0
             ),
-            "expand_to": round(
-                float(first.get("expand_to", 0) or 0), 2
+            "adaptive_recording": bool(
+                first.get("adaptive_recording", False)
             ),
         }
 
@@ -248,6 +255,7 @@ class Job:
         self.finished = None
         self.completed = 0
         self.headlines = []
+        self.live_chemistry = None
 
     def as_dict(self):
         return {
@@ -297,15 +305,51 @@ class Job:
             self.run_fraction = min(
                 beat["steps_done"] / beat["steps_total"], 1.0
             )
+            self.live_chemistry = beat.get("live")
 
-            self.run_seed = beat.get("seed")
+            reported_group = beat.get("boxes_in_group")
+            if reported_group is None:
+                # Compatibility with runners started before grouped
+                # heartbeats carried their size. New Lab soup jobs use the
+                # Lab group default unless they explicitly request another.
+                reported_group = GROUP_SIZE
+                if "--group" in self.arguments:
+                    position = self.arguments.index("--group") + 1
+                    if position < len(self.arguments):
+                        try:
+                            reported_group = int(self.arguments[position])
+                        except ValueError:
+                            pass
+            remaining = max(self.runs - self.completed, 1)
             self.inflight_runs = max(
-                1, int(beat.get("boxes_in_group", 1) or 1)
+                1, min(int(reported_group or 1), remaining)
             )
+
+            label = beat.get("seed")
+            if self.inflight_runs > 1 and self.seeds:
+                unfinished = [seed for seed in self.seeds if seed not in done]
+                try:
+                    first = int(str(label).split("-", 1)[0])
+                except (TypeError, ValueError):
+                    first = unfinished[0] if unfinished else self.seeds[0]
+                if first in done and unfinished:
+                    first = unfinished[0]
+                try:
+                    start = self.seeds.index(first)
+                except ValueError:
+                    start = 0
+                active = self.seeds[start:start + self.inflight_runs]
+                if active:
+                    label = (
+                        str(active[0]) if len(active) == 1
+                        else f"{active[0]}-{active[-1]}"
+                    )
+            self.run_seed = label
         else:
             self.run_fraction = 0.0
             self.run_seed = None
             self.inflight_runs = 1
+            self.live_chemistry = None
 
         index = read_index(self.out)
 
@@ -374,6 +418,9 @@ class Lab(QtWidgets.QWidget):
         self.tabs.addTab(self.build_run_tab(), "Run")
         self.tabs.addTab(self.build_batches_tab(), "Batches")
         self.tabs.addTab(self.build_results_tab(), "Results")
+        self.replay_tab_index = self.tabs.addTab(
+            self.build_replay_tab(), "Replay"
+        )
         self.tabs.addTab(self.build_molecules_tab(), "Molecules")
         self.tabs.currentChanged.connect(self.on_tab_changed)
 
@@ -385,6 +432,25 @@ class Lab(QtWidgets.QWidget):
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.tick)
         self.timer.start(POLL_MILLISECONDS)
+
+    # --------------------------------------------------------
+    # Replay tab
+
+    def build_replay_tab(self):
+        from lab_replay import ReplayWidget
+
+        self.replay_widget = ReplayWidget()
+        return self.replay_widget
+
+    def open_replay(self, path):
+        try:
+            self.replay_widget.load_path(os.path.abspath(path))
+        except Exception as problem:
+            QtWidgets.QMessageBox.warning(
+                self, "Cannot load trajectory", str(problem)
+            )
+            return
+        self.tabs.setCurrentIndex(self.replay_tab_index)
 
     # --------------------------------------------------------
     # Run tab
@@ -474,16 +540,6 @@ class Lab(QtWidgets.QWidget):
         )
         left.addRow("trap temp (K)", self.cool_temperature)
 
-        self.expand_to = self.choice(
-            [0, 15, 17, 19, 21, 24, 28], 0, 1
-        )
-        left.addRow("expand box to (A)", self.expand_to)
-
-        self.expand_at = self.choice(
-            [500, 1000, 2000, 4000], 2000, 0
-        )
-        left.addRow("expand at (fs)", self.expand_at)
-
         self.strikes = self.choice([0, 1, 2, 3, 5, 8, 10, 20], 0, 0)
         left.addRow("lightning strikes", self.strikes)
 
@@ -528,11 +584,12 @@ class Lab(QtWidgets.QWidget):
         left.addRow("save every (ps)", self.save_every)
 
         self.grouped = QtWidgets.QCheckBox(
-            "8 boxes at once, one group at a time"
+            f"{GROUP_SIZE} boxes at once, one group at a time"
         )
+        self.grouped.setChecked(True)
         self.grouped.setToolTip(
-            "Use batch_runner.py's grouped GPU mode with the fixed lab rule: "
-            "up to 8 boxes are advanced together, and the next group starts "
+            "Use batch_runner.py's grouped GPU mode with the lab default: "
+            f"up to {GROUP_SIZE} boxes are advanced together, and the next group starts "
             "only after the current group has completely finished."
         )
         self.grouped.stateChanged.connect(self.refresh_existing)
@@ -546,7 +603,7 @@ class Lab(QtWidgets.QWidget):
 
         for widget in (
             self.box_size, self.picoseconds, self.seeds,
-            self.cool_temperature, self.strikes, self.expand_to,
+            self.cool_temperature, self.strikes,
         ):
             widget.valueChanged.connect(self.refresh_existing)
 
@@ -651,7 +708,7 @@ class Lab(QtWidgets.QWidget):
         for widget in (
             self.mixture_box, self.box_size, self.seeds,
             self.first_seed, self.hot_temperature, self.hot_until,
-            self.expand_to, self.expand_at, self.capture_every,
+            self.capture_every,
             self.grouped,
         ):
             widget.setEnabled(not continuing)
@@ -689,7 +746,9 @@ class Lab(QtWidgets.QWidget):
             "cool_temperature": round(
                 self.cool_temperature.value(), 0
             ),
-            "expand_to": round(self.expand_to.value(), 2),
+            # Lightning still uses the compatibility recorder because its
+            # independent action cadence has not yet been decoupled.
+            "adaptive_recording": self.strikes.value() == 0,
         }
 
     def refresh_existing(self):
@@ -850,9 +909,9 @@ class Lab(QtWidgets.QWidget):
         return text
 
     def group_size(self):
-        # Hard lab rule: one grouped process advances at most eight boxes.
+        # One grouped process advances at most GROUP_SIZE boxes.
         # batch_runner.py already processes its groups sequentially, so a
-        # 26-run request becomes 8 + 8 + 8 + 2, never several groups at once.
+        # A remainder becomes a smaller final group, never a concurrent one.
         return GROUP_SIZE
 
     def group_note(self):
@@ -887,8 +946,16 @@ class Lab(QtWidgets.QWidget):
             f"{self.cool_temperature.value():g}",
         ]
 
-        if self.grouped.isChecked():
-            arguments += ["--group", str(self.group_size())]
+        arguments.append(
+            "--adaptive-recording"
+            if self.strikes.value() == 0
+            else "--legacy-recording"
+        )
+
+        arguments += [
+            "--group",
+            str(self.group_size() if self.grouped.isChecked() else 1),
+        ]
 
         seed_text = self.first_seed.currentText().strip()
 
@@ -897,12 +964,6 @@ class Lab(QtWidgets.QWidget):
                 arguments += ["--first-seed", str(int(float(seed_text)))]
             except ValueError:
                 pass
-
-        if self.expand_to.value() > 0:
-            arguments += [
-                "--expand-to", f"{self.expand_to.value():g}",
-                "--expand-at-fs", f"{self.expand_at.value():g}",
-            ]
 
         if self.strikes.value() > 0:
             arguments += [
@@ -939,6 +1000,7 @@ class Lab(QtWidgets.QWidget):
             f"{self.cool_temperature.value():g}",
             "--capture-every", str(int(self.capture_every.value())),
             "--save-every-ps", f"{self.save_every.value():g}",
+            "--legacy-recording",
         ]
 
         if self.strikes.value() > 0:
@@ -993,29 +1055,28 @@ class Lab(QtWidgets.QWidget):
         # Mirrors the naming in batch_runner so the panel can
         # watch the right folder before the batch has made it.
 
-        safe = self.mixture_box.currentText().replace(
-            " ", "_"
-        ).replace("+", "plus")
+        safe = self.mixture_box.currentText().strip().replace("+", "plus")
+        safe = "-".join(safe.replace("_", " ").split())
 
         parts = [
             safe,
-            f"box{self.box_size.value():g}",
+            f"{self.box_size.value():g}A",
             f"{self.picoseconds.value():g}ps",
         ]
 
-        if self.expand_to.value() > 0:
-            parts.append(f"to{self.expand_to.value():g}")
-
         if self.strikes.value() > 0:
             parts.append(
-                f"{int(self.strikes.value())}strikes"
-                f"{self.strike_temperature.value() / 1000:g}k"
+                f"lightning{int(self.strikes.value())}x"
+                f"{self.strike_temperature.value() / 1000:g}kK"
             )
-        else:
-            parts.append("quiet")
 
         if self.cool_temperature.value() != 250.0:
-            parts.append(f"cool{self.cool_temperature.value():g}")
+            parts.append(f"cool{self.cool_temperature.value():g}K")
+
+        if self.strikes.value() == 0:
+            parts.append("v2")
+        else:
+            parts.append("v1")
 
         return os.path.join(self.root, "_".join(parts))
 
@@ -1922,15 +1983,6 @@ class Lab(QtWidgets.QWidget):
             if partner_mode else "com"
         )
 
-        if repeats != 1 and repeats % 8 != 0:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Invalid repeat count",
-                "Characterisation repeats must be exactly 1, or a multiple "
-                "of 8 (8, 16, 24, ...). Partial groups are not allowed.",
-            )
-            return
-
         try:
             molecule = molecule_store.load_molecule(molecule_id)
             partner = (
@@ -1997,6 +2049,7 @@ class Lab(QtWidgets.QWidget):
             "--capture-every", str(int(capture_every)),
             "--box", f"{box:g}",
             "--repeats", str(repeats),
+            "--group", str(GROUP_SIZE),
             "--seed-list", ",".join(str(seed) for seed in planned),
             "--out", out,
         ]
@@ -2446,16 +2499,60 @@ class Lab(QtWidgets.QWidget):
         self.jobs_table = QtWidgets.QTableWidget()
         self.jobs_table.setColumnCount(8)
         self.jobs_table.setHorizontalHeaderLabels([
-            "batch", "state", "this run", "batch",
-            "runs", "elapsed", "left", "recent",
+            "batch", "state", "active group", "overall",
+            "finished", "elapsed", "estimated left", "live chemistry / results",
         ])
         self.jobs_table.horizontalHeader().setStretchLastSection(True)
         self.jobs_table.setSelectionBehavior(
             QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows
         )
         self.jobs_table.verticalHeader().setVisible(False)
+        self.jobs_table.itemSelectionChanged.connect(
+            self.draw_live_batch_details
+        )
 
-        layout.addWidget(self.jobs_table)
+        splitter = QtWidgets.QSplitter(
+            QtCore.Qt.Orientation.Vertical
+        )
+        splitter.addWidget(self.jobs_table)
+
+        live_panel = QtWidgets.QWidget()
+        live_layout = QtWidgets.QVBoxLayout(live_panel)
+
+        self.live_batch_title = QtWidgets.QLabel(
+            "Live chemistry — select a running batch"
+        )
+        title_font = self.live_batch_title.font()
+        title_font.setPointSize(title_font.pointSize() + 2)
+        title_font.setBold(True)
+        self.live_batch_title.setFont(title_font)
+        live_layout.addWidget(self.live_batch_title)
+
+        self.live_batch_summary = QtWidgets.QLabel(
+            "Live atom information will appear at the next progress update."
+        )
+        self.live_batch_summary.setWordWrap(True)
+        live_layout.addWidget(self.live_batch_summary)
+
+        self.live_seed_table = QtWidgets.QTableWidget()
+        self.live_seed_table.setColumnCount(8)
+        self.live_seed_table.setHorizontalHeaderLabels([
+            "seed", "largest structure", "atoms", "heavy atoms",
+            "carbon", "heavy molecules", "C-C bonds", "temperature K",
+        ])
+        self.live_seed_table.horizontalHeader().setStretchLastSection(True)
+        self.live_seed_table.verticalHeader().setVisible(False)
+        self.live_seed_table.setEditTriggers(
+            QtWidgets.QAbstractItemView.EditTrigger.NoEditTriggers
+        )
+        live_layout.addWidget(self.live_seed_table, stretch=1)
+
+        splitter.addWidget(live_panel)
+        splitter.setStretchFactor(0, 1)
+        splitter.setStretchFactor(1, 3)
+        splitter.setSizes([220, 650])
+
+        layout.addWidget(splitter, stretch=1)
 
         return page
 
@@ -2669,9 +2766,37 @@ class Lab(QtWidgets.QWidget):
                 )
 
                 if job.run_seed is not None:
-                    run_bar += f"  seed {job.run_seed}"
+                    label = str(job.run_seed)
+                    run_bar += (
+                        f"  seeds {label}"
+                        if job.inflight_runs > 1 or "-" in label
+                        else f"  seed {label}"
+                    )
             else:
                 run_bar = "-"
+
+            live_text = "   ".join(job.headlines[-2:])
+            live = job.live_chemistry
+            if job.state == "running" and live:
+                largest = live.get("largest")
+                if largest:
+                    largest_text = (
+                        f"largest: seed {largest.get('seed', '?')} "
+                        f"{largest.get('formula', '?')} "
+                        f"({largest.get('atoms', 0)} atoms, "
+                        f"{largest.get('heavy', 0)} heavy, "
+                        f"{largest.get('carbon', 0)} C)"
+                    )
+                else:
+                    largest_text = "largest: none with 2+ heavy atoms"
+                live_text = (
+                    f"{largest_text}   |   "
+                    f"heavy molecules: {live.get('heavy_molecules', 0)}   |   "
+                    f"C-C bonds: {live.get('cc_bonds', 0)}   |   "
+                    f"hottest: seed {live.get('hottest_seed', '?')} "
+                    f"{live.get('hottest_K', 0)} K   |   "
+                    f"time: {float(live.get('time_fs', 0)) / 1000.0:.2f} ps"
+                )
 
             values = [
                 job.name,
@@ -2681,7 +2806,7 @@ class Lab(QtWidgets.QWidget):
                 f"{job.completed}/{job.runs}",
                 clock(job.elapsed) if job.started else "-",
                 remaining,
-                "   ".join(job.headlines[-2:]),
+                live_text,
             ]
 
             for column, value in enumerate(values):
@@ -2700,6 +2825,89 @@ class Lab(QtWidgets.QWidget):
                 self.jobs_table.setItem(row, column, item)
 
         self.jobs_table.resizeColumnsToContents()
+        self.draw_live_batch_details()
+
+    def draw_live_batch_details(self):
+        if not hasattr(self, "live_seed_table"):
+            return
+
+        selected = self.jobs_table.selectionModel().selectedRows()
+        if selected:
+            row = selected[0].row()
+        else:
+            row = next(
+                (
+                    index for index, job in enumerate(self.jobs)
+                    if job.state == "running"
+                ),
+                -1,
+            )
+
+        if row < 0 or row >= len(self.jobs):
+            self.live_batch_title.setText(
+                "Live chemistry — select a running batch"
+            )
+            self.live_batch_summary.setText(
+                "Live atom information will appear at the next progress update."
+            )
+            self.live_seed_table.setRowCount(0)
+            return
+
+        job = self.jobs[row]
+        self.live_batch_title.setText(f"Live chemistry — {job.name}")
+        live = job.live_chemistry
+
+        if not live:
+            message = (
+                "Waiting for the next live chemistry update. Updates are "
+                "sparse so this panel does not add meaningful simulation load."
+                if job.state == "running"
+                else "No live chemistry snapshot is available for this batch."
+            )
+            self.live_batch_summary.setText(message)
+            self.live_seed_table.setRowCount(0)
+            return
+
+        largest = live.get("largest")
+        if largest:
+            largest_text = (
+                f"Largest structure: {largest.get('formula', '?')} in seed "
+                f"{largest.get('seed', '?')} — {largest.get('atoms', 0)} atoms, "
+                f"{largest.get('heavy', 0)} heavy, {largest.get('carbon', 0)} carbon"
+            )
+        else:
+            largest_text = "Largest structure: none with two or more heavy atoms"
+
+        self.live_batch_summary.setText(
+            f"{largest_text}     •     "
+            f"Heavy molecules: {live.get('heavy_molecules', 0)}     •     "
+            f"C–C bonds: {live.get('cc_bonds', 0)}     •     "
+            f"Hottest: seed {live.get('hottest_seed', '?')} at "
+            f"{live.get('hottest_K', 0)} K     •     "
+            f"Simulation time: {float(live.get('time_fs', 0)) / 1000.0:.2f} ps"
+        )
+
+        rows = list(live.get("per_seed", []))
+        self.live_seed_table.setRowCount(len(rows))
+        for table_row, record in enumerate(rows):
+            structure = record.get("largest") or {}
+            values = [
+                record.get("seed", "?"),
+                structure.get("formula", "—"),
+                structure.get("atoms", 0),
+                structure.get("heavy", 0),
+                structure.get("carbon", 0),
+                record.get("heavy_molecules", 0),
+                record.get("cc_bonds", 0),
+                record.get("temperature_K", 0),
+            ]
+            for column, value in enumerate(values):
+                self.live_seed_table.setItem(
+                    table_row, column,
+                    QtWidgets.QTableWidgetItem(str(value)),
+                )
+
+        self.live_seed_table.resizeColumnsToContents()
 
     # --------------------------------------------------------
     # Results tab
@@ -2744,7 +2952,7 @@ class Lab(QtWidgets.QWidget):
 
         row = QtWidgets.QHBoxLayout()
         row.addWidget(
-            self.button("Open in viewer", self.on_open_viewer)
+            self.button("Open in Replay", self.on_open_viewer)
         )
         row.addWidget(
             self.button("Dashboard", self.on_dashboard)
@@ -2903,10 +3111,7 @@ class Lab(QtWidgets.QWidget):
         if row < 0 or row >= len(self.results_paths):
             return
 
-        subprocess.Popen([
-            sys.executable, "run_reactive_gl.py",
-            "--load", os.path.abspath(self.results_paths[row]),
-        ])
+        self.open_replay(self.results_paths[row])
 
     def batch_numbers(self, index, key):
         values = [
@@ -3307,8 +3512,6 @@ class Lab(QtWidgets.QWidget):
             "hot_temperature": self.hot_temperature.value(),
             "hot_until": self.hot_until.value(),
             "cool_temperature": self.cool_temperature.value(),
-            "expand_to": self.expand_to.value(),
-            "expand_at": self.expand_at.value(),
             "strikes": self.strikes.value(),
             "strike_temperature": self.strike_temperature.value(),
             "strike_dissociation": self.strike_dissociation.value(),
@@ -3336,8 +3539,6 @@ class Lab(QtWidgets.QWidget):
             (self.hot_temperature, "hot_temperature"),
             (self.hot_until, "hot_until"),
             (self.cool_temperature, "cool_temperature"),
-            (self.expand_to, "expand_to"),
-            (self.expand_at, "expand_at"),
             (self.strikes, "strikes"),
             (self.strike_temperature, "strike_temperature"),
             (self.strike_dissociation, "strike_dissociation"),

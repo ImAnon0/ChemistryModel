@@ -156,6 +156,7 @@ class BatchedReactiveSimulation(ReactiveSimulation):
         self.neighbour_mask = torch.tensor(
             mask, device=self.device, dtype=torch.bool
         )
+        self._neighbour_weight = self.neighbour_mask.to(self.dtype)
 
         self.reference_positions = self.positions.clone()
         self.rebuild_count += 1
@@ -168,8 +169,18 @@ class BatchedReactiveSimulation(ReactiveSimulation):
 
     @property
     def potential_per_box(self):
-        with torch.no_grad():
-            per_atom = self.energy_per_atom(self.positions)
+        per_atom = getattr(self, "_potential_per_atom", None)
+        cache_is_current = (
+            per_atom is not None
+            and getattr(self, "_potential_cache_source", None)
+            is self.positions
+            and getattr(self, "_potential_cache_version", None)
+            == self.positions._version
+        )
+
+        if not cache_is_current:
+            with torch.no_grad():
+                per_atom = self.energy_per_atom(self.positions)
 
         return (
             torch.sum(self.by_box(per_atom), dim=1)
@@ -178,30 +189,45 @@ class BatchedReactiveSimulation(ReactiveSimulation):
 
     @property
     def kinetic_per_box(self):
+        kinetic, _ = self.thermodynamics_per_box
+        return kinetic
+
+    @property
+    def thermodynamics_per_box(self):
+        """Kinetic energy and temperature with one host transfer."""
         energies = 0.5 * self.masses * torch.sum(
             self.velocities ** 2, dim=1
         )
 
-        return (
-            torch.sum(self.by_box(energies), dim=1)
-            .detach().cpu().numpy() * 103.642
-        )
+        kinetic = torch.sum(self.by_box(energies), dim=1) * 103.642
+
+        freedom = max(3 * self.per_box - 3, 1)
+        temperature = kinetic / (0.5 * freedom * 8.617333e-5)
+
+        values = torch.stack((kinetic, temperature)).detach().cpu().numpy()
+        return values[0], values[1]
 
     @property
     def temperature_per_box(self):
         # Three degrees of freedom per atom, less the three taken
         # by the box as a whole not moving.
 
-        freedom = max(3 * self.per_box - 3, 1)
-
-        return self.kinetic_per_box / (
-            0.5 * freedom * 8.617333e-5
-        )
+        _, temperature = self.thermodynamics_per_box
+        return temperature
 
     def positions_for(self, box):
         start = box * self.per_box
 
         return self.positions_numpy[start:start + self.per_box]
+
+    @property
+    def positions_per_box(self):
+        """All box positions with one device-to-host transfer."""
+        return (
+            self.positions.detach()
+            .reshape(self.box_count, self.per_box, 3)
+            .cpu().numpy()
+        )
 
     def velocities_for(self, box):
         start = box * self.per_box
@@ -210,6 +236,35 @@ class BatchedReactiveSimulation(ReactiveSimulation):
             self.velocities[start:start + self.per_box]
             .detach().cpu().numpy()
         )
+
+    @property
+    def velocities_per_box(self):
+        """All box velocities with one device-to-host transfer."""
+        return (
+            self.velocities.detach()
+            .reshape(self.box_count, self.per_box, 3)
+            .cpu().numpy()
+        )
+
+    def chemical_observations(self):
+        """Split one compact device transfer into per-box pair diagnostics."""
+        combined = super().chemical_observation()
+        result = []
+        for box in range(self.box_count):
+            start = box * self.per_box
+            stop = start + self.per_box
+            keep = (
+                (combined["first"] >= start)
+                & (combined["first"] < stop)
+            )
+            result.append({
+                "first": combined["first"][keep] - start,
+                "second": combined["second"][keep] - start,
+                "distance": combined["distance"][keep],
+                "inner": combined["inner"][keep],
+                "taper": combined["taper"][keep],
+            })
+        return result
 
 
 def split_into_groups(seeds, group_size):
