@@ -154,6 +154,31 @@ def methane_ch_coordinate(samples=401):
     }
 
 
+def ammonia_nh_coordinate(samples=401):
+    """Stretch one ammonia N-H coordinate with the other atoms held fixed."""
+    symbols, equilibrium = build_box.BUILDERS["NH3"]()
+    direction = equilibrium[-1] / np.linalg.norm(equilibrium[-1])
+    distances = np.linspace(0.50, 3.0, samples)
+    types = R.types_from_symbols(symbols)
+    energies = []
+    for distance in distances:
+        positions = equilibrium.copy()
+        positions[-1] = direction * distance
+        energies.append(R.potential_energy(positions, types))
+    energies = np.asarray(energies)
+    minimum = int(np.argmin(energies))
+    derivative = np.diff(energies)
+    return {
+        "sampled_minimum_A": float(distances[minimum]),
+        "dissociation_coordinate_eV": float(energies[-1] - energies[minimum]),
+        "short_range_energy_eV": float(energies[0] - energies[-1]),
+        "capture_region_falling_steps": int(np.count_nonzero(
+            derivative[minimum:] < -1e-8
+        )),
+        "table": pair_local_diagnostic("N", "H"),
+    }
+
+
 def molecule_nve(name, steps=400, temperature=100.0):
     symbols, positions = build_box.BUILDERS[name]()
     positions = np.asarray(positions) + 5.0
