@@ -256,6 +256,7 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         # tensor, so it cannot stay an array either. A lazy property is the
         # only ordering that satisfies both.
         self._sato_values = sato_values
+        self._share_reactive_intermediates = True
 
         super().__init__(*args, **kwargs)
 
@@ -271,7 +272,10 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
 
     def energy_per_atom(self, positions):
         base = super().energy_per_atom(positions)
-        correction = self._hydrogen_transfer_competition(positions)
+        try:
+            correction = self._hydrogen_transfer_competition(positions)
+        finally:
+            self._reactive_intermediates = None
         return base + correction
 
     def _hydrogen_transfer_competition(self, positions):
@@ -288,94 +292,29 @@ class HighFidelityBatchedReactiveSimulation(BatchedReactiveSimulation):
         order, angles, cutoffs, thermostat, integration, etc. -- is untouched.
         """
 
-        neighbours = self.neighbours
-        mask = self.neighbour_mask.to(self.dtype)
-
-        offsets = positions[neighbours] - positions[:, None, :]
-        offsets = offsets - self.box_size * torch.round(
-            offsets / self.box_size
-        )
-
-        distances = torch.sqrt(
-            torch.clamp(torch.sum(offsets ** 2, dim=2), min=1e-12)
-        )
-
-        centre_types = self.types[:, None].expand_as(neighbours)
-        other_types = self.types[neighbours]
-
-        pair_inner = self.cutoff_inner[centre_types, other_types]
-        pair_outer = self.cutoff_outer[centre_types, other_types]
-        span = torch.clamp(pair_outer - pair_inner, min=1e-9)
-
-        fraction = torch.clamp(
-            (distances - pair_inner) / span, 0.0, 1.0
-        )
-        taper = (
-            0.5 * (1.0 + torch.cos(torch.pi * fraction)) * mask
-        )
-
-        coordination = torch.sum(taper, dim=1)
-        valence = self.valence[self.types]
-
-        # Reproduce the base bond-order calculation so the state energies use
-        # exactly the same distance/depth/width parameters as reactive_v1.
-        spare = torch.clamp(valence - coordination, min=0.0)
-        spare_other = spare[neighbours]
-
-        weighted = taper * spare_other
-        totals = torch.sum(weighted, dim=1)
-        totals_other = totals[neighbours]
-
-        share_out = torch.where(
-            totals[:, None] > 1e-9,
-            spare[:, None] * weighted
-            / torch.clamp(totals[:, None], min=1e-9),
-            torch.zeros_like(weighted),
-        )
-
-        share_back = torch.where(
-            totals_other > 1e-9,
-            spare_other * (taper * spare[:, None])
-            / torch.clamp(totals_other, min=1e-9),
-            torch.zeros_like(weighted),
-        )
-
-        order = torch.clamp(
-            1.0 + torch.minimum(share_out, share_back), 0.0, 3.0
-        ) * mask
-
-        lower = torch.clamp(order - 1.0, 0.0, 1.0)
-        upper = torch.clamp(order - 2.0, 0.0, 1.0)
-
-        def blend(single_table, double_table, triple_table):
-            single = single_table[centre_types, other_types]
-            double = double_table[centre_types, other_types]
-            triple = triple_table[centre_types, other_types]
-            first = single + (double - single) * lower
-            return first + (triple - first) * upper
-
-        pair_length = blend(
-            self.bond_length, self.double_length, self.triple_length
-        )
-        pair_depth = blend(
-            self.bond_depth, self.double_depth, self.triple_depth
-        )
-
-        # The same environment softening the base applied. This correction
-        # subtracts the local picture the base already counted, so the two
-        # must compute identical depths; otherwise the subtraction removes an
-        # energy that was never added and the transfer surface becomes a
-        # hybrid of a softened base and an unsoftened correction.
-        unsoftened_depth = pair_depth
-        pair_depth = pair_depth * self.environment_softening_factor(
-            taper, order, lower, mask, neighbours
-        )
-        pair_width = blend(
-            self.bond_width, self.double_width, self.triple_width
-        )
-
-        shift = distances - pair_length
-        repulsive = pair_depth * torch.exp(-2.0 * pair_width * shift)
+        cached = getattr(self, "_reactive_intermediates", None)
+        if cached is None or cached[0] is not positions:
+            raise RuntimeError(
+                "high-fidelity correction requires current base intermediates"
+            )
+        values = cached[1]
+        neighbours = values["neighbours"]
+        mask = values["mask"]
+        distances = values["distances"]
+        centre_types = values["centre_types"]
+        other_types = values["other_types"]
+        taper = values["taper"]
+        coordination = values["coordination"]
+        valence = values["valence"]
+        order = values["order"]
+        lower = values["lower"]
+        upper = values["upper"]
+        pair_length = values["pair_length"]
+        pair_depth = values["pair_depth"]
+        unsoftened_depth = values["unsoftened_depth"]
+        pair_width = values["pair_width"]
+        shift = values["shift"]
+        repulsive = values["repulsive"]
         attractive = 2.0 * pair_depth * torch.exp(-pair_width * shift)
 
         # These are full undirected-pair energy values. The base engine stores

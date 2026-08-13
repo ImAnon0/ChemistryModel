@@ -440,7 +440,24 @@ def potential_energy(positions, types, box_size=None,
 
                 angle = np.arccos(np.clip(cosine, -1.0, 1.0))
 
-                weight = taper[centre, first] * taper[centre, second]
+                first_taper = taper[centre, first]
+                second_taper = taper[centre, second]
+                angle_pair_taper = first_taper * second_taper
+                taper_difference = first_taper - second_taper
+                weaker_taper = 0.5 * (
+                    first_taper
+                    + second_taper
+                    - np.sqrt(taper_difference ** 2 + 1e-8)
+                    + 1e-4
+                )
+                lone_pair_directionality = np.clip(
+                    0.5 * lone_pairs[centre], 0.0, 1.0
+                )
+                angle_engagement = (
+                    weaker_taper
+                    + (1.0 - weaker_taper) * lone_pair_directionality
+                )
+                weight = angle_pair_taper * angle_engagement
 
                 angle_total += (
                     0.5

@@ -1,11 +1,23 @@
-# Simulation output
-*.xyz
+# Python environments and caches
+.venv/
+**/.venv/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+*.dist-info/
 
-# Downloaded model weights
+# Editors and operating-system files
+.vs/
+**/.vs/
+.idea/
+.vscode/
+*.pyproj
+.DS_Store
+Thumbs.db
+
+# Downloaded models and locally installed packages
 *.model
 mace_cache/
-
-# Packages installed with pip --target
 torch/
 ase/
 mace/
@@ -14,21 +26,23 @@ nvidia/
 sympy/
 networkx/
 functorch/
-*.dist-info/
-*.egg-info/
-**/.venv/
-**/.vs/
-**/__pycache__/
+
+# Simulation recordings and generated analysis
 *.npz
 *.xyz
-
-# Run output and analysis
 runs/
 results/
+characterisation/
+molecules/
 .analysis_cache/
 dashboard.html
 
-# Local settings the lab writes
+# Local Lab state
 lab_queue.json
 lab_templates.json
 mixtures.json
+
+# Scratch and benchmark output
+timing_test/
+tmp_*/
+*_patch.txt

@@ -14,6 +14,7 @@ import build_box
 
 from reactive_torch import ReactiveSimulation
 from recorder import Recorder
+from lab_renderer import AtomView, ELEMENT_COLOUR, ELEMENT_SIZE
 
 
 # ============================================================
@@ -83,21 +84,6 @@ CHANNEL_DISSOCIATION = 0.6
 from mixtures import STARTS
 
 
-# Standard chemistry colours, so the picture reads the way a
-# chemist expects.
-
-ELEMENT_COLOUR = {
-    "H": (0.92, 0.92, 0.92, 1.0),
-    "C": (0.28, 0.28, 0.30, 1.0),
-    "N": (0.19, 0.31, 0.97, 1.0),
-    "O": (0.90, 0.16, 0.13, 1.0),
-}
-
-# Roughly proportional to covalent radius.
-
-ELEMENT_SIZE = {"H": 0.42, "C": 0.72, "N": 0.68, "O": 0.64}
-
-
 def make_simulation(name="loose H + O", box=BOX_SIZE,
                     temperature=TEMPERATURE, seed=0):
     kind, contents = STARTS[name]
@@ -145,14 +131,6 @@ class Viewer(QtWidgets.QWidget):
         self.channel_dissociation = CHANNEL_DISSOCIATION
         self.atom_scale = 1.0
 
-        # Where the box is being squeezed or stretched to. The
-        # change is applied a fraction at a time rather than all
-        # at once, because scaling every coordinate also scales
-        # the bonds, and a sudden jump would leave every molecule
-        # badly stretched at the moment of the change.
-
-        self.target_box = float(BOX_SIZE)
-        self.box_rate = 0.002
         self.playback_fps = PLAYBACK_FPS
         self.last_advance = time.perf_counter()
 
@@ -177,7 +155,7 @@ class Viewer(QtWidgets.QWidget):
 
         layout = QtWidgets.QHBoxLayout(self)
 
-        self.view = gl.GLViewWidget()
+        self.view = AtomView()
         self.view.setCameraPosition(distance=self.box_size * 2.2)
 
         layout.addWidget(self.view, stretch=4)
@@ -483,7 +461,9 @@ class Viewer(QtWidgets.QWidget):
         self.scale_slider.valueChanged.connect(self.on_atom_scale)
         right.addWidget(self.scale_slider)
 
-        self.box_label = QtWidgets.QLabel(f"box {BOX_SIZE:.1f} A")
+        self.box_label = QtWidgets.QLabel(
+            f"next run box  {BOX_SIZE:.1f} A"
+        )
         right.addWidget(self.box_label)
 
         self.box_slider = QtWidgets.QSlider(
@@ -669,8 +649,6 @@ class Viewer(QtWidgets.QWidget):
         )
 
     def on_box_size(self, value):
-        self.target_box = float(value) / 10.0
-
         self.update_box_label()
 
     def update_box_label(self):
@@ -678,76 +656,13 @@ class Viewer(QtWidgets.QWidget):
 
         density = count / (self.box_size ** 3)
 
-        moving = (
-            "  ->  {:.1f}".format(self.target_box)
-            if abs(self.target_box - self.box_size) > 0.05
-            else ""
-        )
+        requested = self.box_slider.value() / 10.0
 
         self.box_label.setText(
-            f"box {self.box_size:.1f} A{moving}"
-            f"   {density:.3f} atoms/A^3"
+            f"next run box  {requested:.1f} A"
+            f"   current {self.box_size:.1f} A"
+            f" / {density:.3f} atoms/A^3"
         )
-
-    def resize_box(self):
-        # Nudge the box toward its target and scale every
-        # coordinate with it.
-        #
-        # This is how a barostat works: squeeze the cell and the
-        # contents come along. Doing it in small steps lets the
-        # bonds relax between changes, so nothing is left stretched
-        # or crushed. Compressing raises the density, which makes
-        # collisions more frequent and drives reactions; expanding
-        # does the opposite.
-
-        difference = self.target_box - self.box_size
-
-        if abs(difference) < 0.01:
-            return
-
-        step = np.clip(
-            difference,
-            -self.box_rate * self.box_size,
-            self.box_rate * self.box_size,
-        )
-
-        new_size = self.box_size + step
-
-        factor = new_size / self.box_size
-
-        self.simulation.positions = (
-            self.simulation.positions * factor
-        )
-
-        self.simulation.box_size = float(new_size)
-
-        self.box_size = float(new_size)
-
-        # The camera pulls back with the cell, otherwise the
-        # contents appear to shrink into the distance as the box
-        # grows around them. Atoms keep their true size, since
-        # they are drawn in world units and an atom does not
-        # change size when the box does.
-
-        self.view.opts["distance"] *= factor
-
-        half = self.box_size / 2.0
-
-        self.view.opts["center"] = pg.Vector(half, half, half)
-
-        # The neighbour table and the forces both depend on the
-        # cell, so both have to be rebuilt after a change.
-
-        self.simulation.reference_positions = None
-        self.simulation.build_neighbours()
-
-        self.simulation.forces, self.simulation._potential_energy = (
-            self.simulation.compute_forces()
-        )
-
-        self.add_box_outline()
-
-        self.update_box_label()
 
     def on_steps(self, value):
         self.steps_per_frame = int(value)
@@ -1334,8 +1249,6 @@ class Viewer(QtWidgets.QWidget):
         )
 
         self.box_size = float(self.simulation.box_size)
-        self.target_box = self.box_size
-
         self.update_box_label()
 
         self.time_history.clear()
@@ -1398,8 +1311,6 @@ class Viewer(QtWidgets.QWidget):
             return
 
         if not self.paused:
-            self.resize_box()
-
             # The frame's worth of stepping is broken into chunks
             # so the recorder can sample partway through. Copying
             # 82 positions off the GPU costs about a kilobyte and
