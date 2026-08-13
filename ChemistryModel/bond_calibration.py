@@ -389,6 +389,53 @@ def hydrazine_nn_coordinate(samples=401):
     }
 
 
+def hydroxylamine_geometry(no_distance=1.453):
+    """Approximate NH2OH geometry for a controlled N-O coordinate."""
+    nitrogen = np.array([0.0, 0.0, 0.0])
+    oxygen = np.array([0.0, 0.0, no_distance])
+    atoms = [nitrogen, oxygen]
+    hno_polar = math.radians(107.0)
+    hnh_angle = math.radians(103.3)
+    cos_separation = (
+        math.cos(hnh_angle) - math.cos(hno_polar) ** 2
+    ) / math.sin(hno_polar) ** 2
+    separation = math.acos(np.clip(cos_separation, -1.0, 1.0))
+    for turn in (-0.5 * separation, 0.5 * separation):
+        atoms.append(1.016 * np.array([
+            math.sin(hno_polar) * math.cos(turn),
+            math.sin(hno_polar) * math.sin(turn),
+            math.cos(hno_polar),
+        ]))
+    oh_polar = math.radians(180.0 - 101.4)
+    atoms.append(oxygen + 0.962 * np.array([
+        math.sin(oh_polar), 0.0, math.cos(oh_polar)
+    ]))
+    return ["N", "O", "H", "H", "H"], np.asarray(atoms)
+
+
+def hydroxylamine_no_coordinate(samples=401):
+    """Move fixed NH2 and OH fragments along their N-O coordinate."""
+    distances = np.linspace(1.0, 3.2, samples)
+    symbols, _ = hydroxylamine_geometry()
+    types = R.types_from_symbols(symbols)
+    energies = []
+    for distance in distances:
+        _, positions = hydroxylamine_geometry(distance)
+        energies.append(R.potential_energy(positions, types))
+    energies = np.asarray(energies)
+    minimum = int(np.argmin(energies))
+    derivative = np.diff(energies)
+    return {
+        "sampled_minimum_A": float(distances[minimum]),
+        "dissociation_coordinate_eV": float(energies[-1] - energies[minimum]),
+        "short_range_energy_eV": float(energies[0] - energies[-1]),
+        "capture_region_falling_steps": int(np.count_nonzero(
+            derivative[minimum:] < -1e-8
+        )),
+        "table": pair_local_diagnostic("N", "O"),
+    }
+
+
 def molecule_nve(name, steps=400, temperature=100.0):
     symbols, positions = build_box.BUILDERS[name]()
     positions = np.asarray(positions) + 5.0
@@ -485,6 +532,30 @@ def methanol_nve(steps=400, temperature=100.0):
 def hydrazine_nve(steps=400, temperature=100.0):
     symbols, positions = hydrazine_geometry(
         float(pair_local_diagnostic("N", "N")["re_A"])
+    )
+    simulation = ReactiveSimulation(
+        symbols, positions + 5.0, 14.0, target_temperature=temperature,
+        friction=0.0, device="cpu", random_seed=19,
+    )
+    simulation.thermostat_is_on = False
+    start = float(simulation.potential_energy + simulation.kinetic_energy)
+    initial = simulation.positions_numpy.copy()
+    simulation.step(steps)
+    end = float(simulation.potential_energy + simulation.kinetic_energy)
+    displacement = simulation.positions_numpy - initial
+    displacement -= simulation.box_size * np.round(displacement / simulation.box_size)
+    return {
+        "energy_start_eV": start,
+        "energy_end_eV": end,
+        "drift_eV": end - start,
+        "max_displacement_A": float(np.linalg.norm(displacement, axis=1).max()),
+        "capped_steps": int(simulation.capped_steps),
+    }
+
+
+def hydroxylamine_nve(steps=400, temperature=100.0):
+    symbols, positions = hydroxylamine_geometry(
+        float(pair_local_diagnostic("N", "O")["re_A"])
     )
     simulation = ReactiveSimulation(
         symbols, positions + 5.0, 14.0, target_temperature=temperature,
