@@ -112,6 +112,14 @@ def test_hydroxylamine_no_coordinate_has_stable_minimum_and_capture_path():
     assert result["capture_region_falling_steps"] == 0
 
 
+def test_hydrogen_peroxide_oo_coordinate_has_stable_minimum_and_capture_path():
+    result = calibration.hydrogen_peroxide_oo_coordinate()
+    assert abs(result["sampled_minimum_A"] - result["table"]["re_A"]) < 0.04
+    assert result["dissociation_coordinate_eV"] > 1.2
+    assert result["short_range_energy_eV"] > 0.0
+    assert result["capture_region_falling_steps"] == 0
+
+
 def test_amidogen_calibration_builder_has_expected_bent_geometry():
     symbols, positions = build_box.BUILDERS["NH2"]()
     assert symbols == ["N", "H", "H"]
@@ -145,6 +153,10 @@ def test_small_molecule_nve_baselines_remain_numerically_stable():
     hydroxylamine = calibration.hydroxylamine_nve(steps=200)
     assert abs(hydroxylamine["drift_eV"]) < 0.05, hydroxylamine
     assert hydroxylamine["capped_steps"] == 0, hydroxylamine
+
+    peroxide = calibration.hydrogen_peroxide_nve(steps=200)
+    assert abs(peroxide["drift_eV"]) < 0.05, peroxide
+    assert peroxide["capped_steps"] == 0, peroxide
 
 
 if __name__ == "__main__":
