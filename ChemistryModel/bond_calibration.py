@@ -112,6 +112,48 @@ def h2_curve(samples=401):
     }
 
 
+def pair_local_diagnostic(first, second):
+    """Report the raw table pair as a local two-body Morse oscillator."""
+    first_index = R.ELEMENT_INDEX[first]
+    second_index = R.ELEMENT_INDEX[second]
+    depth = float(R.BOND_DEPTH[first_index, second_index])
+    width = float(R.BOND_WIDTH[first_index, second_index])
+    return {
+        "re_A": float(R.BOND_LENGTH[first_index, second_index]),
+        "depth_eV": depth,
+        "width_inv_A": width,
+        "curvature_eV_A2": morse_curvature(depth, width),
+        "local_harmonic_cm-1": harmonic_wavenumber(
+            depth, width, R.MASS[first], R.MASS[second]
+        ),
+    }
+
+
+def methane_ch_coordinate(samples=401):
+    """Stretch one methane C-H coordinate with the other atoms held fixed."""
+    symbols, equilibrium = build_box.BUILDERS["CH4"]()
+    direction = equilibrium[-1] / np.linalg.norm(equilibrium[-1])
+    distances = np.linspace(0.55, 3.0, samples)
+    types = R.types_from_symbols(symbols)
+    energies = []
+    for distance in distances:
+        positions = equilibrium.copy()
+        positions[-1] = direction * distance
+        energies.append(R.potential_energy(positions, types))
+    energies = np.asarray(energies)
+    minimum = int(np.argmin(energies))
+    derivative = np.diff(energies)
+    return {
+        "sampled_minimum_A": float(distances[minimum]),
+        "dissociation_coordinate_eV": float(energies[-1] - energies[minimum]),
+        "short_range_energy_eV": float(energies[0] - energies[-1]),
+        "capture_region_falling_steps": int(np.count_nonzero(
+            derivative[minimum:] < -1e-8
+        )),
+        "table": pair_local_diagnostic("C", "H"),
+    }
+
+
 def molecule_nve(name, steps=400, temperature=100.0):
     symbols, positions = build_box.BUILDERS[name]()
     positions = np.asarray(positions) + 5.0
