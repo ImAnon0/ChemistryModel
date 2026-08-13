@@ -44,7 +44,7 @@ ANGLE_STIFFNESS = {"C": 3.0, "N": 2.6, "O": 2.6, "H": 0.0}
 # (length in angstroms, dissociation energy in kJ/mol, Morse width)
 
 BOND_TABLE = {
-    ("H", "H"): (0.74, 435.0, 1.94),
+    ("H", "H"): (0.74144, 458.02871, 1.94458),
     ("C", "H"): (1.09, 439.0, 1.80),
     ("N", "H"): (1.01, 449.0, 1.95),
     ("O", "H"): (0.96, 498.0, 2.18),
