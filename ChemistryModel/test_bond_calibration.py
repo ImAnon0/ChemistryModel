@@ -4,6 +4,7 @@ import numpy as np
 import torch
 
 import bond_calibration as calibration
+import build_box
 import reactive as R
 from reactive_torch import ReactiveSimulation
 
@@ -101,6 +102,14 @@ def test_hydrazine_nn_coordinate_has_stable_minimum_and_capture_path():
     assert result["dissociation_coordinate_eV"] > 1.4
     assert result["short_range_energy_eV"] > 0.0
     assert result["capture_region_falling_steps"] == 0
+
+
+def test_amidogen_calibration_builder_has_expected_bent_geometry():
+    symbols, positions = build_box.BUILDERS["NH2"]()
+    assert symbols == ["N", "H", "H"]
+    assert positions.shape == (3, 3)
+    assert np.allclose(np.linalg.norm(positions[1:] - positions[0], axis=1),
+                       1.0109)
 
 
 def test_small_molecule_nve_baselines_remain_numerically_stable():

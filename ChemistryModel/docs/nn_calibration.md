@@ -109,3 +109,41 @@ shows that the steeper width can run safely, but not that it is physically more
 accurate overall. Revisit only with an independent hydrazine harmonic force
 constant/reference potential and a validation that directly exercises N-N
 formation and dissociation.
+
+This conclusion is provisional: a dedicated `[calibration] NH2 radicals`
+mixture was subsequently added so matched runs can directly test hydrazine
+formation and persistence. The width experiment may be reopened if that
+targeted evidence distinguishes the candidates.
+
+The focused width-2.00 control used 24 NH2 radicals, seeds 18000--18015, 5 ps
+and a 10 A fixed box. All 16 runs were stable with zero strikes, energy jumps
+or move caps; all formed and retained N2H4 as their largest closed-shell
+product. This directly exercises N-N formation and persistence, so the 2.938
+candidate is reopened for an exact matched comparison.
+
+## Focused width result
+
+The exact matched 2.938 candidate was also numerically stable, but it strongly
+suppressed the chemistry it was intended to improve:
+
+| Quantity | Width 2.00 control | Width 2.938 candidate | Difference |
+| --- | ---: | ---: | ---: |
+| finished / stable | 16 / 16 | 16 / 16 | 0 |
+| strikes / energy jumps / move caps | 0 / 0 / 0 | 0 / 0 / 0 | 0 |
+| runs forming and retaining N2H4 | 16 / 16 | 5 / 16 | -11 |
+| mean heavy bonds formed | 5.500 | 0.500 | -5.000 |
+| mean largest structure (atoms) | 6.000 | 1.875 | -4.125 |
+| mean largest heavy-atom count | 2.000 | 0.625 | -1.375 |
+| mean final temperature (K) | 251.94 | 275.47 | +23.53 |
+| mean final potential (eV) | -235.74 | -229.04 | +6.70 |
+
+In the eleven failed candidate seeds, no N-N-containing species was recorded
+even transiently. The narrower attractive/capture region implied by the larger
+Morse width prevents most NH2 radical pairs from forming hydrazine under the
+same controlled conditions. This is a material reaction-dynamics regression,
+despite the improved single-number frequency match.
+
+Final recommendation: reject 2.938 and retain width 2.00. The focused result
+confirms the original conservative decision with direct N-N evidence. Matching
+the polyatomic fundamental by changing only pair width sacrifices ordinary
+N-N capture and is therefore not an acceptable calibration.
