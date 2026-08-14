@@ -1,4 +1,5 @@
 import numpy as np
+from chemistry_format import molecular_formula
 
 from ase.neighborlist import natural_cutoffs, NeighborList
 
@@ -133,20 +134,7 @@ def formulas_from_pairs(atoms, bonded_pairs):
     for group_index in range(group_count):
         members = symbols[group_labels == group_index]
 
-        counts = {}
-
-        for symbol in members:
-            counts[symbol] = counts.get(symbol, 0) + 1
-
-        formula = ""
-
-        for symbol in sorted(counts):
-            formula += symbol
-
-            if counts[symbol] > 1:
-                formula += str(counts[symbol])
-
-        formulas.append(formula)
+        formulas.append(molecular_formula(members))
 
     return formulas
 

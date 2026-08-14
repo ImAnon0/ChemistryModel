@@ -930,7 +930,7 @@ def prepare_box(molecule, box_size, seed):
     return symbols, positions.astype(np.float32)
 
 
-def atom_partner(symbol):
+def atom_reactant(symbol):
     symbol = str(symbol)
     bonds = np.empty((0, 2), dtype=np.int32)
     return {
@@ -942,18 +942,27 @@ def atom_partner(symbol):
         "positions": np.zeros((1, 3), dtype=np.float32),
         "bonds": bonds,
         "graph_fingerprint": molecule_store.graph_fingerprint([symbol], bonds),
-        "source": {"kind": "elemental partner"},
+        "source": {"kind": "elemental reactant"},
     }
 
 
-def load_partner(partner_id, library):
-    if not partner_id:
-        raise ValueError("partner test needs a partner")
+atom_partner = atom_reactant
 
-    if str(partner_id).startswith("atom:"):
-        return atom_partner(str(partner_id).split(":", 1)[1])
 
-    return molecule_store.load_molecule(partner_id, root=library)
+def load_reactant(reactant_id, library):
+    if not reactant_id:
+        raise ValueError("experiment needs a reactant")
+
+    if str(reactant_id).startswith("atom:"):
+        symbol = str(reactant_id).split(":", 1)[1]
+        if symbol not in ("H", "C", "N", "O"):
+            raise ValueError(f"unsupported elemental reactant: {symbol}")
+        return atom_reactant(symbol)
+
+    return molecule_store.load_molecule(reactant_id, root=library)
+
+
+load_partner = load_reactant
 
 
 def minimum_pair_box_size(molecule, partner, start_gap, margin=4.0):
@@ -970,22 +979,46 @@ def minimum_pair_box_size(molecule, partner, start_gap, margin=4.0):
 
 
 def prepare_collision_box(molecule, partner, box_size, seed, start_gap,
-                          impact_target="com"):
+                          impact_target="com", sampling_mode=None,
+                          target_atom=None):
     first_symbols, first_positions = _centred_positions(molecule)
     second_symbols, second_positions = _centred_positions(partner)
 
     generator = np.random.default_rng(int(seed) + 67019)
-    first_positions = first_positions @ rotation_matrix(generator).T
-    second_positions = second_positions @ rotation_matrix(generator).T
+    if sampling_mode is None:
+        sampling_mode = "random_orientation" if impact_target == "com" else "targeted_random"
+    sampling_mode = str(sampling_mode)
+    if sampling_mode not in ("targeted", "random_orientation", "targeted_random"):
+        raise ValueError(f"unknown sampling mode: {sampling_mode}")
+    if sampling_mode != "targeted":
+        first_positions = first_positions @ rotation_matrix(generator).T
+        second_positions = second_positions @ rotation_matrix(generator).T
 
     impact_target = str(impact_target or "com").lower()
     target_symbol = _aim_symbol(impact_target)
+    requested_target_atom = target_atom
     target_atom = None
     los_clearance = None
     los_blockers = None
 
-    if target_symbol is None:
-        if impact_target != "com":
+    targeted = sampling_mode in ("targeted", "targeted_random")
+    if targeted:
+        if requested_target_atom is not None:
+            target_atom = int(requested_target_atom)
+            if target_atom < 0 or target_atom >= len(first_symbols):
+                raise ValueError("target atom is outside reactant A")
+            target_symbol = str(first_symbols[target_atom])
+        elif target_symbol is not None:
+            candidates = [index for index, symbol in enumerate(first_symbols)
+                          if str(symbol) == target_symbol]
+            if not candidates:
+                raise ValueError(f"{molecule.get('id', 'reactant A')} has no {target_symbol} atom to aim at")
+            target_atom = int(candidates[0] if sampling_mode == "targeted" else generator.choice(candidates))
+        else:
+            target_atom = 0 if len(first_symbols) == 1 else None
+
+    if target_atom is None:
+        if impact_target != "com" and not targeted:
             raise ValueError(f"unknown collision impact target: {impact_target}")
         axis = _random_axis(generator)
         first_positions, second_positions, combined, safety = _safe_collision_layout(
@@ -998,16 +1031,6 @@ def prepare_collision_box(molecule, partner, box_size, seed, start_gap,
             start_gap,
         )
     else:
-        candidates = [
-            index for index, symbol in enumerate(first_symbols)
-            if str(symbol) == target_symbol
-        ]
-        if not candidates:
-            raise ValueError(
-                f"{molecule.get('id', 'molecule')} has no {target_symbol} atom "
-                f"to aim at"
-            )
-        target_atom = int(generator.choice(candidates))
         axis, los_clearance, los_blockers = _line_of_sight_axis(
             generator,
             first_positions,
@@ -1040,6 +1063,7 @@ def prepare_collision_box(molecule, partner, box_size, seed, start_gap,
         "axis": axis.astype(np.float64),
         "centre_distance_A": centre_distance,
         "impact_target": impact_target,
+        "sampling_mode": sampling_mode,
         "target_atom": target_atom,
         "target_symbol": target_symbol,
         "line_of_sight_clearance_A": los_clearance,
@@ -1318,6 +1342,8 @@ def run_group(molecule, partner, seeds, options):
                 seed,
                 options.start_gap,
                 options.impact_target,
+                options.sampling_mode,
+                options.target_atom_a,
             )
             boxes.append((symbols, positions))
             infos.append(info)
@@ -1535,6 +1561,8 @@ def write_experiment(folder, molecule, partner, options, requested_seeds):
             else {}
         ),
         "test": options.test,
+        "sampling_mode": str(options.sampling_mode),
+        "target_atom_a": options.target_atom_a,
         "molecule_id": molecule.get("id"),
         "formula": molecule.get("formula"),
         "graph_fingerprint": molecule.get("graph_fingerprint"),
@@ -1568,13 +1596,16 @@ def write_experiment(folder, molecule, partner, options, requested_seeds):
             "start_gap_A": float(options.start_gap),
             "approach_factor": float(options.approach_factor),
             "impact_target": str(options.impact_target),
-            "target_geometry_revision": (2 if str(options.impact_target) != "com" else 1),
+            "target_atom_a": options.target_atom_a,
+            "sampling_mode": str(options.sampling_mode),
+            "target_geometry_revision": (2 if str(options.sampling_mode) != "random_orientation" else 1),
             "collision_geometry": (
                 "head-on centre-of-mass approach; random independent orientations"
-                if str(options.impact_target) == "com"
-                else "partner COM trajectory aimed through a selected target atom; "
-                     "random independent orientations; attack axis selected from random "
-                     "candidates for a clear line of sight to the requested atom"
+                if str(options.sampling_mode) == "random_orientation"
+                else "partner COM trajectory aimed through the selected atom on reactant A; "
+                     + ("stored orientations retained"
+                        if str(options.sampling_mode) == "targeted"
+                        else "independent orientations randomized around the targeted encounter")
             ),
             "approach_definition": (
                 "directed relative COM speed = approach_factor times the initial "
@@ -1611,6 +1642,12 @@ def main():
         ),
     )
     parser.add_argument("--partner", default=None)
+    parser.add_argument(
+        "--sampling-mode", default=None,
+        choices=["targeted", "random_orientation", "targeted_random"],
+        help="How orientations and the approach axis are sampled.",
+    )
+    parser.add_argument("--target-atom-a", type=int, default=None)
     parser.add_argument("--temperature", type=float, default=250.0)
     parser.add_argument("--ps", dest="picoseconds", type=float, default=10.0)
     parser.add_argument("--box", type=float, default=12.0)
@@ -1661,13 +1698,22 @@ def main():
 
     options = parser.parse_args()
 
+    if options.sampling_mode is None:
+        options.sampling_mode = (
+            "random_orientation" if options.impact_target == "com"
+            else "targeted_random"
+        )
+
     if options.repeats < 1:
         raise SystemExit("repeats must be at least 1")
 
     if options.group < 1:
         raise SystemExit("group must be at least 1")
 
-    molecule = molecule_store.load_molecule(options.molecule, root=options.library)
+    try:
+        molecule = load_reactant(options.molecule, options.library)
+    except Exception as problem:
+        raise SystemExit(f"cannot load reactant A: {problem}")
     partner = None
     if options.test == "with_partner":
         try:
@@ -1687,7 +1733,11 @@ def main():
             raise SystemExit("diagnostic-coarse-sample-fs must be greater than zero")
 
         target_symbol = _aim_symbol(options.impact_target)
-        if target_symbol is not None and target_symbol not in list(molecule["symbols"]):
+        if options.target_atom_a is not None and not (
+            0 <= int(options.target_atom_a) < len(molecule["symbols"])
+        ):
+            raise SystemExit("target-atom-a is outside reactant A")
+        if options.target_atom_a is None and target_symbol is not None and target_symbol not in list(molecule["symbols"]):
             raise SystemExit(
                 f"{molecule.get('id', options.molecule)} contains no "
                 f"{target_symbol} atom to aim at"
@@ -1790,8 +1840,9 @@ def main():
         if partner is not None:
             print(
                 f"collision: gap {options.start_gap:g} A, approach "
-                f"{options.approach_factor:g} x thermal RMS, aim "
-                f"{options.impact_target}"
+                f"{options.approach_factor:g} x thermal RMS, sampling "
+                f"{options.sampling_mode}"
+                + ("" if options.target_atom_a is None else f", target A #{int(options.target_atom_a)+1}")
             )
         if len(requested) == 1:
             print("fixed grouping: single-box characterisation")

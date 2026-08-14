@@ -37,6 +37,28 @@ BUILT_IN = {
     "H rich loose": ("atoms", {"C": 8, "H": 60, "N": 6, "O": 8}),
     "H rich x5": ("atoms", {"C": 40, "H": 300, "N": 30, "O": 40}),
     "carbon rich": ("atoms", {"C": 80, "H": 200, "N": 20, "O": 30}),
+    "carbon skeleton growth": ("atoms", {"C": 94, "H": 236}),
+    "oxygenated carbon growth": (
+        "atoms", {"C": 73, "H": 183, "O": 73}
+    ),
+    "amino carbon growth": ("atoms", {"C": 83, "H": 206, "N": 41}),
+    "amino alcohol growth": (
+        "atoms", {"C": 66, "H": 197, "N": 33, "O": 33}
+    ),
+    "balanced complex CHNO": (
+        "atoms", {"C": 63, "H": 188, "N": 31, "O": 47}
+    ),
+    "[calibration] NH2 radicals": ("molecules", {"NH2": 24}),
+    "[calibration] OH radicals": ("molecules", {"OH": 24}),
+    "[validation] stable small molecules": (
+        "molecules", {"H2": 4, "CH4": 4, "NH3": 4, "H2O": 4}
+    ),
+    "[validation] nitrogen radicals": (
+        "molecules", {"NH3": 8, "NH2": 8, "H2": 4}
+    ),
+    "[validation] oxygen radicals": (
+        "molecules", {"H2O": 8, "OH": 8, "H2": 4}
+    ),
 }
 
 

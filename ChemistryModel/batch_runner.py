@@ -45,7 +45,7 @@ DEFAULT_SCHEDULE = [
 
 
 def build_simulation(mixture, box_size, seed, temperature,
-                     time_step, friction, device):
+                     time_step, friction, device, compiled_forces=False):
     import build_box
 
     from reactive_torch import ReactiveSimulation
@@ -63,7 +63,7 @@ def build_simulation(mixture, box_size, seed, temperature,
             contents, box_size, random_seed=seed
         )
 
-    return ReactiveSimulation(
+    simulation = ReactiveSimulation(
         symbols=symbols,
         positions=positions,
         box_size=box_size,
@@ -73,6 +73,9 @@ def build_simulation(mixture, box_size, seed, temperature,
         device=device,
         random_seed=seed,
     )
+    if compiled_forces:
+        simulation.enable_compiled_forces()
+    return simulation
 
 
 def temperature_at(schedule, femtoseconds):
@@ -187,6 +190,7 @@ def run_one(mixture, seed, options, progress=None,
         options.time_step,
         options.friction,
         options.device,
+        getattr(options, "compiled_forces", False),
     )
 
     adaptive = bool(getattr(options, "adaptive_recording", False))
@@ -332,6 +336,14 @@ def run_one(mixture, seed, options, progress=None,
                 radius=options.strike_radius,
                 temperature=options.strike_temperature,
                 dissociation=options.strike_dissociation,
+            )
+
+            recorder.record_external_event(
+                simulation.elapsed_femtoseconds,
+                "strike",
+                deposited_eV=float(report.get("deposited", 0.0)),
+                struck_atoms=int(report.get("struck", 0)),
+                dissociated_bonds=int(report.get("dissociated", 0)),
             )
 
             if options.verbose:
@@ -520,6 +532,8 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
         device=options.device,
         random_seed=seeds[0],
     )
+    if getattr(options, "compiled_forces", False):
+        simulation.enable_compiled_forces()
 
     adaptive = bool(getattr(options, "adaptive_recording", False))
     recorder_class = AdaptiveRecorder if adaptive else Recorder
@@ -709,6 +723,15 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
         ):
             reports = strike_group(simulation, generators, options)
 
+            for recorder, report in zip(recorders, reports):
+                recorder.record_external_event(
+                    simulation.elapsed_femtoseconds,
+                    "strike",
+                    deposited_eV=float(report.get("deposited", 0.0)),
+                    struck_atoms=int(report.get("struck", 0)),
+                    dissociated_bonds=int(report.get("dissociated", 0)),
+                )
+
             if options.verbose:
                 broken = sum(
                     report["dissociated"] for report in reports
@@ -750,7 +773,7 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
 
                 entry = summarise_run(
                     recorder, simulation, seed, each, strikes_done,
-                    options, analysis,
+                    options, analysis, box=box,
                 )
                 entry["finished"] = False
 
@@ -805,13 +828,22 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
 
 
 def summarise_run(recorder, simulation, seed, seconds, strikes,
-                  options, analysis):
+                  options, analysis, box=None):
     # Everything written about one finished run, whether it was
     # computed alone or alongside others.
 
     result = analysis.analyse(
         recorder, stride=options.stride, structures=False
     )
+
+    if box is None:
+        move_cap_events = int(simulation.capped_steps)
+    else:
+        start = box * simulation.per_box
+        stop = start + simulation.per_box
+        move_cap_events = int(np.sum(
+            simulation.capped_atom_counts[start:stop]
+        ))
 
     return {
         "number": 0,
@@ -835,6 +867,7 @@ def summarise_run(recorder, simulation, seed, seconds, strikes,
         "cool_temperature": options.cool_temperature,
         "frames": len(recorder),
         "recording_format": int(getattr(recorder, "format_version", 1)),
+        "compiled_forces": bool(getattr(options, "compiled_forces", False)),
         "adaptive_recording": bool(getattr(options, "adaptive_recording", False)),
         "adaptive_candidate_fs": (
             float(options.adaptive_candidate_fs)
@@ -869,9 +902,29 @@ def summarise_run(recorder, simulation, seed, seconds, strikes,
         "species_count": result["species_count"],
         "stable": result.get("stable", True),
         "energy_jumps": result.get("energy_jumps", 0),
+        "spontaneous_energy_jumps": result.get(
+            "spontaneous_energy_jumps", result.get("energy_jumps", 0)
+        ),
+        "external_energy_injections": result.get(
+            "external_energy_injections", 0
+        ),
+        "declared_external_energy_events": result.get(
+            "declared_external_energy_events", 0
+        ),
+        "total_declared_external_energy_eV": result.get(
+            "total_declared_external_energy_eV", 0.0
+        ),
+        "largest_declared_external_energy_eV": result.get(
+            "largest_declared_external_energy_eV", 0.0
+        ),
+        "largest_external_energy_injection": result.get(
+            "largest_external_energy_injection", 0.0
+        ),
+        "numerical_failures": result.get("numerical_failures", 0),
         "largest_energy_jump": result.get(
             "largest_energy_jump", 0.0
         ),
+        "move_cap_events": move_cap_events,
         "final_temperature": result["temperature"]["final"],
         "final_potential": result["potential"]["final"],
     }
@@ -927,7 +980,7 @@ def run_grouped(planned, mixture, options, progress):
 
             entry = summarise_run(
                 recorder, simulation, seed, each, strikes,
-                options, analysis,
+                options, analysis, box=index,
             )
             entry["finished"] = True
 
@@ -1136,12 +1189,19 @@ def continue_one(path, options, progress=None):
             and simulation.elapsed_femtoseconds >= next_strike
             and strikes_done < options.strikes
         ):
-            discharge.apply_to(
+            report = discharge.apply_to(
                 simulation,
                 generator,
                 radius=options.strike_radius,
                 temperature=options.strike_temperature,
                 dissociation=options.strike_dissociation,
+            )
+            recorder.record_external_event(
+                simulation.elapsed_femtoseconds,
+                "strike",
+                deposited_eV=float(report.get("deposited", 0.0)),
+                struck_atoms=int(report.get("struck", 0)),
+                dissociated_bonds=int(report.get("dissociated", 0)),
             )
 
             strikes_done += 1
@@ -1505,6 +1565,7 @@ def condition_key(options):
             round(float(options.adaptive_chemical_context_fs), 3)
             if getattr(options, "adaptive_recording", False) else 0.0
         ),
+        "compiled_forces": bool(getattr(options, "compiled_forces", False)),
     }
 
 
@@ -1535,6 +1596,9 @@ def folder_name(options):
         parts.append("v2" if candidate == 2.0 else f"v2-{candidate:g}fs")
     else:
         parts.append("v1")
+
+    if getattr(options, "compiled_forces", False):
+        parts.append("compiled-experimental")
 
     return "_".join(parts)
 
@@ -1593,6 +1657,7 @@ def existing_batch(directory):
         "adaptive_recording": bool(
             first.get("adaptive_recording", False)
         ),
+        "compiled_forces": bool(first.get("compiled_forces", False)),
         "adaptive_candidate_fs": round(float(
             first.get("adaptive_candidate_fs", 0) or 0
         ), 3),
@@ -1802,6 +1867,25 @@ def run_continuation(options):
             "species_count": result["species_count"],
             "stable": result.get("stable", True),
             "energy_jumps": result.get("energy_jumps", 0),
+            "spontaneous_energy_jumps": result.get(
+                "spontaneous_energy_jumps", result.get("energy_jumps", 0)
+            ),
+            "external_energy_injections": result.get(
+                "external_energy_injections", 0
+            ),
+            "declared_external_energy_events": result.get(
+                "declared_external_energy_events", 0
+            ),
+            "total_declared_external_energy_eV": result.get(
+                "total_declared_external_energy_eV", 0.0
+            ),
+            "largest_declared_external_energy_eV": result.get(
+                "largest_declared_external_energy_eV", 0.0
+            ),
+            "largest_external_energy_injection": result.get(
+                "largest_external_energy_injection", 0.0
+            ),
+            "numerical_failures": result.get("numerical_failures", 0),
             "largest_energy_jump": result.get(
                 "largest_energy_jump", 0.0
             ),
@@ -1849,6 +1933,10 @@ def main():
     parser.add_argument("--box", type=float, default=12.0)
     parser.add_argument("--time-step", type=float, default=0.25)
     parser.add_argument("--friction", type=float, default=0.01)
+    parser.add_argument(
+        "--compiled-forces", action="store_true",
+        help="experimental Triton/Inductor force evaluation (CUDA only)",
+    )
     parser.add_argument("--capture-every", type=int, default=40,
                         help="simulation steps between recorded frames")
     recording_mode = parser.add_mutually_exclusive_group()
@@ -2341,7 +2429,27 @@ def run_all(planned, mixture, options, index, index_path, progress):
             "species_count": result["species_count"],
             "stable": result.get("stable", True),
             "energy_jumps": result.get("energy_jumps", 0),
+            "spontaneous_energy_jumps": result.get(
+                "spontaneous_energy_jumps", result.get("energy_jumps", 0)
+            ),
+            "external_energy_injections": result.get(
+                "external_energy_injections", 0
+            ),
+            "declared_external_energy_events": result.get(
+                "declared_external_energy_events", 0
+            ),
+            "total_declared_external_energy_eV": result.get(
+                "total_declared_external_energy_eV", 0.0
+            ),
+            "largest_declared_external_energy_eV": result.get(
+                "largest_declared_external_energy_eV", 0.0
+            ),
+            "largest_external_energy_injection": result.get(
+                "largest_external_energy_injection", 0.0
+            ),
+            "numerical_failures": result.get("numerical_failures", 0),
             "largest_energy_jump": result.get("largest_energy_jump", 0.0),
+            "move_cap_events": int(simulation.capped_steps),
             "isomers": result.get("isomers", {}),
             "final_temperature": result["temperature"]["final"],
             "final_potential": result["potential"]["final"],

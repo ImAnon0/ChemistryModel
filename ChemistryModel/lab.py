@@ -1589,14 +1589,14 @@ class Lab(QtWidgets.QWidget):
         outer.setContentsMargins(18, 18, 18, 18)
         outer.setSpacing(10)
 
-        eyebrow = QtWidgets.QLabel("CHEMISTRY LIBRARY")
+        eyebrow = QtWidgets.QLabel("REACTION EXPERIMENTS")
         eyebrow.setObjectName("eyebrow")
         outer.addWidget(eyebrow)
-        title = QtWidgets.QLabel("Molecule workbench")
+        title = QtWidgets.QLabel("Build, run, and reuse chemistry")
         title.setObjectName("heroTitle")
         outer.addWidget(title)
         subtitle = QtWidgets.QLabel(
-            "Inspect discovered structures, review formation evidence, and send molecules into controlled experiments."
+            "Choose what collides, how encounters are sampled, then inspect or reuse products."
         )
         subtitle.setObjectName("sectionSubtitle")
         outer.addWidget(subtitle)
@@ -1644,7 +1644,7 @@ class Lab(QtWidgets.QWidget):
 
         picker = QtWidgets.QHBoxLayout()
 
-        title = QtWidgets.QLabel("molecule")
+        title = QtWidgets.QLabel("reactant A")
         title.setStyleSheet("font-weight: bold; font-size: 14px;")
         picker.addWidget(title)
 
@@ -1669,7 +1669,7 @@ class Lab(QtWidgets.QWidget):
         )
 
         self.character_molecule.lineEdit().setPlaceholderText(
-            "type a formula or id to filter"
+            "atom or saved molecule"
         )
         self.character_molecule.currentIndexChanged.connect(
             self.on_character_molecule_changed
@@ -1711,7 +1711,7 @@ class Lab(QtWidgets.QWidget):
         test_layout = QtWidgets.QVBoxLayout(test_contents)
         test_layout.setContentsMargins(0, 4, 8, 4)
 
-        new_title = QtWidgets.QLabel("new controlled test")
+        new_title = QtWidgets.QLabel("Experiment definition")
         new_title.setStyleSheet("font-weight: bold;")
         test_layout.addWidget(new_title)
 
@@ -1732,14 +1732,11 @@ class Lab(QtWidgets.QWidget):
         run_form.setFormAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
         self.character_test = QtWidgets.QComboBox()
-        self.character_test.addItems([
-            "isolated",
-            "with partner",
-        ])
+        self.character_test.addItems(["A only", "A + B collision"])
         self.character_test.currentIndexChanged.connect(
             self.on_character_test_mode
         )
-        form.addRow("test", self.character_test)
+        form.addRow("encounter", self.character_test)
 
         self.character_physics = QtWidgets.QComboBox()
         self.character_physics.addItem("standard", "standard")
@@ -1756,7 +1753,21 @@ class Lab(QtWidgets.QWidget):
 
         self.character_partner = QtWidgets.QComboBox()
         self.character_partner.setEnabled(False)
-        form.addRow("partner", self.character_partner)
+        form.addRow("reactant B", self.character_partner)
+
+        self.character_sampling = QtWidgets.QComboBox()
+        self.character_sampling.addItem("controlled / targeted", "targeted")
+        self.character_sampling.addItem("random orientations", "random_orientation")
+        self.character_sampling.addItem("targeted + randomized", "targeted_random")
+        self.character_sampling.setEnabled(False)
+        form.addRow("sampling", self.character_sampling)
+
+        self.character_target_atom = QtWidgets.QComboBox()
+        self.character_target_atom.setEnabled(False)
+        self.character_target_atom.setToolTip(
+            "Controls initial geometry only; reactive physics decides the outcome."
+        )
+        form.addRow("target on A", self.character_target_atom)
 
         self.character_impact_target = QtWidgets.QComboBox()
         self.character_impact_target.addItem("random / COM", "com")
@@ -1772,7 +1783,7 @@ class Lab(QtWidgets.QWidget):
             "atom is not deliberately sitting in the beam; reactive physics still "
             "decides what happens."
         )
-        form.addRow("aim at", self.character_impact_target)
+        self.character_impact_target.hide()
 
         self.character_approach = self.choice(
             [0.5, 1, 1.5, 2, 3, 5], 2, 1
@@ -1830,7 +1841,7 @@ class Lab(QtWidgets.QWidget):
         self.character_repeats = self.choice(
             [1, 8, 16, 24, 32, 40, 48, 64, 80, 96, 128], 8, 0
         )
-        run_form.addRow("repeats", self.character_repeats)
+        run_form.addRow("runs", self.character_repeats)
 
         group_rule = QtWidgets.QLabel(
             "1, or exact multiples of 8; one 8-box group at a time"
@@ -1844,7 +1855,7 @@ class Lab(QtWidgets.QWidget):
 
         row = QtWidgets.QHBoxLayout()
         self.character_run_button = self.button(
-            "Run test", self.on_character_run
+            "Run experiment", self.on_character_run
         )
         self.character_all_button = self.button(
             "Test all", self.on_character_not_ready
@@ -1872,7 +1883,7 @@ class Lab(QtWidgets.QWidget):
         results_layout.setContentsMargins(0, 4, 0, 0)
 
         results_header = QtWidgets.QHBoxLayout()
-        results_title = QtWidgets.QLabel("characterisation results")
+        results_title = QtWidgets.QLabel("experiment results")
         results_title.setStyleSheet("font-weight: bold;")
         results_header.addWidget(results_title)
         results_header.addStretch(1)
@@ -1924,16 +1935,26 @@ class Lab(QtWidgets.QWidget):
             self.on_character_run_selection_changed
         )
         self.character_runs.cellDoubleClicked.connect(
-            self.on_open_character_result_viewer
+            self.on_open_character_run_replay
         )
         run_side.addWidget(self.character_runs)
 
         self.character_open_result = self.button(
-            "Open selected run in viewer",
-            self.on_open_character_result_viewer,
+            "Open run in Replay",
+            self.on_open_character_run_replay,
         )
         self.character_open_result.setEnabled(False)
         run_side.addWidget(self.character_open_result)
+
+        self.character_save_product = self.button(
+            "Save final product to library...",
+            self.on_save_character_product,
+        )
+        self.character_save_product.setEnabled(False)
+        self.character_save_product.setToolTip(
+            "Choose a connected component actually present in the final recorded frame. No bond order, charge, radical label, or reaction is invented."
+        )
+        run_side.addWidget(self.character_save_product)
 
         result_splitter.addWidget(run_widget)
         result_splitter.setStretchFactor(0, 2)
@@ -2248,6 +2269,9 @@ class Lab(QtWidgets.QWidget):
         self.character_molecule.blockSignals(True)
         self.character_molecule.clear()
 
+        for symbol in ("H", "C", "N", "O"):
+            self.character_molecule.addItem(f"{symbol} atom", f"atom:{symbol}")
+
         for item in self.library_molecules:
             self.character_molecule.addItem(
                 f"{item.get('id', '?')} - {item.get('formula', '?')}",
@@ -2291,8 +2315,7 @@ class Lab(QtWidgets.QWidget):
                     self.character_partner.setCurrentIndex(index)
                     break
 
-        has_species = bool(self.library_molecules)
-        self.character_molecule.setEnabled(has_species)
+        self.character_molecule.setEnabled(True)
 
         if selected_row >= 0:
             self.molecule_library_list.setCurrentRow(selected_row)
@@ -2305,7 +2328,7 @@ class Lab(QtWidgets.QWidget):
                 "per-frame atom identity are allowed to contribute."
             )
             self.character_selected.setText(
-                "Scan recordings to populate the test dropdown."
+                "Library empty; elemental H, C, N and O are ready to use."
             )
             self.molecule_open_source.setEnabled(False)
 
@@ -2330,7 +2353,8 @@ class Lab(QtWidgets.QWidget):
     def on_character_test_mode(self, index):
         partner_mode = index == 1
         self.character_partner.setEnabled(partner_mode)
-        self.character_impact_target.setEnabled(partner_mode)
+        self.character_sampling.setEnabled(partner_mode)
+        self.character_target_atom.setEnabled(partner_mode)
         self.character_approach.setEnabled(partner_mode)
         self.character_start_gap.setEnabled(partner_mode)
         self.character_run_button.setEnabled(
@@ -2340,7 +2364,9 @@ class Lab(QtWidgets.QWidget):
     def characterisation_folder(self, molecule_id, test, partner_id,
                                temperature, duration, box,
                                approach=None, start_gap=None,
-                               impact_target="com", physics_mode="standard"):
+                               impact_target="com", physics_mode="standard",
+                               sampling_mode="random_orientation",
+                               target_atom=None):
         physics_suffix = (
             (
                 f"_hf_htransfer_v{HF_MODEL_REVISION}"
@@ -2350,20 +2376,21 @@ class Lab(QtWidgets.QWidget):
 
         if test == "with_partner":
             safe_partner = str(partner_id or "unknown").replace(":", "-")
+            safe_molecule = str(molecule_id).replace(":", "-")
             target_suffix = (
-                "" if str(impact_target or "com") == "com"
-                else f"_aim{str(impact_target)}_targetv2_diagv3"
+                f"_{str(sampling_mode)}"
+                + ("" if target_atom is None else f"_target{int(target_atom)+1}")
             )
             return os.path.join(
                 CHARACTERISATION_ROOT,
-                f"{molecule_id}_with_{safe_partner}_{temperature:g}K_"
+                f"{safe_molecule}_with_{safe_partner}_{temperature:g}K_"
                 f"{duration:g}ps_box{box:g}_a{float(approach):g}_g{float(start_gap):g}"
                 f"{target_suffix}{physics_suffix}",
             )
 
         return os.path.join(
             CHARACTERISATION_ROOT,
-            f"{molecule_id}_isolated_{temperature:g}K_"
+            f"{str(molecule_id).replace(':', '-')}_isolated_{temperature:g}K_"
             f"{duration:g}ps_box{box:g}{physics_suffix}",
         )
 
@@ -2393,6 +2420,14 @@ class Lab(QtWidgets.QWidget):
             }
 
         return molecule_store.load_molecule(partner_id)
+
+    def _character_reactant_payload(self, reactant_id):
+        return self._character_partner_payload(reactant_id)
+
+    def _reload_character_targets(self, reactant):
+        self.character_target_atom.clear()
+        for index, symbol in enumerate(reactant.get("symbols", [])):
+            self.character_target_atom.addItem(f"{symbol} #{index + 1}", index)
 
     def _required_character_box(self, molecule, partner=None, start_gap=2.5):
         first = np.asarray(molecule.get("positions", []), dtype=float)
@@ -2437,13 +2472,14 @@ class Lab(QtWidgets.QWidget):
         repeats = max(1, int(self.character_repeats.value()))
         approach = float(self.character_approach.value())
         start_gap = float(self.character_start_gap.value())
-        impact_target = (
-            str(self.character_impact_target.currentData() or "com")
-            if partner_mode else "com"
+        sampling_mode = str(
+            self.character_sampling.currentData() or "random_orientation"
         )
+        target_atom = self.character_target_atom.currentData() if partner_mode else None
+        impact_target = "com"
 
         try:
-            molecule = molecule_store.load_molecule(molecule_id)
+            molecule = self._character_reactant_payload(molecule_id)
             partner = (
                 self._character_partner_payload(partner_id)
                 if partner_mode else None
@@ -2496,6 +2532,8 @@ class Lab(QtWidgets.QWidget):
             start_gap=start_gap,
             impact_target=impact_target,
             physics_mode=physics_mode,
+            sampling_mode=sampling_mode,
+            target_atom=target_atom,
         )
         planned = self.characterisation_seeds(out, repeats)
 
@@ -2519,12 +2557,15 @@ class Lab(QtWidgets.QWidget):
                 "--approach-factor", f"{approach:g}",
                 "--start-gap", f"{start_gap:g}",
                 "--impact-target", impact_target,
+                "--sampling-mode", sampling_mode,
             ]
+            if target_atom is not None and sampling_mode != "random_orientation":
+                arguments += ["--target-atom-a", str(int(target_atom))]
 
         partner_text = ""
         if partner is not None:
             partner_text = f" + {partner.get('formula', partner_id)}"
-        aim_text = "" if impact_target == "com" else f" aim-{impact_target}"
+        aim_text = f" {sampling_mode.replace('_', '-')}" if partner_mode else ""
         physics_text = " HF" if physics_mode == "high_fidelity" else ""
 
         job = Job(
@@ -2556,12 +2597,26 @@ class Lab(QtWidgets.QWidget):
         self.character_run_button.setEnabled(True)
 
         molecule_id = self.character_molecule.itemData(index)
+        try:
+            reactant = self._character_reactant_payload(molecule_id)
+            self._reload_character_targets(reactant)
+        except Exception as problem:
+            self.character_selected.setText(str(problem))
+            self.character_run_button.setEnabled(False)
+            return
         selected = next(
             (item for item in self.library_molecules
              if item.get("id") == molecule_id),
             None,
         )
 
+        if selected is None and str(molecule_id).startswith("atom:"):
+            symbol = str(molecule_id).split(":", 1)[1]
+            self.character_selected.setText(
+                f"Single {symbol} atom · no saved-library entry required"
+            )
+            self.reload_characterisation_results(molecule_id)
+            return
         if selected is None:
             return
 
@@ -2748,6 +2803,7 @@ class Lab(QtWidgets.QWidget):
             or run_row >= len(self.character_run_entries)
         ):
             self.character_open_result.setEnabled(False)
+            self.character_save_product.setEnabled(False)
             return
 
         path = character_results.recording_path(
@@ -2755,8 +2811,51 @@ class Lab(QtWidgets.QWidget):
             self.character_run_entries[run_row],
         )
         self.character_open_result.setEnabled(bool(path))
+        self.character_save_product.setEnabled(bool(path))
 
-    def on_open_character_result_viewer(self, *unused):
+    def on_save_character_product(self):
+        experiment_row = self.character_experiment_list.currentRow()
+        run_row = self.character_runs.currentRow()
+        if not (0 <= experiment_row < len(self.character_experiments_data)
+                and 0 <= run_row < len(self.character_run_entries)):
+            return
+        path = character_results.recording_path(
+            self.character_experiments_data[experiment_row],
+            self.character_run_entries[run_row],
+        )
+        if not path:
+            return
+        try:
+            from recorder import Recorder
+            recorder = Recorder.load(path)
+            components = molecule_store.molecules_at(recorder, -1)
+            if not components:
+                raise ValueError("the final recorded frame has no connected component")
+            choices = [
+                f"{item['formula']} · {item['atoms']} atoms · component {item['component'] + 1}"
+                for item in components
+            ]
+            selected_index = 0
+            if len(choices) > 1:
+                choice, accepted = QtWidgets.QInputDialog.getItem(
+                    self, "Choose product", "Connected product:", choices, 0, False
+                )
+                if not accepted:
+                    return
+                selected_index = choices.index(choice)
+            saved = molecule_store.save_component(
+                path, -1, components[selected_index], recorder=recorder,
+                note="Saved from a Molecules-tab reaction experiment",
+            )
+            self.reload_molecule_library(select_id=saved["id"])
+            QtWidgets.QMessageBox.information(
+                self, "Product saved",
+                f"Saved {saved['formula']} as {saved['id']}. It is now available as reactant A or B.",
+            )
+        except Exception as problem:
+            QtWidgets.QMessageBox.warning(self, "Cannot save product", str(problem))
+
+    def on_open_character_run_replay(self, *unused):
         experiment_row = self.character_experiment_list.currentRow()
         run_row = self.character_runs.currentRow()
 
@@ -2776,10 +2875,7 @@ class Lab(QtWidgets.QWidget):
         if not path:
             return
 
-        subprocess.Popen([
-            sys.executable, "run_reactive_gl.py",
-            "--load", path,
-        ])
+        self.open_replay(path)
 
     def on_character_not_ready(self):
         QtWidgets.QMessageBox.information(
@@ -3270,6 +3366,30 @@ class Lab(QtWidgets.QWidget):
         job.state = "running"
         job.started = time.time()
 
+    @staticmethod
+    def job_uses_grouped_gpu(job):
+        """Whether a job already fills one GPU with a tensor seed group."""
+        if job.runner not in ("batch_runner.py", "characterisation_runner.py"):
+            return False
+        arguments = list(job.arguments)
+        device = None
+        if "--device" in arguments:
+            position = arguments.index("--device") + 1
+            if position < len(arguments):
+                device = str(arguments[position]).lower()
+        # No explicit device means the runners choose CUDA when available.
+        if device == "cpu":
+            return False
+        group = 1
+        if "--group" in arguments:
+            position = arguments.index("--group") + 1
+            if position < len(arguments):
+                try:
+                    group = int(arguments[position])
+                except ValueError:
+                    pass
+        return group > 1
+
     def tick(self):
         for job in self.jobs:
             if job.state != "running":
@@ -3314,6 +3434,10 @@ class Lab(QtWidgets.QWidget):
                 and job.runner == "characterisation_runner.py"
                 for job in self.jobs
             )
+            grouped_gpu_active = any(
+                job.state == "running" and self.job_uses_grouped_gpu(job)
+                for job in self.jobs
+            )
 
             for job in self.jobs:
                 if active >= self.concurrency:
@@ -3332,11 +3456,22 @@ class Lab(QtWidgets.QWidget):
                 ):
                     continue
 
+                # A width-16 tensor batch is already faster than the best
+                # multi-process CUDA result on this machine. Starting another
+                # grouped process creates a second CUDA context and contention,
+                # so grouped GPU jobs remain sequential even when general queue
+                # concurrency is higher. CPU and legacy group-1 jobs retain the
+                # existing concurrency setting.
+                if self.job_uses_grouped_gpu(job) and grouped_gpu_active:
+                    continue
+
                 self.start_job(job)
                 active += 1
 
                 if job.runner == "characterisation_runner.py":
                     characterisation_active = True
+                if self.job_uses_grouped_gpu(job):
+                    grouped_gpu_active = True
 
         self.draw_jobs()
 
@@ -3496,7 +3631,7 @@ class Lab(QtWidgets.QWidget):
                 if job.state == "running"
                 else f"{len(batch_index)} recorded runs • "
                      f"{len(batch_index) - unstable} usable • "
-                     f"{unstable} unstable"
+                     f"{unstable} numerically unstable"
             )
             self.live_batch_summary.setText(message)
             self.live_seed_display_rows = []
@@ -3695,42 +3830,46 @@ class Lab(QtWidgets.QWidget):
 
         left.addWidget(self.results_list, stretch=1)
 
-        row = QtWidgets.QHBoxLayout()
-        row.addWidget(self.button("Refresh", self.reload_results))
+        selected_label = QtWidgets.QLabel("SELECTED RUN")
+        selected_label.setObjectName("eyebrow")
+        left.addWidget(selected_label)
+        self.results_open_replay = self.button(
+            "Open selected run in Replay", self.on_open_viewer
+        )
+        self.results_open_replay.setObjectName("primaryAction")
+        self.results_open_replay.setEnabled(False)
+        left.addWidget(self.results_open_replay)
 
+        analysis_label = QtWidgets.QLabel("BATCH ANALYSIS")
+        analysis_label.setObjectName("eyebrow")
+        left.addWidget(analysis_label)
+        analysis_grid = QtWidgets.QGridLayout()
+        analysis_grid.setSpacing(6)
+        analysis_grid.addWidget(
+            self.button("Summarise batch", self.on_summarise), 0, 0
+        )
+        analysis_grid.addWidget(
+            self.button("Species table", self.on_species), 0, 1
+        )
+        analysis_grid.addWidget(
+            self.button("Compare batches", self.on_compare), 1, 0
+        )
+        analysis_grid.addWidget(
+            self.button("Dashboard", self.on_dashboard), 1, 1
+        )
+        left.addLayout(analysis_grid)
+
+        utility_label = QtWidgets.QLabel("UTILITIES & DISPLAY")
+        utility_label.setObjectName("eyebrow")
+        left.addWidget(utility_label)
+        utility_row = QtWidgets.QHBoxLayout()
+        utility_row.addWidget(self.button("Export CSV", self.on_export))
+        utility_row.addWidget(self.button("Refresh", self.reload_results))
         self.structures_button = self.button(
             "Structures: off", self.on_toggle_structures
         )
-        row.addWidget(self.structures_button)
-
-        left.addLayout(row)
-
-        row = QtWidgets.QHBoxLayout()
-        row.addWidget(
-            self.button("Open in Replay", self.on_open_viewer)
-        )
-        row.addWidget(
-            self.button("Dashboard", self.on_dashboard)
-        )
-        left.addLayout(row)
-
-        row = QtWidgets.QHBoxLayout()
-        row.addWidget(
-            self.button("Summarise this batch", self.on_summarise)
-        )
-        row.addWidget(
-            self.button("Compare batches", self.on_compare)
-        )
-        left.addLayout(row)
-
-        row = QtWidgets.QHBoxLayout()
-        row.addWidget(
-            self.button("Export CSV", self.on_export)
-        )
-        row.addWidget(
-            self.button("Species table", self.on_species)
-        )
-        left.addLayout(row)
+        utility_row.addWidget(self.structures_button)
+        left.addLayout(utility_row)
 
         left_column_layout.addWidget(browser, 1)
         splitter.addWidget(left_column)
@@ -3845,6 +3984,7 @@ class Lab(QtWidgets.QWidget):
     def on_pick_batch(self, position):
         self.results_list.clear()
         self.results_paths = []
+        self.results_open_replay.setEnabled(False)
 
         if position < 0 or position >= len(self.batches):
             return
@@ -3897,6 +4037,10 @@ class Lab(QtWidgets.QWidget):
         self.draw_result_scatter()
 
     def on_pick_run(self, row):
+        self.results_open_replay.setEnabled(
+            0 <= row < len(self.results_paths)
+            and os.path.exists(self.results_paths[row])
+        )
         if row < 0 or row >= len(self.results_paths):
             return
 
@@ -4191,10 +4335,25 @@ class Lab(QtWidgets.QWidget):
 
             for entry in unstable:
                 lines.append(
-                    f"    seed {entry.get('seed', '?')}: energy "
-                    f"jumped "
+                    f"    seed {entry.get('seed', '?')}: unexplained energy "
+                    f"rise "
                     f"{entry.get('largest_energy_jump', 0):.0f} eV"
                 )
+
+        injected = [
+            entry for entry in index
+            if entry.get("declared_external_energy_events", 0)
+        ]
+        if injected:
+            lines.append("")
+            lines.append("")
+            lines.append("  intentional strike stress")
+            lines.append("  " + "-" * 58)
+            lines.append(
+                f"    {sum(entry.get('declared_external_energy_events', 0) for entry in injected)} "
+                "declared energy events across "
+                f"{len(injected)} runs; these do not by themselves mark a run unstable."
+            )
 
         self.results_title.setText(f"summary of {label}")
         self.results_report.setPlainText("\n".join(lines))

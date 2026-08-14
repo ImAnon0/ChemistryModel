@@ -44,16 +44,20 @@ ANGLE_STIFFNESS = {"C": 3.0, "N": 2.6, "O": 2.6, "H": 0.0}
 # (length in angstroms, dissociation energy in kJ/mol, Morse width)
 
 BOND_TABLE = {
-    ("H", "H"): (0.74, 435.0, 1.94),
-    ("C", "H"): (1.09, 439.0, 1.80),
-    ("N", "H"): (1.01, 449.0, 1.95),
+    # H-H uses the same thermochemical/BDE298-like effective-depth
+    # convention as the other single-bond rows.  The width preserves the
+    # 4401.21 cm-1 harmonic curvature at this effective depth; it is not a
+    # pointwise fit to the older spectroscopy-derived De Morse curve.
+    ("H", "H"): (0.74144, 435.78, 1.99360),
+    ("C", "H"): (1.086, 439.0, 1.80),
+    ("N", "H"): (1.0109, 449.0, 1.95),
     ("O", "H"): (0.96, 498.0, 2.18),
-    ("C", "C"): (1.54, 348.0, 1.85),
-    ("C", "N"): (1.47, 305.0, 1.90),
-    ("C", "O"): (1.43, 358.0, 1.95),
-    ("N", "N"): (1.45, 167.0, 2.00),
-    ("N", "O"): (1.40, 201.0, 2.00),
-    ("O", "O"): (1.48, 146.0, 2.05),
+    ("C", "C"): (1.525, 348.0, 1.85),
+    ("C", "N"): (1.47, 356.0, 1.90),
+    ("C", "O"): (1.427, 358.0, 1.95),
+    ("N", "N"): (1.446, 167.0, 2.00),
+    ("N", "O"): (1.453, 201.0, 2.00),
+    ("O", "O"): (1.475, 146.0, 2.735),
 }
 
 # Double and triple bonds. Where a pair has no multiple bond the
@@ -268,14 +272,18 @@ def bond_orders(taper, types):
 
     totals = np.sum(weighted, axis=1)
 
-    with np.errstate(divide="ignore", invalid="ignore"):
-        share = np.where(
-            totals[:, None] > 1e-9,
-            spare[:, None] * weighted / np.maximum(
-                totals[:, None], 1e-9
-            ),
-            0.0
-        )
+    # Normalizing a vanishing contact gives a finite share whose derivative is
+    # ill-conditioned. Fade that allocation in with a C1 smoothstep. Above the
+    # tiny onset region the gate is exactly one and the established bond-order
+    # calculation is unchanged in both value and force.
+    onset = 1e-4
+    share_fraction = np.clip(totals / onset, 0.0, 1.0)
+    share_gate = share_fraction ** 2 * (3.0 - 2.0 * share_fraction)
+    share = (
+        spare[:, None] * weighted
+        / np.maximum(totals[:, None], 1e-12)
+        * share_gate[:, None]
+    )
 
     # A bond can only be as strong as the poorer partner allows.
 

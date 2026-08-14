@@ -67,6 +67,9 @@ class ReactiveSimulation:
 
         self.maximum_step = 0.15
         self.capped_steps = 0
+        self.capped_atom_counts = np.zeros(len(self.symbols), dtype=np.uint64)
+        self.last_capped_atoms = ()
+        self._last_move_capped_mask = None
 
         self.random_generator = np.random.default_rng(random_seed)
 
@@ -359,6 +362,15 @@ class ReactiveSimulation:
     def energy(self, positions):
         return torch.sum(self.energy_per_atom(positions))
 
+    def _gather_neighbours(self, values, neighbours, role):
+        """Gather padded neighbour rows; experimental index-select backend."""
+        selected = getattr(self, "experimental_index_select_gather", False)
+        if selected is True or (selected and role in selected):
+            return torch.index_select(
+                values, 0, neighbours.reshape(-1)
+            ).reshape(*neighbours.shape, *values.shape[1:])
+        return values[neighbours]
+
     def environment_softening_factor(self, taper, order, lower, mask,
                                      neighbours, cache_key=None):
         """How much each single bond is weakened by its partner's commitment.
@@ -414,7 +426,9 @@ class ReactiveSimulation:
         # force flip on that surface. Same treatment, and same reasoning, as
         # the two-contact minimum in the transfer gate.
         own = commitment[:, None]
-        partner = commitment[neighbours]
+        partner = self._gather_neighbours(
+            commitment, neighbours, "commitment"
+        )
         gap = own - partner
         pair_commitment = 0.5 * (
             own + partner
@@ -501,7 +515,10 @@ class ReactiveSimulation:
         neighbours = self.neighbours
         mask = self._neighbour_weight
 
-        offsets = positions[neighbours] - positions[:, None, :]
+        offsets = (
+            self._gather_neighbours(positions, neighbours, "positions")
+            - positions[:, None, :]
+        )
 
         offsets = offsets - self.box_size * torch.round(
             offsets / self.box_size
@@ -528,13 +545,14 @@ class ReactiveSimulation:
         # Read-only diagnostics reuse the exact pair state already evaluated
         # for forces. Detached views do not retain the autograd graph and are
         # replaced by the next force calculation.
-        self._chemical_pair_cache = {
-            "neighbours": neighbours,
-            "mask": self.neighbour_mask,
-            "distances": distances.detach(),
-            "inner": pair_inner.detach(),
-            "taper": taper.detach(),
-        }
+        if not getattr(self, "_suppress_force_diagnostic_caches", False):
+            self._chemical_pair_cache = {
+                "neighbours": neighbours,
+                "mask": self.neighbour_mask,
+                "distances": distances.detach(),
+                "inner": pair_inner.detach(),
+                "taper": taper.detach(),
+            }
 
         coordination = torch.sum(taper, dim=1)
 
@@ -550,26 +568,34 @@ class ReactiveSimulation:
 
         spare = torch.clamp(valence - coordination, min=0.0)
 
-        spare_other = spare[neighbours]
+        spare_other = self._gather_neighbours(spare, neighbours, "spare")
 
         weighted = taper * spare_other
 
         totals = torch.sum(weighted, dim=1)
 
-        totals_other = totals[neighbours]
+        totals_other = self._gather_neighbours(totals, neighbours, "totals")
 
-        share_out = torch.where(
-            totals[:, None] > 1e-9,
+        onset = 1e-4
+        share_fraction = torch.clamp(totals / onset, 0.0, 1.0)
+        share_gate = share_fraction ** 2 * (3.0 - 2.0 * share_fraction)
+        share_out = (
             spare[:, None] * weighted
-            / torch.clamp(totals[:, None], min=1e-9),
-            torch.zeros_like(weighted)
+            / torch.clamp(totals[:, None], min=1e-12)
+            * share_gate[:, None]
         )
 
-        share_back = torch.where(
-            totals_other > 1e-9,
+        share_fraction_other = torch.clamp(
+            totals_other / onset, 0.0, 1.0
+        )
+        share_gate_other = (
+            share_fraction_other ** 2
+            * (3.0 - 2.0 * share_fraction_other)
+        )
+        share_back = (
             spare_other * (taper * spare[:, None])
-            / torch.clamp(totals_other, min=1e-9),
-            torch.zeros_like(weighted)
+            / torch.clamp(totals_other, min=1e-12)
+            * share_gate_other
         )
 
         extra = torch.minimum(share_out, share_back) * taper
@@ -768,11 +794,18 @@ class ReactiveSimulation:
 
         # Temporary: stash the pieces so a scratch script can see which term
         # a barrier is made of. Delete once measured.
-        self._energy_parts = {
-            "bond": bond_per_atom.detach(),
-            "over": over_per_atom.detach(),
-            "angle": angle_per_atom.detach(),
-        }
+        if not getattr(self, "_suppress_force_diagnostic_caches", False):
+            self._energy_parts = {
+                "bond": bond_per_atom.detach(),
+                "over": over_per_atom.detach(),
+                "angle": angle_per_atom.detach(),
+            }
+        if getattr(self, "_profile_energy_part_gradients", False):
+            self._profile_energy_parts = {
+                "bond": bond_per_atom,
+                "over": over_per_atom,
+                "angle": angle_per_atom,
+            }
 
         return bond_per_atom + over_per_atom + angle_per_atom
 
@@ -868,6 +901,10 @@ class ReactiveSimulation:
         # a far better approximation than an explosion.
 
         if self.maximum_step <= 0:
+            self.last_capped_atoms = ()
+            self._last_move_capped_mask = torch.zeros(
+                len(movement), device=movement.device, dtype=torch.bool
+            )
             return movement
 
         distances = torch.linalg.norm(movement, dim=1)
@@ -878,17 +915,29 @@ class ReactiveSimulation:
             max=1.0,
         )
 
-        caught = int(torch.count_nonzero(scale < 1.0))
+        caught_mask = scale < 1.0
+        self._last_move_capped_mask = caught_mask
+        caught = int(torch.count_nonzero(caught_mask))
+
+        self.last_capped_atoms = tuple(
+            torch.nonzero(caught_mask, as_tuple=False)
+            .flatten().detach().cpu().tolist()
+        )
 
         if caught:
             self.capped_steps += caught
+            self.capped_atom_counts[np.asarray(self.last_capped_atoms)] += 1
 
         return movement * scale[:, None]
 
     def compute_forces(self):
         positions = self.positions.detach().requires_grad_(True)
 
-        per_atom = self.energy_per_atom(positions)
+        compiled = getattr(self, "_compiled_energy_per_atom", None)
+        per_atom = (
+            compiled(positions) if compiled is not None
+            else self.energy_per_atom(positions)
+        )
         total = torch.sum(per_atom)
 
         gradient, = torch.autograd.grad(total, positions)
@@ -902,10 +951,72 @@ class ReactiveSimulation:
         self._potential_per_atom = per_atom.detach()
         self._potential_cache_source = self.positions
         self._potential_cache_version = self.positions._version
-        self._chemical_pair_cache_source = self.positions
-        self._chemical_pair_cache_version = self.positions._version
+        if not getattr(self, "_suppress_force_diagnostic_caches", False):
+            self._chemical_pair_cache_source = self.positions
+            self._chemical_pair_cache_version = self.positions._version
+        else:
+            self._chemical_pair_cache_source = None
+            self._chemical_pair_cache_version = None
 
         return -gradient.detach(), total.detach()
+
+    def enable_compiled_forces(self, mode="reduce-overhead", max_fusion_size=8):
+        """Enable the experimental Triton/Inductor force path.
+
+        This is deliberately opt-in until ensemble equivalence is established.
+        It changes execution/floating-point reduction order, not the energy
+        equation or parameters.
+        """
+        if self.device.type != "cuda":
+            raise ValueError("compiled forces require a CUDA device")
+        if getattr(self, "_share_reactive_intermediates", False):
+            raise ValueError(
+                "compiled forces are not yet validated for high-fidelity "
+                "reactive corrections"
+            )
+        try:
+            import triton  # noqa: F401
+        except ImportError as error:
+            raise RuntimeError(
+                "compiled forces require a working Triton installation"
+            ) from error
+        torch._inductor.config.max_fusion_size = int(max_fusion_size)
+        self._suppress_force_diagnostic_caches = True
+        self._compiled_energy_per_atom = torch.compile(
+            self.energy_per_atom, backend="inductor", fullgraph=True,
+            mode=mode,
+        )
+        self.forces, self._potential_energy = self.compute_forces()
+        return self
+
+    def _refresh_chemical_pair_cache(self):
+        with torch.no_grad():
+            neighbours = self.neighbours
+            mask = self._neighbour_weight
+            offsets = (
+                self._gather_neighbours(
+                    self.positions, neighbours, "positions"
+                ) - self.positions[:, None, :]
+            )
+            offsets -= self.box_size * torch.round(offsets / self.box_size)
+            distances = torch.sqrt(torch.clamp(
+                torch.sum(offsets ** 2, dim=2), min=1e-12
+            ))
+            centre_types = self.types[:, None].expand_as(neighbours)
+            other_types = self.types[neighbours]
+            inner = self.cutoff_inner[centre_types, other_types]
+            outer = self.cutoff_outer[centre_types, other_types]
+            fraction = torch.clamp(
+                (distances - inner) / torch.clamp(outer - inner, min=1e-9),
+                0.0, 1.0,
+            )
+            taper = 0.5 * (1.0 + torch.cos(np.pi * fraction)) * mask
+            self._chemical_pair_cache = {
+                "neighbours": neighbours, "mask": self.neighbour_mask,
+                "distances": distances, "inner": inner, "taper": taper,
+            }
+            self._chemical_pair_cache_source = self.positions
+            self._chemical_pair_cache_version = self.positions._version
 
     def chemical_observation(self):
         """Return compact current pair diagnostics without recomputation."""
@@ -917,7 +1028,10 @@ class ReactiveSimulation:
             or getattr(self, "_chemical_pair_cache_version", None)
             != self.positions._version
         ):
-            raise RuntimeError("chemical observation requested before forces")
+            if getattr(self, "_compiled_energy_per_atom", None) is None:
+                raise RuntimeError("chemical observation requested before forces")
+            self._refresh_chemical_pair_cache()
+            cache = self._chemical_pair_cache
         neighbours = cache["neighbours"]
         centres = torch.arange(
             len(self.positions), device=self.device, dtype=torch.long
@@ -1012,9 +1126,20 @@ class ReactiveSimulation:
 
             new_acceleration = new_forces * conversion / masses
 
-            self.velocities = self.velocities + 0.5 * (
+            ordinary_velocity = self.velocities + 0.5 * (
                 acceleration + new_acceleration
             ) * dt
+            # A capped move means this timestep did not resolve the force
+            # impulse. Do not turn either the rejected old force or the still
+            # potentially steep new force into kinetic energy. Keep the
+            # pre-step velocity and let the freshly evaluated force act from
+            # the separated position on the next ordinary step.
+            capped_velocity = self.velocities
+            self.velocities = torch.where(
+                self._last_move_capped_mask[:, None],
+                capped_velocity,
+                ordinary_velocity,
+            )
 
             self.forces = new_forces
             self._potential_energy = potential

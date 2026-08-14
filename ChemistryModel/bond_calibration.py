@@ -1,0 +1,670 @@
+"""Fast, observational diagnostics for bond-parameter calibration.
+
+Nothing in this module is imported by the simulation engine.  It derives
+spectroscopic quantities from the engine's existing tables and runs short,
+controlled probes so candidate constants can be compared with the untouched
+baseline.
+"""
+
+from __future__ import annotations
+
+import math
+import time
+
+import numpy as np
+
+import build_box
+import reactive as R
+from reactive_torch import ReactiveSimulation
+
+
+EV_PER_ANGSTROM2_TO_N_PER_M = 16.02176634
+ATOMIC_MASS_TO_KG = 1.66053906892e-27
+LIGHT_CM_PER_SECOND = 2.99792458e10
+WAVENUMBER_TO_EV = 1.2398419843320026e-4
+
+H2_REFERENCE = {
+    "re_angstrom": 0.74144,
+    "omega_e_cm-1": 4401.21,
+    "omega_exe_cm-1": 121.33,
+    "D0_cm-1": 36118.06962,
+}
+
+
+def morse_curvature(depth_ev, width_inverse_angstrom):
+    """Return d2V/dr2 at re in eV/A^2 for D(e^-2ax - 2e^-ax)."""
+    return 2.0 * float(depth_ev) * float(width_inverse_angstrom) ** 2
+
+
+def harmonic_wavenumber(depth_ev, width_inverse_angstrom,
+                        first_mass_amu, second_mass_amu):
+    reduced_amu = first_mass_amu * second_mass_amu / (
+        first_mass_amu + second_mass_amu
+    )
+    curvature_si = (
+        morse_curvature(depth_ev, width_inverse_angstrom)
+        * EV_PER_ANGSTROM2_TO_N_PER_M
+    )
+    angular_frequency = math.sqrt(
+        curvature_si / (reduced_amu * ATOMIC_MASS_TO_KG)
+    )
+    return angular_frequency / (2.0 * math.pi * LIGHT_CM_PER_SECOND)
+
+
+def width_for_frequency(depth_ev, wavenumber_cm, first_mass_amu,
+                        second_mass_amu):
+    reduced_kg = (
+        first_mass_amu * second_mass_amu
+        / (first_mass_amu + second_mass_amu)
+        * ATOMIC_MASS_TO_KG
+    )
+    angular = 2.0 * math.pi * LIGHT_CM_PER_SECOND * wavenumber_cm
+    curvature_ev_a2 = (
+        reduced_kg * angular ** 2 / EV_PER_ANGSTROM2_TO_N_PER_M
+    )
+    return math.sqrt(curvature_ev_a2 / (2.0 * depth_ev))
+
+
+def spectroscopic_h2_depths(reference=H2_REFERENCE):
+    omega = reference["omega_e_cm-1"]
+    anharmonicity = reference["omega_exe_cm-1"]
+    # G(0) = omega_e/2 - omega_exe/4 for the usual diatomic expansion.
+    zpe_cm = 0.5 * omega - 0.25 * anharmonicity
+    de_from_d0_cm = reference["D0_cm-1"] + zpe_cm
+    # Exact only for an ideal Morse oscillator; report as a diagnostic.
+    ideal_morse_de_cm = omega ** 2 / (4.0 * anharmonicity)
+    return {
+        "zpe_cm-1": zpe_cm,
+        "De_from_D0_eV": de_from_d0_cm * WAVENUMBER_TO_EV,
+        "ideal_Morse_De_eV": ideal_morse_de_cm * WAVENUMBER_TO_EV,
+    }
+
+
+def h2_curve(samples=401):
+    distances = np.linspace(0.35, 3.0, samples)
+    types = R.types_from_symbols(["H", "H"])
+    energies = np.array([
+        R.potential_energy(np.array([[0.0, 0.0, 0.0], [r, 0.0, 0.0]]), types)
+        for r in distances
+    ])
+    minimum = int(np.argmin(energies))
+    tail = float(energies[-1])
+    derivative = np.diff(energies)
+    post_minimum_falling_steps = int(
+        np.count_nonzero(derivative[minimum:] < -1e-8)
+    )
+    i = R.ELEMENT_INDEX["H"]
+    depth = float(R.BOND_DEPTH[i, i])
+    width = float(R.BOND_WIDTH[i, i])
+    return {
+        "table_re_A": float(R.BOND_LENGTH[i, i]),
+        "sampled_re_A": float(distances[minimum]),
+        "table_depth_eV": depth,
+        "sampled_well_eV": float(tail - energies[minimum]),
+        "width_inv_A": width,
+        "curvature_eV_A2": morse_curvature(depth, width),
+        "harmonic_cm-1": harmonic_wavenumber(
+            depth, width, R.MASS["H"], R.MASS["H"]
+        ),
+        "energy_at_0.35A_eV": float(energies[0]),
+        "energy_at_3A_eV": tail,
+        "post_minimum_falling_steps": post_minimum_falling_steps,
+    }
+
+
+def pair_local_diagnostic(first, second):
+    """Report the raw table pair as a local two-body Morse oscillator."""
+    first_index = R.ELEMENT_INDEX[first]
+    second_index = R.ELEMENT_INDEX[second]
+    depth = float(R.BOND_DEPTH[first_index, second_index])
+    width = float(R.BOND_WIDTH[first_index, second_index])
+    return {
+        "re_A": float(R.BOND_LENGTH[first_index, second_index]),
+        "depth_eV": depth,
+        "width_inv_A": width,
+        "curvature_eV_A2": morse_curvature(depth, width),
+        "local_harmonic_cm-1": harmonic_wavenumber(
+            depth, width, R.MASS[first], R.MASS[second]
+        ),
+    }
+
+
+def methane_ch_coordinate(samples=401):
+    """Stretch one methane C-H coordinate with the other atoms held fixed."""
+    symbols, equilibrium = build_box.BUILDERS["CH4"]()
+    direction = equilibrium[-1] / np.linalg.norm(equilibrium[-1])
+    distances = np.linspace(0.55, 3.0, samples)
+    types = R.types_from_symbols(symbols)
+    energies = []
+    for distance in distances:
+        positions = equilibrium.copy()
+        positions[-1] = direction * distance
+        energies.append(R.potential_energy(positions, types))
+    energies = np.asarray(energies)
+    minimum = int(np.argmin(energies))
+    derivative = np.diff(energies)
+    return {
+        "sampled_minimum_A": float(distances[minimum]),
+        "dissociation_coordinate_eV": float(energies[-1] - energies[minimum]),
+        "short_range_energy_eV": float(energies[0] - energies[-1]),
+        "capture_region_falling_steps": int(np.count_nonzero(
+            derivative[minimum:] < -1e-8
+        )),
+        "table": pair_local_diagnostic("C", "H"),
+    }
+
+
+def ammonia_nh_coordinate(samples=401):
+    """Stretch one ammonia N-H coordinate with the other atoms held fixed."""
+    symbols, equilibrium = build_box.BUILDERS["NH3"]()
+    direction = equilibrium[-1] / np.linalg.norm(equilibrium[-1])
+    distances = np.linspace(0.50, 3.0, samples)
+    types = R.types_from_symbols(symbols)
+    energies = []
+    for distance in distances:
+        positions = equilibrium.copy()
+        positions[-1] = direction * distance
+        energies.append(R.potential_energy(positions, types))
+    energies = np.asarray(energies)
+    minimum = int(np.argmin(energies))
+    derivative = np.diff(energies)
+    return {
+        "sampled_minimum_A": float(distances[minimum]),
+        "dissociation_coordinate_eV": float(energies[-1] - energies[minimum]),
+        "short_range_energy_eV": float(energies[0] - energies[-1]),
+        "capture_region_falling_steps": int(np.count_nonzero(
+            derivative[minimum:] < -1e-8
+        )),
+        "table": pair_local_diagnostic("N", "H"),
+    }
+
+
+def water_oh_coordinate(samples=401):
+    """Stretch one water O-H coordinate with the other atoms held fixed."""
+    symbols, equilibrium = build_box.BUILDERS["H2O"]()
+    direction = equilibrium[-1] / np.linalg.norm(equilibrium[-1])
+    distances = np.linspace(0.45, 3.0, samples)
+    types = R.types_from_symbols(symbols)
+    energies = []
+    for distance in distances:
+        positions = equilibrium.copy()
+        positions[-1] = direction * distance
+        energies.append(R.potential_energy(positions, types))
+    energies = np.asarray(energies)
+    minimum = int(np.argmin(energies))
+    derivative = np.diff(energies)
+    return {
+        "sampled_minimum_A": float(distances[minimum]),
+        "dissociation_coordinate_eV": float(energies[-1] - energies[minimum]),
+        "short_range_energy_eV": float(energies[0] - energies[-1]),
+        "capture_region_falling_steps": int(np.count_nonzero(
+            derivative[minimum:] < -1e-8
+        )),
+        "table": pair_local_diagnostic("O", "H"),
+    }
+
+
+def ethane_geometry(cc_distance=1.54):
+    """Return a staggered ethane-like geometry with fixed tetrahedral CH3 ends."""
+    tetrahedral = math.radians(180.0 - 109.47)
+    atoms = [np.array([0.0, 0.0, 0.0])]
+    for index in range(3):
+        turn = 2.0 * math.pi * index / 3.0
+        atoms.append(1.086 * np.array([
+            math.sin(tetrahedral) * math.cos(turn),
+            math.sin(tetrahedral) * math.sin(turn),
+            -math.cos(tetrahedral),
+        ]))
+    second = np.array([0.0, 0.0, cc_distance])
+    atoms.append(second)
+    for index in range(3):
+        turn = math.pi / 3.0 + 2.0 * math.pi * index / 3.0
+        atoms.append(second + 1.086 * np.array([
+            math.sin(tetrahedral) * math.cos(turn),
+            math.sin(tetrahedral) * math.sin(turn),
+            math.cos(tetrahedral),
+        ]))
+    return ["C", "H", "H", "H", "C", "H", "H", "H"], np.asarray(atoms)
+
+
+def ethane_cc_coordinate(samples=401):
+    """Move two fixed CH3 fragments along their C-C coordinate."""
+    distances = np.linspace(1.0, 3.0, samples)
+    symbols, _ = ethane_geometry()
+    types = R.types_from_symbols(symbols)
+    energies = []
+    for distance in distances:
+        _, positions = ethane_geometry(distance)
+        energies.append(R.potential_energy(positions, types))
+    energies = np.asarray(energies)
+    minimum = int(np.argmin(energies))
+    derivative = np.diff(energies)
+    return {
+        "sampled_minimum_A": float(distances[minimum]),
+        "dissociation_coordinate_eV": float(energies[-1] - energies[minimum]),
+        "short_range_energy_eV": float(energies[0] - energies[-1]),
+        "capture_region_falling_steps": int(np.count_nonzero(
+            derivative[minimum:] < -1e-8
+        )),
+        "table": pair_local_diagnostic("C", "C"),
+    }
+
+
+def methylamine_geometry(cn_distance=1.47):
+    """Approximate CH3NH2 geometry for a controlled C-N coordinate."""
+    tetrahedral = math.radians(180.0 - 109.47)
+    atoms = [np.array([0.0, 0.0, 0.0])]
+    for index in range(3):
+        turn = 2.0 * math.pi * index / 3.0
+        atoms.append(1.086 * np.array([
+            math.sin(tetrahedral) * math.cos(turn),
+            math.sin(tetrahedral) * math.sin(turn),
+            -math.cos(tetrahedral),
+        ]))
+    nitrogen = np.array([0.0, 0.0, cn_distance])
+    atoms.append(nitrogen)
+    # Experimental methylamine is pyramidal at nitrogen.  Place the N-H bonds
+    # at approximately H-N-C = 111 degrees and H-N-H = 106 degrees rather
+    # than putting them opposite one another around the C-N axis.
+    nh_polar = math.radians(180.0 - 111.0)
+    hnh_angle = math.radians(106.0)
+    cos_turn_separation = (
+        math.cos(hnh_angle) - math.cos(nh_polar) ** 2
+    ) / math.sin(nh_polar) ** 2
+    turn_separation = math.acos(np.clip(cos_turn_separation, -1.0, 1.0))
+    for turn in (-0.5 * turn_separation, 0.5 * turn_separation):
+        atoms.append(nitrogen + 1.0109 * np.array([
+            math.sin(nh_polar) * math.cos(turn),
+            math.sin(nh_polar) * math.sin(turn),
+            math.cos(nh_polar),
+        ]))
+    return ["C", "H", "H", "H", "N", "H", "H"], np.asarray(atoms)
+
+
+def methylamine_cn_coordinate(samples=401):
+    """Move fixed CH3 and NH2 fragments along their C-N coordinate."""
+    distances = np.linspace(1.0, 3.2, samples)
+    symbols, _ = methylamine_geometry()
+    types = R.types_from_symbols(symbols)
+    energies = []
+    for distance in distances:
+        _, positions = methylamine_geometry(distance)
+        energies.append(R.potential_energy(positions, types))
+    energies = np.asarray(energies)
+    minimum = int(np.argmin(energies))
+    derivative = np.diff(energies)
+    return {
+        "sampled_minimum_A": float(distances[minimum]),
+        "dissociation_coordinate_eV": float(energies[-1] - energies[minimum]),
+        "short_range_energy_eV": float(energies[0] - energies[-1]),
+        "capture_region_falling_steps": int(np.count_nonzero(
+            derivative[minimum:] < -1e-8
+        )),
+        "table": pair_local_diagnostic("C", "N"),
+    }
+
+
+def methanol_geometry(co_distance=1.427):
+    """Approximate CH3OH geometry for a controlled C-O coordinate."""
+    tetrahedral = math.radians(180.0 - 109.0)
+    atoms = [np.array([0.0, 0.0, 0.0])]
+    for index in range(3):
+        turn = 2.0 * math.pi * index / 3.0
+        atoms.append(1.096 * np.array([
+            math.sin(tetrahedral) * math.cos(turn),
+            math.sin(tetrahedral) * math.sin(turn),
+            -math.cos(tetrahedral),
+        ]))
+    oxygen = np.array([0.0, 0.0, co_distance])
+    atoms.append(oxygen)
+    hoc_from_positive_axis = math.radians(180.0 - 108.9)
+    atoms.append(oxygen + 0.956 * np.array([
+        math.sin(hoc_from_positive_axis),
+        0.0,
+        math.cos(hoc_from_positive_axis),
+    ]))
+    return ["C", "H", "H", "H", "O", "H"], np.asarray(atoms)
+
+
+def methanol_co_coordinate(samples=401):
+    """Move fixed CH3 and OH fragments along their C-O coordinate."""
+    distances = np.linspace(1.0, 3.2, samples)
+    symbols, _ = methanol_geometry()
+    types = R.types_from_symbols(symbols)
+    energies = []
+    for distance in distances:
+        _, positions = methanol_geometry(distance)
+        energies.append(R.potential_energy(positions, types))
+    energies = np.asarray(energies)
+    minimum = int(np.argmin(energies))
+    derivative = np.diff(energies)
+    return {
+        "sampled_minimum_A": float(distances[minimum]),
+        "dissociation_coordinate_eV": float(energies[-1] - energies[minimum]),
+        "short_range_energy_eV": float(energies[0] - energies[-1]),
+        "capture_region_falling_steps": int(np.count_nonzero(
+            derivative[minimum:] < -1e-8
+        )),
+        "table": pair_local_diagnostic("C", "O"),
+    }
+
+
+def hydrazine_geometry(nn_distance=1.446):
+    """Experimental-like N2H4 geometry with an adjustable N-N distance."""
+    reference = np.array([
+        [0.0000, 0.7230, -0.1123],
+        [0.0000, -0.7230, -0.1123],
+        [-0.4470, 1.0031, 0.7562],
+        [0.4470, -1.0031, 0.7562],
+        [0.9663, 1.0031, 0.0301],
+        [-0.9663, -1.0031, 0.0301],
+    ])
+    first_shift = np.array([0.0, 0.5 * nn_distance - 0.7230, 0.0])
+    second_shift = np.array([0.0, -0.5 * nn_distance + 0.7230, 0.0])
+    reference[[0, 2, 4]] += first_shift
+    reference[[1, 3, 5]] += second_shift
+    return ["N", "N", "H", "H", "H", "H"], reference
+
+
+def hydrazine_nn_coordinate(samples=401):
+    """Move fixed NH2 fragments along the hydrazine N-N coordinate."""
+    distances = np.linspace(1.0, 3.2, samples)
+    symbols, _ = hydrazine_geometry()
+    types = R.types_from_symbols(symbols)
+    energies = []
+    for distance in distances:
+        _, positions = hydrazine_geometry(distance)
+        energies.append(R.potential_energy(positions, types))
+    energies = np.asarray(energies)
+    minimum = int(np.argmin(energies))
+    derivative = np.diff(energies)
+    return {
+        "sampled_minimum_A": float(distances[minimum]),
+        "dissociation_coordinate_eV": float(energies[-1] - energies[minimum]),
+        "short_range_energy_eV": float(energies[0] - energies[-1]),
+        "capture_region_falling_steps": int(np.count_nonzero(
+            derivative[minimum:] < -1e-8
+        )),
+        "table": pair_local_diagnostic("N", "N"),
+    }
+
+
+def hydroxylamine_geometry(no_distance=1.453):
+    """Approximate NH2OH geometry for a controlled N-O coordinate."""
+    nitrogen = np.array([0.0, 0.0, 0.0])
+    oxygen = np.array([0.0, 0.0, no_distance])
+    atoms = [nitrogen, oxygen]
+    hno_polar = math.radians(107.0)
+    hnh_angle = math.radians(103.3)
+    cos_separation = (
+        math.cos(hnh_angle) - math.cos(hno_polar) ** 2
+    ) / math.sin(hno_polar) ** 2
+    separation = math.acos(np.clip(cos_separation, -1.0, 1.0))
+    for turn in (-0.5 * separation, 0.5 * separation):
+        atoms.append(1.016 * np.array([
+            math.sin(hno_polar) * math.cos(turn),
+            math.sin(hno_polar) * math.sin(turn),
+            math.cos(hno_polar),
+        ]))
+    oh_polar = math.radians(180.0 - 101.4)
+    atoms.append(oxygen + 0.962 * np.array([
+        math.sin(oh_polar), 0.0, math.cos(oh_polar)
+    ]))
+    return ["N", "O", "H", "H", "H"], np.asarray(atoms)
+
+
+def hydroxylamine_no_coordinate(samples=401):
+    """Move fixed NH2 and OH fragments along their N-O coordinate."""
+    distances = np.linspace(1.0, 3.2, samples)
+    symbols, _ = hydroxylamine_geometry()
+    types = R.types_from_symbols(symbols)
+    energies = []
+    for distance in distances:
+        _, positions = hydroxylamine_geometry(distance)
+        energies.append(R.potential_energy(positions, types))
+    energies = np.asarray(energies)
+    minimum = int(np.argmin(energies))
+    derivative = np.diff(energies)
+    return {
+        "sampled_minimum_A": float(distances[minimum]),
+        "dissociation_coordinate_eV": float(energies[-1] - energies[minimum]),
+        "short_range_energy_eV": float(energies[0] - energies[-1]),
+        "capture_region_falling_steps": int(np.count_nonzero(
+            derivative[minimum:] < -1e-8
+        )),
+        "table": pair_local_diagnostic("N", "O"),
+    }
+
+
+def hydrogen_peroxide_geometry(oo_distance=1.475):
+    """Experimental-like H2O2 geometry with adjustable O-O distance."""
+    reference = np.array([
+        [0.0000, 0.7375, -0.0528],
+        [0.0000, -0.7375, -0.0528],
+        [0.8190, 0.8170, 0.4220],
+        [-0.8190, -0.8170, 0.4220],
+    ])
+    first_shift = np.array([0.0, 0.5 * oo_distance - 0.7375, 0.0])
+    second_shift = np.array([0.0, -0.5 * oo_distance + 0.7375, 0.0])
+    reference[[0, 2]] += first_shift
+    reference[[1, 3]] += second_shift
+    return ["O", "O", "H", "H"], reference
+
+
+def hydrogen_peroxide_oo_coordinate(samples=401):
+    """Move fixed OH fragments along the peroxide O-O coordinate."""
+    distances = np.linspace(1.0, 3.2, samples)
+    symbols, _ = hydrogen_peroxide_geometry()
+    types = R.types_from_symbols(symbols)
+    energies = []
+    for distance in distances:
+        _, positions = hydrogen_peroxide_geometry(distance)
+        energies.append(R.potential_energy(positions, types))
+    energies = np.asarray(energies)
+    minimum = int(np.argmin(energies))
+    derivative = np.diff(energies)
+    return {
+        "sampled_minimum_A": float(distances[minimum]),
+        "dissociation_coordinate_eV": float(energies[-1] - energies[minimum]),
+        "short_range_energy_eV": float(energies[0] - energies[-1]),
+        "capture_region_falling_steps": int(np.count_nonzero(
+            derivative[minimum:] < -1e-8
+        )),
+        "table": pair_local_diagnostic("O", "O"),
+    }
+
+
+def molecule_nve(name, steps=400, temperature=100.0):
+    symbols, positions = build_box.BUILDERS[name]()
+    positions = np.asarray(positions) + 5.0
+    simulation = ReactiveSimulation(
+        symbols, positions, 12.0, target_temperature=temperature,
+        friction=0.0, device="cpu", random_seed=19,
+    )
+    simulation.thermostat_is_on = False
+    start = float(simulation.potential_energy + simulation.kinetic_energy)
+    initial = simulation.positions_numpy.copy()
+    simulation.step(steps)
+    end = float(simulation.potential_energy + simulation.kinetic_energy)
+    displacement = simulation.positions_numpy - initial
+    displacement -= simulation.box_size * np.round(displacement / simulation.box_size)
+    return {
+        "energy_start_eV": start,
+        "energy_end_eV": end,
+        "drift_eV": end - start,
+        "max_displacement_A": float(np.linalg.norm(displacement, axis=1).max()),
+        "capped_steps": int(simulation.capped_steps),
+    }
+
+
+def ethane_nve(steps=400, temperature=100.0):
+    symbols, positions = ethane_geometry(float(pair_local_diagnostic("C", "C")["re_A"]))
+    simulation = ReactiveSimulation(
+        symbols, positions + 5.0, 14.0, target_temperature=temperature,
+        friction=0.0, device="cpu", random_seed=19,
+    )
+    simulation.thermostat_is_on = False
+    start = float(simulation.potential_energy + simulation.kinetic_energy)
+    initial = simulation.positions_numpy.copy()
+    simulation.step(steps)
+    end = float(simulation.potential_energy + simulation.kinetic_energy)
+    displacement = simulation.positions_numpy - initial
+    displacement -= simulation.box_size * np.round(displacement / simulation.box_size)
+    return {
+        "energy_start_eV": start,
+        "energy_end_eV": end,
+        "drift_eV": end - start,
+        "max_displacement_A": float(np.linalg.norm(displacement, axis=1).max()),
+        "capped_steps": int(simulation.capped_steps),
+    }
+
+
+def methylamine_nve(steps=400, temperature=100.0):
+    symbols, positions = methylamine_geometry(
+        float(pair_local_diagnostic("C", "N")["re_A"])
+    )
+    simulation = ReactiveSimulation(
+        symbols, positions + 5.0, 14.0, target_temperature=temperature,
+        friction=0.0, device="cpu", random_seed=19,
+    )
+    simulation.thermostat_is_on = False
+    start = float(simulation.potential_energy + simulation.kinetic_energy)
+    initial = simulation.positions_numpy.copy()
+    simulation.step(steps)
+    end = float(simulation.potential_energy + simulation.kinetic_energy)
+    displacement = simulation.positions_numpy - initial
+    displacement -= simulation.box_size * np.round(displacement / simulation.box_size)
+    return {
+        "energy_start_eV": start,
+        "energy_end_eV": end,
+        "drift_eV": end - start,
+        "max_displacement_A": float(np.linalg.norm(displacement, axis=1).max()),
+        "capped_steps": int(simulation.capped_steps),
+    }
+
+
+def methanol_nve(steps=400, temperature=100.0):
+    symbols, positions = methanol_geometry(
+        float(pair_local_diagnostic("C", "O")["re_A"])
+    )
+    simulation = ReactiveSimulation(
+        symbols, positions + 5.0, 14.0, target_temperature=temperature,
+        friction=0.0, device="cpu", random_seed=19,
+    )
+    simulation.thermostat_is_on = False
+    start = float(simulation.potential_energy + simulation.kinetic_energy)
+    initial = simulation.positions_numpy.copy()
+    simulation.step(steps)
+    end = float(simulation.potential_energy + simulation.kinetic_energy)
+    displacement = simulation.positions_numpy - initial
+    displacement -= simulation.box_size * np.round(displacement / simulation.box_size)
+    return {
+        "energy_start_eV": start,
+        "energy_end_eV": end,
+        "drift_eV": end - start,
+        "max_displacement_A": float(np.linalg.norm(displacement, axis=1).max()),
+        "capped_steps": int(simulation.capped_steps),
+    }
+
+
+def hydrazine_nve(steps=400, temperature=100.0):
+    symbols, positions = hydrazine_geometry(
+        float(pair_local_diagnostic("N", "N")["re_A"])
+    )
+    simulation = ReactiveSimulation(
+        symbols, positions + 5.0, 14.0, target_temperature=temperature,
+        friction=0.0, device="cpu", random_seed=19,
+    )
+    simulation.thermostat_is_on = False
+    start = float(simulation.potential_energy + simulation.kinetic_energy)
+    initial = simulation.positions_numpy.copy()
+    simulation.step(steps)
+    end = float(simulation.potential_energy + simulation.kinetic_energy)
+    displacement = simulation.positions_numpy - initial
+    displacement -= simulation.box_size * np.round(displacement / simulation.box_size)
+    return {
+        "energy_start_eV": start,
+        "energy_end_eV": end,
+        "drift_eV": end - start,
+        "max_displacement_A": float(np.linalg.norm(displacement, axis=1).max()),
+        "capped_steps": int(simulation.capped_steps),
+    }
+
+
+def hydroxylamine_nve(steps=400, temperature=100.0):
+    symbols, positions = hydroxylamine_geometry(
+        float(pair_local_diagnostic("N", "O")["re_A"])
+    )
+    simulation = ReactiveSimulation(
+        symbols, positions + 5.0, 14.0, target_temperature=temperature,
+        friction=0.0, device="cpu", random_seed=19,
+    )
+    simulation.thermostat_is_on = False
+    start = float(simulation.potential_energy + simulation.kinetic_energy)
+    initial = simulation.positions_numpy.copy()
+    simulation.step(steps)
+    end = float(simulation.potential_energy + simulation.kinetic_energy)
+    displacement = simulation.positions_numpy - initial
+    displacement -= simulation.box_size * np.round(displacement / simulation.box_size)
+    return {
+        "energy_start_eV": start,
+        "energy_end_eV": end,
+        "drift_eV": end - start,
+        "max_displacement_A": float(np.linalg.norm(displacement, axis=1).max()),
+        "capped_steps": int(simulation.capped_steps),
+    }
+
+
+def hydrogen_peroxide_nve(steps=400, temperature=100.0):
+    symbols, positions = hydrogen_peroxide_geometry(
+        float(pair_local_diagnostic("O", "O")["re_A"])
+    )
+    simulation = ReactiveSimulation(
+        symbols, positions + 5.0, 14.0, target_temperature=temperature,
+        friction=0.0, device="cpu", random_seed=19,
+    )
+    simulation.thermostat_is_on = False
+    start = float(simulation.potential_energy + simulation.kinetic_energy)
+    initial = simulation.positions_numpy.copy()
+    simulation.step(steps)
+    end = float(simulation.potential_energy + simulation.kinetic_energy)
+    displacement = simulation.positions_numpy - initial
+    displacement -= simulation.box_size * np.round(displacement / simulation.box_size)
+    return {
+        "energy_start_eV": start,
+        "energy_end_eV": end,
+        "drift_eV": end - start,
+        "max_displacement_A": float(np.linalg.norm(displacement, axis=1).max()),
+        "capped_steps": int(simulation.capped_steps),
+    }
+
+
+def runtime_probe(repeats=5, steps=100):
+    symbols, positions = build_box.BUILDERS["H2"]()
+    timings = []
+    for seed in range(repeats):
+        simulation = ReactiveSimulation(
+            symbols, positions + 5.0, 12.0, target_temperature=100.0,
+            device="cpu", random_seed=seed,
+        )
+        started = time.perf_counter()
+        simulation.step(steps)
+        timings.append(time.perf_counter() - started)
+    return {"median_seconds": float(np.median(timings)), "steps": steps}
+
+
+def baseline_report():
+    return {
+        "h2_reference": dict(H2_REFERENCE),
+        "h2_reference_derived": spectroscopic_h2_depths(),
+        "h2_curve": h2_curve(),
+        "molecules": {
+            name: molecule_nve(name) for name in ("H2", "CH4", "NH3", "H2O")
+        },
+        "runtime": runtime_probe(),
+    }
+
+
+if __name__ == "__main__":
+    import json
+    print(json.dumps(baseline_report(), indent=2, sort_keys=True))

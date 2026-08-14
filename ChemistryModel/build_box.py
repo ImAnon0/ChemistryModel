@@ -52,12 +52,33 @@ def ammonia():
     return np.array(coordinates)
 
 
+def amidogen():
+    """Experimental-like bent NH2 radical used by N-N calibration runs."""
+    r = 1.0109
+    half_angle = 0.5 * np.deg2rad(106.75)
+    return np.array([
+        [0.0, 0.0, 0.0],
+        [r * np.cos(half_angle), r * np.sin(half_angle), 0.0],
+        [r * np.cos(half_angle), -r * np.sin(half_angle), 0.0],
+    ])
+
+
+def hydroxyl():
+    """OH radical geometry used by focused O-O calibration runs."""
+    return np.array([
+        [0.0, 0.0, 0.0],
+        [0.96, 0.0, 0.0],
+    ])
+
+
 BUILDERS = {
     "H2": lambda: (["H", "H"],
                    np.array([[0.0, 0.0, 0.0], [0.74, 0.0, 0.0]])),
     "H2O": lambda: (["O", "H", "H"], water()),
     "CH4": lambda: (["C", "H", "H", "H", "H"], methane()),
     "NH3": lambda: (["N", "H", "H", "H"], ammonia()),
+    "NH2": lambda: (["N", "H", "H"], amidogen()),
+    "OH": lambda: (["O", "H"], hydroxyl()),
 }
 
 
