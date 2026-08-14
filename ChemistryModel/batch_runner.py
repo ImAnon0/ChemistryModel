@@ -45,7 +45,7 @@ DEFAULT_SCHEDULE = [
 
 
 def build_simulation(mixture, box_size, seed, temperature,
-                     time_step, friction, device):
+                     time_step, friction, device, compiled_forces=False):
     import build_box
 
     from reactive_torch import ReactiveSimulation
@@ -63,7 +63,7 @@ def build_simulation(mixture, box_size, seed, temperature,
             contents, box_size, random_seed=seed
         )
 
-    return ReactiveSimulation(
+    simulation = ReactiveSimulation(
         symbols=symbols,
         positions=positions,
         box_size=box_size,
@@ -73,6 +73,9 @@ def build_simulation(mixture, box_size, seed, temperature,
         device=device,
         random_seed=seed,
     )
+    if compiled_forces:
+        simulation.enable_compiled_forces()
+    return simulation
 
 
 def temperature_at(schedule, femtoseconds):
@@ -187,6 +190,7 @@ def run_one(mixture, seed, options, progress=None,
         options.time_step,
         options.friction,
         options.device,
+        getattr(options, "compiled_forces", False),
     )
 
     adaptive = bool(getattr(options, "adaptive_recording", False))
@@ -520,6 +524,8 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
         device=options.device,
         random_seed=seeds[0],
     )
+    if getattr(options, "compiled_forces", False):
+        simulation.enable_compiled_forces()
 
     adaptive = bool(getattr(options, "adaptive_recording", False))
     recorder_class = AdaptiveRecorder if adaptive else Recorder
@@ -844,6 +850,7 @@ def summarise_run(recorder, simulation, seed, seconds, strikes,
         "cool_temperature": options.cool_temperature,
         "frames": len(recorder),
         "recording_format": int(getattr(recorder, "format_version", 1)),
+        "compiled_forces": bool(getattr(options, "compiled_forces", False)),
         "adaptive_recording": bool(getattr(options, "adaptive_recording", False)),
         "adaptive_candidate_fs": (
             float(options.adaptive_candidate_fs)
@@ -1515,6 +1522,7 @@ def condition_key(options):
             round(float(options.adaptive_chemical_context_fs), 3)
             if getattr(options, "adaptive_recording", False) else 0.0
         ),
+        "compiled_forces": bool(getattr(options, "compiled_forces", False)),
     }
 
 
@@ -1545,6 +1553,9 @@ def folder_name(options):
         parts.append("v2" if candidate == 2.0 else f"v2-{candidate:g}fs")
     else:
         parts.append("v1")
+
+    if getattr(options, "compiled_forces", False):
+        parts.append("compiled-experimental")
 
     return "_".join(parts)
 
@@ -1603,6 +1614,7 @@ def existing_batch(directory):
         "adaptive_recording": bool(
             first.get("adaptive_recording", False)
         ),
+        "compiled_forces": bool(first.get("compiled_forces", False)),
         "adaptive_candidate_fs": round(float(
             first.get("adaptive_candidate_fs", 0) or 0
         ), 3),
@@ -1859,6 +1871,10 @@ def main():
     parser.add_argument("--box", type=float, default=12.0)
     parser.add_argument("--time-step", type=float, default=0.25)
     parser.add_argument("--friction", type=float, default=0.01)
+    parser.add_argument(
+        "--compiled-forces", action="store_true",
+        help="experimental Triton/Inductor force evaluation (CUDA only)",
+    )
     parser.add_argument("--capture-every", type=int, default=40,
                         help="simulation steps between recorded frames")
     recording_mode = parser.add_mutually_exclusive_group()
