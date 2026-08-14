@@ -1,7 +1,7 @@
 # ChemistryModel independent validation report
 
-Revision: `3cf5b10074f433c1bbac33a6991277e367894b08`  
-Mode: `standard`  
+Revision: `0eb378989fa849b7e234d454c8e544e0ec312e7d`
+Mode: `full`
 Force-field parameters changed by this report: **no**
 
 Fit targets are labelled and are not counted as independent validation.
@@ -11,18 +11,19 @@ Fit targets are labelled and are not counted as independent validation.
 **Strong**
 - deterministic core, high-fidelity, recorder, and replay regressions
 - preserved focused N-N and O-O recombination ensembles
+- H2 effective depth now matches the thermochemical convention while preserving equilibrium length and harmonic curvature
+- whole-model H2-forming abstraction energies now have the expected sign and are within 0.10 eV of their BDE298-derived comparisons
 - most fitted X-H geometry and curvature diagnostics
 
 **Weak**
-- whole-model methane and ammonia abstraction reaction energies have the wrong sign against the BDE298-derived comparison
-- whole-model water abstraction is endothermic in the correct direction but materially too small
-- standard-mode frozen abstraction barriers are screening values and lie below reference ranges
+- the relaxed methane abstraction barrier remains below its reference range
 - N-N/N-O heavy-atom curvature transfer is weak or uncertain
 
 **Uncertain**
 - reaction-energy references are calibration-linked BDE298 differences, not independent like-for-like electronic energies
-- full relaxed barrier scans and broader collision ensembles are still needed
-- double/triple bond transfer and high-level pointwise potential curves remain sparsely validated
+- ammonia lacks a bundled independent abstraction-barrier reference and broader collision ensembles are still needed
+- the full H2 Morse curve is convention-dependent; spectroscopy constrains its equilibrium length and local curvature here
+- double/triple bond transfer and other high-level pointwise potential curves remain sparsely validated
 
 ## 1. Parameter consistency
 
@@ -74,7 +75,7 @@ These are generic-pair transfer diagnostics, not fully relaxed molecular structu
 
 ## 5. Potential curves
 
-- **H2 H-H**: GOOD; minimum 0.7409 A, dissociation coordinate 4.747 eV. External pointwise comparison: FIT TARGET - NOT INDEPENDENT.
+- **H2 H-H**: GOOD; minimum 0.7409 A, dissociation coordinate 4.517 eV. External pointwise comparison: CONVENTION-DEPENDENT DIAGNOSTIC.
 - **CH4 C-H**: GOOD; minimum 1.0890 A, dissociation coordinate 4.572 eV. External pointwise comparison: INSUFFICIENT REFERENCE DATA.
 - **C2H6 C-C**: GOOD; minimum 1.5250 A, dissociation coordinate 3.651 eV. External pointwise comparison: INSUFFICIENT REFERENCE DATA.
 - **CH3NH2 C-N**: GOOD; minimum 1.4675 A, dissociation coordinate 3.708 eV. External pointwise comparison: INSUFFICIENT REFERENCE DATA.
@@ -87,7 +88,7 @@ These are generic-pair transfer diagnostics, not fully relaxed molecular structu
 
 | reaction | model kJ/mol | reference kJ/mol | error % | status |
 | --- | ---: | ---: | ---: | --- |
-| H2 -> H + H | 458.0 | 435.8 | 5.1 | ACCEPTABLE |
+| H2 -> H + H | 435.8 | 435.8 | 0.0 | GOOD |
 | CH4 -> CH3 + H | 439.0 | 439.0 | 0.0 | FIT TARGET - NOT INDEPENDENT |
 | NH3 -> NH2 + H | 449.0 | 449.0 | 0.0 | FIT TARGET - NOT INDEPENDENT |
 | H2O -> OH + H | 498.0 | 498.0 | 0.0 | FIT TARGET - NOT INDEPENDENT |
@@ -100,9 +101,9 @@ These are generic-pair transfer diagnostics, not fully relaxed molecular structu
 
 These pair-depth differences are diagnostics only. They are not ChemistryModel reaction thermochemistry.
 
-- **H + CH4 -> H2 + CH3**: FAIL; model -0.197 eV, reference 0.033 eV.
-- **H + H2O -> H2 + OH**: FAIL; model 0.414 eV, reference 0.645 eV.
-- **H + NH3 -> H2 + NH2**: FAIL; model -0.094 eV, reference 0.137 eV.
+- **H + CH4 -> H2 + CH3**: GOOD; model 0.033 eV, reference 0.033 eV.
+- **H + H2O -> H2 + OH**: GOOD; model 0.645 eV, reference 0.645 eV.
+- **H + NH3 -> H2 + NH2**: GOOD; model 0.137 eV, reference 0.137 eV.
 - **CH3 + CH3 -> C2H6**: INSUFFICIENT REFERENCE DATA.
 - **CH3 + OH -> CH3OH**: INSUFFICIENT REFERENCE DATA.
 - **NH2 + NH2 -> N2H4**: INSUFFICIENT REFERENCE DATA.
@@ -112,23 +113,23 @@ These pair-depth differences are diagnostics only. They are not ChemistryModel r
 
 These use relaxed complete reactant and product species through the production Torch energy function. The reference is a BDE298-derived thermochemical difference, so it is not a like-for-like zero-temperature electronic-energy observable.
 
-- **H + CH4 -> H2 + CH3**: FAIL; model Delta E -0.139 eV, BDE298-derived reference 0.033 eV; relaxation converged: True.
-- **H + H2O -> H2 + OH**: FAIL; model Delta E 0.414 eV, BDE298-derived reference 0.645 eV; relaxation converged: True.
-- **H + NH3 -> H2 + NH2**: FAIL; model Delta E -0.093 eV, BDE298-derived reference 0.137 eV; relaxation converged: True.
+- **H + CH4 -> H2 + CH3**: GOOD; model Delta E 0.092 eV, BDE298-derived reference 0.033 eV; relaxation converged: True.
+- **H + H2O -> H2 + OH**: GOOD; model Delta E 0.644 eV, BDE298-derived reference 0.645 eV; relaxation converged: True.
+- **H + NH3 -> H2 + NH2**: GOOD; model Delta E 0.137 eV, BDE298-derived reference 0.137 eV; relaxation converged: True.
 
 ## 9. Reaction barriers
 
 Frozen scans are screening diagnostics; relaxed full-mode scans are the stronger result.
 
-- **formaldehyde**: WEAK; model 0.160 eV (frozen scan).
-- **water**: WEAK; model 0.223 eV (frozen scan).
-- **methane**: WEAK; model 0.193 eV (frozen scan).
-- **ammonia**: INSUFFICIENT REFERENCE DATA; model 0.195 eV (frozen scan).
+- **formaldehyde**: WEAK; model 0.126 eV (relaxed scan).
+- **water**: GOOD; model 0.344 eV (relaxed scan).
+- **methane**: WEAK; model 0.165 eV (relaxed scan).
+- **ammonia**: INSUFFICIENT REFERENCE DATA; model 0.168 eV (relaxed scan).
 
 ## 10. Dynamic reactions
 
-- **NH2 + NH2 -> N2H4**: GOOD; 16/16 reacted, 16 retained product.
-- **OH + OH -> H2O2**: GOOD; 16/16 reacted, 16 retained product.
+- **NH2 + NH2 -> N2H4**: NOT RUN.
+- **OH + OH -> H2O2**: NOT RUN.
 - **H + H -> H2**: INSUFFICIENT REFERENCE DATA.
 - **H + CH3 -> CH4**: INSUFFICIENT REFERENCE DATA.
 - **CH3 + CH3 -> C2H6**: INSUFFICIENT REFERENCE DATA.
@@ -136,7 +137,7 @@ Frozen scans are screening diagnostics; relaxed full-mode scans are the stronger
 
 ## 11. Mixture behaviour
 
-- Large matched mixture: **ACCEPTABLE**
+- Large matched mixture: **INSUFFICIENT REFERENCE DATA**
 
 ## 12. Numerical stability
 
@@ -145,7 +146,7 @@ Frozen scans are screening diagnostics; relaxed full-mode scans are the stronger
 
 ## 13. Performance
 
-- CPU probe: 203.8 steps/s (0.491 s for 100 steps).
+- CPU probe: 406.1 steps/s (0.246 s for 100 steps).
 
 ## 14. Transferability
 

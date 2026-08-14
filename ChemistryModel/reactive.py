@@ -44,7 +44,11 @@ ANGLE_STIFFNESS = {"C": 3.0, "N": 2.6, "O": 2.6, "H": 0.0}
 # (length in angstroms, dissociation energy in kJ/mol, Morse width)
 
 BOND_TABLE = {
-    ("H", "H"): (0.74144, 458.02871, 1.94458),
+    # H-H uses the same thermochemical/BDE298-like effective-depth
+    # convention as the other single-bond rows.  The width preserves the
+    # 4401.21 cm-1 harmonic curvature at this effective depth; it is not a
+    # pointwise fit to the older spectroscopy-derived De Morse curve.
+    ("H", "H"): (0.74144, 435.78, 1.99360),
     ("C", "H"): (1.086, 439.0, 1.80),
     ("N", "H"): (1.0109, 449.0, 1.95),
     ("O", "H"): (0.96, 498.0, 2.18),

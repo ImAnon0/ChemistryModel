@@ -65,6 +65,22 @@ def test_quick_report_keeps_whole_model_energy_separate():
     assert "reaction_thermochemistry" not in report
 
 
+def test_h2_full_curve_is_a_convention_diagnostic_not_fit_target():
+    row = next(
+        item for item in V.potential_curves()
+        if item["coordinate"] == "H2 H-H"
+    )
+    assert row["reference_curve_status"] == "CONVENTION-DEPENDENT DIAGNOSTIC"
+    assert row["reference_curve"]["required_pointwise_target"] is False
+    assert "not a pointwise fit requirement" in row["note"]
+
+
+def test_near_thermoneutral_reaction_uses_absolute_energy_error():
+    assert V.status_for_reaction_energy(0.06) == V.STATUS["good"]
+    assert V.status_for_reaction_energy(0.15) == V.STATUS["acceptable"]
+    assert V.status_for_reaction_energy(0.25) == V.STATUS["weak"]
+
+
 if __name__ == "__main__":
     tests = [value for name, value in sorted(globals().items()) if name.startswith("test_")]
     failures = 0

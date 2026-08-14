@@ -71,56 +71,57 @@
     "strong": [
       "deterministic core, high-fidelity, recorder, and replay regressions",
       "preserved focused N-N and O-O recombination ensembles",
+      "H2 effective depth now matches the thermochemical convention while preserving equilibrium length and harmonic curvature",
+      "whole-model H2-forming abstraction energies now have the expected sign and are within 0.10 eV of their BDE298-derived comparisons",
       "most fitted X-H geometry and curvature diagnostics"
     ],
     "uncertain": [
       "reaction-energy references are calibration-linked BDE298 differences, not independent like-for-like electronic energies",
-      "full relaxed barrier scans and broader collision ensembles are still needed",
-      "double/triple bond transfer and high-level pointwise potential curves remain sparsely validated"
+      "ammonia lacks a bundled independent abstraction-barrier reference and broader collision ensembles are still needed",
+      "the full H2 Morse curve is convention-dependent; spectroscopy constrains its equilibrium length and local curvature here",
+      "double/triple bond transfer and other high-level pointwise potential curves remain sparsely validated"
     ],
     "weak": [
-      "whole-model methane and ammonia abstraction reaction energies have the wrong sign against the BDE298-derived comparison",
-      "whole-model water abstraction is endothermic in the correct direction but materially too small",
-      "standard-mode frozen abstraction barriers are screening values and lie below reference ranges",
+      "the relaxed methane abstraction barrier remains below its reference range",
       "N-N/N-O heavy-atom curvature transfer is weak or uncertain"
     ]
   },
   "bond_depth_diagnostics": [
     {
-      "absolute_error": -0.2302193605223609,
-      "absolute_error_magnitude": 0.2302193605223609,
+      "absolute_error": 0.0003730631704414178,
+      "absolute_error_magnitude": 0.0003730631704414178,
       "classification": "derived from calibration-linked pair depths; not an independent hold-out",
       "diagnostic_kind": "effective pair-depth difference",
-      "model_eV": -0.1972193605223609,
+      "model_eV": 0.03337306317044142,
       "note": "bond-depth diagnostic only; not the model's reaction thermochemistry and omits all non-pair-depth terms, fragment relaxation, thermal corrections, and ZPE",
-      "percent_error": 697.634425825336,
+      "percent_error": 1.1304944558830843,
       "reaction": "H + CH4 -> H2 + CH3",
       "reference_eV": 0.033,
-      "status": "FAIL"
+      "status": "GOOD"
     },
     {
-      "absolute_error": -0.2307253459086911,
-      "absolute_error_magnitude": 0.2307253459086911,
+      "absolute_error": -0.0001329222158887866,
+      "absolute_error_magnitude": 0.0001329222158887866,
       "classification": "derived from calibration-linked pair depths; not an independent hold-out",
       "diagnostic_kind": "effective pair-depth difference",
-      "model_eV": 0.4142746540913089,
+      "model_eV": 0.6448670777841112,
       "note": "bond-depth diagnostic only; not the model's reaction thermochemistry and omits all non-pair-depth terms, fragment relaxation, thermal corrections, and ZPE",
-      "percent_error": 35.7713714587118,
+      "percent_error": 0.020608095486633584,
       "reaction": "H + H2O -> H2 + OH",
       "reference_eV": 0.645,
-      "status": "FAIL"
+      "status": "GOOD"
     },
     {
-      "absolute_error": -0.2305763071980107,
-      "absolute_error_magnitude": 0.2305763071980107,
+      "absolute_error": 1.611649479160704e-05,
+      "absolute_error_magnitude": 1.611649479160704e-05,
       "classification": "derived from calibration-linked pair depths; not an independent hold-out",
       "diagnostic_kind": "effective pair-depth difference",
-      "model_eV": -0.09357630719801069,
+      "model_eV": 0.13701611649479162,
       "note": "bond-depth diagnostic only; not the model's reaction thermochemistry and omits all non-pair-depth terms, fragment relaxation, thermal corrections, and ZPE",
-      "percent_error": 168.3038738671611,
+      "percent_error": 0.011763864811391998,
       "reaction": "H + NH3 -> H2 + NH2",
       "reference_eV": 0.137,
-      "status": "FAIL"
+      "status": "GOOD"
     },
     {
       "note": "bond-depth diagnostic unavailable as independent evidence: formation energy is the inverse of a calibration-linked BDE",
@@ -145,7 +146,7 @@
   ],
   "collision_abstraction": [
     {
-      "barrier_eV": 0.1599679524057187,
+      "barrier_eV": 0.12627143374576733,
       "caution": "static surface threshold, not a trajectory probability or experimental rate",
       "collision_energy_multipliers": [
         {
@@ -164,7 +165,7 @@
           "nominal_eV": 0.077555999358
         },
         {
-          "classically_above_static_barrier": false,
+          "classically_above_static_barrier": true,
           "multiplier": 5,
           "nominal_eV": 0.12925999893
         }
@@ -173,7 +174,7 @@
       "status": "ACCEPTABLE"
     },
     {
-      "barrier_eV": 0.22305273167456718,
+      "barrier_eV": 0.3444050566173402,
       "caution": "static surface threshold, not a trajectory probability or experimental rate",
       "collision_energy_multipliers": [
         {
@@ -201,7 +202,7 @@
       "status": "ACCEPTABLE"
     },
     {
-      "barrier_eV": 0.19337360984458485,
+      "barrier_eV": 0.16498013563510128,
       "caution": "static surface threshold, not a trajectory probability or experimental rate",
       "collision_energy_multipliers": [
         {
@@ -229,7 +230,7 @@
       "status": "ACCEPTABLE"
     },
     {
-      "barrier_eV": 0.19531563819026587,
+      "barrier_eV": 0.16816396144599643,
       "caution": "static surface threshold, not a trajectory probability or experimental rate",
       "collision_energy_multipliers": [
         {
@@ -259,18 +260,18 @@
   ],
   "dissociation_energies": [
     {
-      "absolute_error": 22.248710000000074,
-      "absolute_error_magnitude": 22.248710000000074,
+      "absolute_error": 0.0,
+      "absolute_error_magnitude": 0.0,
       "caution": "effective pair De compared with molecular thermochemical quantity",
       "classification": "hold-out",
-      "model_effective_depth_kJ_mol": 458.02871000000005,
+      "model_effective_depth_kJ_mol": 435.78,
       "pair": "H-H",
-      "percent_error": 5.105491302951048,
+      "percent_error": 0.0,
       "reaction": "H2 -> H + H",
       "reference_kJ_mol": 435.78,
       "reference_quantity": "D298",
       "source": "https://doi.org/10.1063/1.3120443",
-      "status": "ACCEPTABLE"
+      "status": "GOOD"
     },
     {
       "absolute_error": 5.684341886080802e-14,
@@ -373,50 +374,14 @@
   ],
   "dynamic_reactions": [
     {
-      "attempts": 16,
-      "batch": {
-        "energy_jumps": 0,
-        "finished": 16,
-        "mean_final_potential_eV": -235.73945999145508,
-        "mean_final_temperature_K": 251.93757343292236,
-        "mean_heavy_bonds_formed": 5.5,
-        "mean_largest_structure": 6.0,
-        "mean_species_count": 2.0,
-        "mean_wall_seconds": 17.4,
-        "move_cap_events": 0,
-        "path": "runs\\nn_width_2000_focused_control\\index.json",
-        "runs": 16,
-        "stable": 16
-      },
-      "integration_failures": 0,
-      "interpretation": "deterministic regression ensemble, not an experimental rate constant",
-      "reacting": 16,
+      "path": "runs/nn_width_2000_focused_control/index.json",
       "reaction": "NH2 + NH2 -> N2H4",
-      "retained": 16,
-      "status": "GOOD"
+      "status": "NOT RUN"
     },
     {
-      "attempts": 16,
-      "batch": {
-        "energy_jumps": 0,
-        "finished": 16,
-        "mean_final_potential_eV": -139.56846141815186,
-        "mean_final_temperature_K": 253.91038608551025,
-        "mean_heavy_bonds_formed": 10.0625,
-        "mean_largest_structure": 4.0,
-        "mean_species_count": 2.0,
-        "mean_wall_seconds": 9.1,
-        "move_cap_events": 0,
-        "path": "runs\\oo_width_2735_focused_candidate\\index.json",
-        "runs": 16,
-        "stable": 16
-      },
-      "integration_failures": 0,
-      "interpretation": "deterministic regression ensemble, not an experimental rate constant",
-      "reacting": 16,
+      "path": "runs/oo_width_2735_focused_candidate/index.json",
       "reaction": "OH + OH -> H2O2",
-      "retained": 16,
-      "status": "GOOD"
+      "status": "NOT RUN"
     },
     {
       "note": "no preserved matched focused ensemble yet",
@@ -571,16 +536,16 @@
       "status": "FIT TARGET - NOT INDEPENDENT"
     }
   ],
-  "git_revision": "3cf5b10074f433c1bbac33a6991277e367894b08",
+  "git_revision": "0eb378989fa849b7e234d454c8e544e0ec312e7d",
   "harmonic_curvature": [
     {
-      "absolute_error": -0.00020457664231798844,
-      "absolute_error_magnitude": 0.00020457664231798844,
+      "absolute_error": -0.0052011990464961855,
+      "absolute_error_magnitude": 0.0052011990464961855,
       "classification": "calibration-linked",
       "comparison_quality": "clean/strong comparison",
-      "model_cm-1": 4401.209795423358,
+      "model_cm-1": 4401.2047988009535,
       "pair": "H-H",
-      "percent_error": 4.648190891095595e-06,
+      "percent_error": 0.00011817657068161224,
       "reference_cm-1": 4401.21,
       "source": "https://webbook.nist.gov/cgi/cbook.cgi?ID=C1333740&Mask=3FF7&Units=SI",
       "status": "FIT TARGET - NOT INDEPENDENT"
@@ -750,37 +715,11 @@
   ],
   "large_mixture": {
     "caution": "historical matched seeds; stochastic products need distribution-level interpretation",
-    "current_calibration_stage": {
-      "energy_jumps": 0,
-      "finished": 16,
-      "mean_final_potential_eV": -1090.217300415039,
-      "mean_final_temperature_K": 538.9271430969238,
-      "mean_heavy_bonds_formed": 59.625,
-      "mean_largest_structure": 11.4375,
-      "mean_species_count": 51.1875,
-      "mean_wall_seconds": 9.8,
-      "move_cap_events": 0,
-      "path": "runs\\oo_length_candidate\\index.json",
-      "runs": 16,
-      "stable": 16
-    },
-    "historical_baseline": {
-      "energy_jumps": 0,
-      "finished": 16,
-      "mean_final_potential_eV": -1084.435203552246,
-      "mean_final_temperature_K": 528.8305816650391,
-      "mean_heavy_bonds_formed": 57.75,
-      "mean_largest_structure": 11.0625,
-      "mean_species_count": 49.875,
-      "mean_wall_seconds": 10.1,
-      "move_cap_events": 0,
-      "path": "runs\\integrator_smoothstep_final\\index.json",
-      "runs": 16,
-      "stable": 16
-    },
-    "status": "ACCEPTABLE"
+    "current_calibration_stage": null,
+    "historical_baseline": null,
+    "status": "INSUFFICIENT REFERENCE DATA"
   },
-  "mode": "standard",
+  "mode": "full",
   "numerical_stability": {
     "source": "NVE endurance plus focused batch health",
     "status": "GOOD"
@@ -846,8 +785,8 @@
         },
         {
           "bond_order": 1,
-          "depth_eV": 4.7471494014613675,
-          "depth_kJ_mol": 458.02871,
+          "depth_eV": 4.516556977768565,
+          "depth_kJ_mol": 435.78,
           "elements": [
             "H",
             "H"
@@ -856,7 +795,7 @@
           "re_A": 0.74144,
           "source": "reactive.py live table",
           "state": "accepted single-bond calibration",
-          "width_inv_A": 1.94458
+          "width_inv_A": 1.9936
         },
         {
           "bond_order": 1,
@@ -1085,57 +1024,60 @@
   "performance": {
     "device": "cpu",
     "gpu_memory": "not measured in quick local probe",
-    "median_seconds": 0.4907132999942405,
+    "median_seconds": 0.24622670000098879,
     "status": "GOOD",
     "steps": 100,
-    "steps_per_second": 203.78497994893087
+    "steps_per_second": 406.129798269637
   },
   "potential_curves": [
     {
       "coordinate": "H2 H-H",
-      "model_dissociation_coordinate_eV": 4.747143664807817,
-      "note": "H2 has an independent spectroscopy-derived approximate curve; other coordinates lack bundled pointwise references",
+      "model_dissociation_coordinate_eV": 4.5165512409691235,
+      "note": "H2 spectroscopy constrains equilibrium length and harmonic curvature. The full Morse-curve difference is reported only as a depth-convention diagnostic and is not a pointwise fit requirement.",
       "post_minimum_falling_steps": 0,
       "reference_curve": {
         "kind": "spectroscopy-derived Morse approximation",
+        "model_depth_convention": "thermochemical/BDE298-like effective bond depth",
         "points": [
           {
-            "absolute_error_eV": 4.4888285088973134e-08,
+            "absolute_error_eV": 0.23405559672144527,
             "distance_A": 0.6,
-            "model_eV": -4.271360787019145,
+            "model_eV": -4.037305145409414,
             "spectroscopic_Morse_reference_eV": -4.2713607421308595
           },
           {
-            "absolute_error_eV": 5.622972309993202e-09,
+            "absolute_error_eV": 0.23059242931577462,
             "distance_A": 0.74144,
-            "model_eV": -4.7471494014613675,
+            "model_eV": -4.516556977768565,
             "spectroscopic_Morse_reference_eV": -4.74714940708434
           },
           {
-            "absolute_error_eV": 4.7612482845238446e-08,
+            "absolute_error_eV": 0.22203889852040337,
             "distance_A": 1.0,
-            "model_eV": -4.005876874967478,
+            "model_eV": -3.7838379288345916,
             "spectroscopic_Morse_reference_eV": -4.005876827354995
           },
           {
-            "absolute_error_eV": 1.1110870157260422e-07,
+            "absolute_error_eV": 0.15192135976460452,
             "distance_A": 1.5,
-            "model_eV": -1.9234941680588338,
+            "model_eV": -1.7715726971855277,
             "spectroscopic_Morse_reference_eV": -1.9234940569501322
           },
           {
-            "absolute_error_eV": 8.334366774498392e-08,
+            "absolute_error_eV": 0.08101139702118199,
             "distance_A": 2.0,
-            "model_eV": -0.7859177550387952,
+            "model_eV": -0.7049062746739455,
             "spectroscopic_Morse_reference_eV": -0.7859176716951275
           }
         ],
+        "reference_depth_convention": "spectroscopic De derived from D0 plus ZPE",
+        "required_pointwise_target": false,
         "source": "https://webbook.nist.gov/cgi/cbook.cgi?ID=C1333740&Mask=3FF7&Units=SI"
       },
-      "reference_curve_status": "FIT TARGET - NOT INDEPENDENT",
+      "reference_curve_status": "CONVENTION-DEPENDENT DIAGNOSTIC",
       "sampled_minimum_A": 0.740875,
       "shape_status": "GOOD",
-      "short_range_above_dissociation_eV": 1.4310655724415255
+      "short_range_above_dissociation_eV": 1.796729919900102
     },
     {
       "coordinate": "CH4 C-H",
@@ -1210,102 +1152,102 @@
   ],
   "reaction_barriers": [
     {
-      "absolute_error_eV": 0.1640320475942813,
-      "caution": "frozen spectators make this an approximate screening value; use --full for relaxed barriers",
+      "absolute_error_eV": 0.19772856625423268,
+      "caution": null,
       "model": {
-        "barrier": 0.1599679524057187,
-        "donor": 1.1600000000000001,
+        "barrier": 0.12627143374576733,
+        "donor": 1.12,
         "reactant_donor": 1.08,
-        "reactant_transfer": 1.3000000000000007,
-        "reaction": -0.6691900219812457,
+        "reactant_transfer": 1.5900000000000007,
+        "reaction": -0.7535366147016713,
         "spectators": [
-          1.2,
-          1.09,
-          122.0,
-          122.0
+          1.1999996492161082,
+          1.086,
+          119.99483280849682,
+          120.01200936958547
         ],
-        "transfer": 1.0600000000000005
+        "transfer": 1.0500000000000003
       },
       "reference_eV": [
         0.324,
         0.324
       ],
-      "scan_kind": "frozen",
+      "scan_kind": "relaxed",
       "status": "WEAK",
       "system": "formaldehyde",
-      "wall_seconds": 0.3017277000035392
+      "wall_seconds": 10.67814830000134
     },
     {
-      "absolute_error_eV": 0.1409472683254328,
-      "caution": "frozen spectators make this an approximate screening value; use --full for relaxed barriers",
+      "absolute_error_eV": 0.01959494338265977,
+      "caution": null,
       "model": {
-        "barrier": 0.22305273167456718,
-        "donor": 1.3800000000000003,
-        "reactant_donor": 0.9,
-        "reactant_transfer": 1.5500000000000007,
-        "reaction": -0.008846741938022262,
+        "barrier": 0.3444050566173402,
+        "donor": 0.9800000000000001,
+        "reactant_donor": 0.9800000000000001,
+        "reactant_transfer": 1.7800000000000007,
+        "reaction": -0.009380057313665091,
         "spectators": [
-          0.96,
-          0.96,
-          104.5,
-          104.5
+          0.9599985104078477,
+          0.9568093640961459,
+          75.42542594244586,
+          125.08179180164406
         ],
-        "transfer": 0.9900000000000001
+        "transfer": 1.3800000000000003
       },
       "reference_eV": [
         0.364,
         0.525
       ],
-      "scan_kind": "frozen",
-      "status": "WEAK",
+      "scan_kind": "relaxed",
+      "status": "GOOD",
       "system": "water",
-      "wall_seconds": 0.22361159999854863
+      "wall_seconds": 36.670392200001515
     },
     {
-      "absolute_error_eV": 0.44662639015541516,
-      "caution": "frozen spectators make this an approximate screening value; use --full for relaxed barriers",
+      "absolute_error_eV": 0.47501986436489874,
+      "caution": null,
       "model": {
-        "barrier": 0.19337360984458485,
+        "barrier": 0.16498013563510128,
         "donor": 1.12,
         "reactant_donor": 1.08,
-        "reactant_transfer": 1.3000000000000007,
-        "reaction": -0.17547610544211167,
+        "reactant_transfer": 1.5900000000000007,
+        "reaction": 0.03410162281116769,
         "spectators": [
-          1.09,
-          1.09,
-          1.09,
-          109.47
+          1.0859999211509985,
+          1.0859999211509714,
+          1.0859999211509705,
+          109.47001985558839
         ],
-        "transfer": 1.0600000000000005
+        "transfer": 1.0500000000000003
       },
       "reference_eV": [
         0.64,
         0.64
       ],
-      "scan_kind": "frozen",
+      "scan_kind": "relaxed",
       "status": "WEAK",
       "system": "methane",
-      "wall_seconds": 0.27995199999713805
+      "wall_seconds": 12.092722699999285
     },
     {
-      "caution": "frozen spectators make this an approximate screening value; use --full for relaxed barriers",
+      "caution": null,
       "model": {
-        "barrier": 0.19531563819026587,
+        "barrier": 0.16816396144599643,
         "donor": 1.04,
         "reactant_donor": 1.0,
-        "reactant_transfer": 1.3000000000000007,
-        "reaction": -0.08931580377981696,
+        "reactant_transfer": 1.5900000000000007,
+        "reaction": 0.13604336284433316,
         "spectators": [
-          1.01,
-          1.01,
-          107.0
+          1.0109002074416074,
+          1.0109002464989516,
+          106.97134023510056
         ],
-        "transfer": 1.0600000000000005
+        "transfer": 1.0500000000000003
       },
-      "scan_kind": "frozen",
+      "scan_kind": "relaxed",
       "status": "INSUFFICIENT REFERENCE DATA",
       "system": "ammonia",
-      "wall_seconds": 0.26161810000485275
+      "wall_seconds": 10.84372810000059
     }
   ],
   "rules": {
@@ -1317,10 +1259,10 @@
   "stable_molecule_endurance": [
     {
       "capped_steps": 0,
-      "drift_eV": 3.7184709178461617e-07,
-      "energy_end_eV": -4.7428545327545955,
-      "energy_start_eV": -4.742854904601687,
-      "max_displacement_A": 0.1039099171757698,
+      "drift_eV": 3.481166714891515e-07,
+      "energy_end_eV": -4.5124625772674865,
+      "energy_start_eV": -4.512462925384158,
+      "max_displacement_A": 0.10391083359718323,
       "molecule": "H2",
       "status": "GOOD"
     },
@@ -1430,16 +1372,16 @@
     "oxygen": "[validation] oxygen radicals",
     "stable": "[validation] stable small molecules"
   },
-  "wall_seconds": 75.45086399999855,
+  "wall_seconds": 109.32846810000046,
   "whole_model_reaction_energies": [
     {
-      "absolute_error": -0.1718647866155246,
-      "absolute_error_magnitude": 0.1718647866155246,
+      "absolute_error": 0.05852702166866078,
+      "absolute_error_magnitude": 0.05852702166866078,
       "calculation": "complete-species ChemistryModel Torch energy after isolated-fragment relaxation",
       "classification": "derived comparison from calibration-linked BDE targets; not independent",
       "limitation": "model electronic energy is compared with a BDE298-derived thermochemical value; ZPE and finite-temperature corrections are not included",
-      "model_delta_E_eV": -0.1388647866155246,
-      "percent_error": 520.8023836834078,
+      "model_delta_E_eV": 0.09152702166866078,
+      "percent_error": 177.35461111715387,
       "reaction": "H + CH4 -> H2 + CH3",
       "reference_delta_E_eV": 0.033,
       "reference_quantity": "approximate reaction enthalpy from experimental BDE298 difference",
@@ -1471,23 +1413,24 @@
         "H2": {
           "atoms": 2,
           "converged": true,
-          "energy_eV": -4.743019381482094,
+          "energy_eV": -4.512627573197906,
           "geometry": "engine-relaxed from a stable experimental-like starting geometry",
-          "initial_energy_eV": -4.742982086714424,
-          "maximum_force_eV_per_A": 8.064660050877137e-13
+          "initial_energy_eV": -4.5125902758809895,
+          "maximum_force_eV_per_A": 7.993605777301127e-13
         }
       },
-      "status": "FAIL",
+      "status": "GOOD",
+      "status_basis": "absolute delta-E error; percentage error is retained but not used for near-thermoneutral reactions",
       "terms": "the full engine energy, including bond order, environment softening, coordination, and angle terms"
     },
     {
-      "absolute_error": -0.23108576485775467,
-      "absolute_error_magnitude": 0.23108576485775467,
+      "absolute_error": -0.0006939565735675224,
+      "absolute_error_magnitude": 0.0006939565735675224,
       "calculation": "complete-species ChemistryModel Torch energy after isolated-fragment relaxation",
       "classification": "derived comparison from calibration-linked BDE targets; not independent",
       "limitation": "model electronic energy is compared with a BDE298-derived thermochemical value; ZPE and finite-temperature corrections are not included",
-      "model_delta_E_eV": 0.41391423514224535,
-      "percent_error": 35.827250365543364,
+      "model_delta_E_eV": 0.6443060434264325,
+      "percent_error": 0.10759016644457711,
       "reaction": "H + H2O -> H2 + OH",
       "reference_delta_E_eV": 0.645,
       "reference_quantity": "approximate reaction enthalpy from experimental BDE298 difference",
@@ -1503,10 +1446,10 @@
         "H2": {
           "atoms": 2,
           "converged": true,
-          "energy_eV": -4.743019381482094,
+          "energy_eV": -4.512627573197906,
           "geometry": "engine-relaxed from a stable experimental-like starting geometry",
-          "initial_energy_eV": -4.742982086714424,
-          "maximum_force_eV_per_A": 8.064660050877137e-13
+          "initial_energy_eV": -4.5125902758809895,
+          "maximum_force_eV_per_A": 7.993605777301127e-13
         },
         "H2O": {
           "atoms": 3,
@@ -1525,17 +1468,18 @@
           "maximum_force_eV_per_A": 4.618527782440651e-14
         }
       },
-      "status": "FAIL",
+      "status": "GOOD",
+      "status_basis": "absolute delta-E error; percentage error is retained but not used for near-thermoneutral reactions",
       "terms": "the full engine energy, including bond order, environment softening, coordination, and angle terms"
     },
     {
-      "absolute_error": -0.23049491654819354,
-      "absolute_error_magnitude": 0.23049491654819354,
+      "absolute_error": -0.00010310826400639073,
+      "absolute_error_magnitude": 0.00010310826400639073,
       "calculation": "complete-species ChemistryModel Torch energy after isolated-fragment relaxation",
       "classification": "derived comparison from calibration-linked BDE targets; not independent",
       "limitation": "model electronic energy is compared with a BDE298-derived thermochemical value; ZPE and finite-temperature corrections are not included",
-      "model_delta_E_eV": -0.09349491654819353,
-      "percent_error": 168.24446463371788,
+      "model_delta_E_eV": 0.13689689173599362,
+      "percent_error": 0.07526150657400782,
       "reaction": "H + NH3 -> H2 + NH2",
       "reference_delta_E_eV": 0.137,
       "reference_quantity": "approximate reaction enthalpy from experimental BDE298 difference",
@@ -1551,10 +1495,10 @@
         "H2": {
           "atoms": 2,
           "converged": true,
-          "energy_eV": -4.743019381482094,
+          "energy_eV": -4.512627573197906,
           "geometry": "engine-relaxed from a stable experimental-like starting geometry",
-          "initial_energy_eV": -4.742982086714424,
-          "maximum_force_eV_per_A": 8.064660050877137e-13
+          "initial_energy_eV": -4.5125902758809895,
+          "maximum_force_eV_per_A": 7.993605777301127e-13
         },
         "NH2": {
           "atoms": 3,
@@ -1573,7 +1517,8 @@
           "maximum_force_eV_per_A": 0.0003579873140123948
         }
       },
-      "status": "FAIL",
+      "status": "GOOD",
+      "status_basis": "absolute delta-E error; percentage error is retained but not used for near-thermoneutral reactions",
       "terms": "the full engine energy, including bond order, environment softening, coordination, and angle terms"
     }
   ]

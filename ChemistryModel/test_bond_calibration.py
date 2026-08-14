@@ -35,6 +35,15 @@ def test_h2_harmonic_diagnostic_is_finite_and_near_reference():
     assert abs(predicted - calibration.H2_REFERENCE["omega_e_cm-1"]) < 250.0
 
 
+def test_h2_uses_thermochemical_depth_with_preserved_curvature():
+    i = R.ELEMENT_INDEX["H"]
+    assert float(R.BOND_LENGTH[i, i]) == 0.74144
+    assert abs(float(R.BOND_DEPTH[i, i] / R.KJ_PER_MOL_TO_EV) - 435.78) < 1e-10
+    assert float(R.BOND_WIDTH[i, i]) == 1.99360
+    predicted = calibration.h2_curve()["harmonic_cm-1"]
+    assert abs(predicted - calibration.H2_REFERENCE["omega_e_cm-1"]) < 1.0
+
+
 def test_torch_receives_exact_numpy_h2_parameters():
     symbols = ["H", "H"]
     positions = np.array([[5.0, 5.0, 5.0], [5.74144, 5.0, 5.0]])
