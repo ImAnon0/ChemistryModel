@@ -34,6 +34,7 @@ runs/
 results/
 characterisation/
 molecules/
+validation/
 .analysis_cache/
 dashboard.html
 

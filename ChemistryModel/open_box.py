@@ -1,4 +1,5 @@
 import numpy as np
+from chemistry_format import molecular_formula
 
 import build_box
 import reactive as R
@@ -91,17 +92,7 @@ def group_members(labels):
 
 
 def formula_of(symbols, members):
-    counts = {}
-
-    for index in members:
-        symbol = symbols[index]
-        counts[symbol] = counts.get(symbol, 0) + 1
-
-    return "".join(
-        symbol + (str(counts[symbol]) if counts[symbol] > 1 else "")
-        for symbol in ["C", "N", "O", "H"]
-        if symbol in counts
-    )
+    return molecular_formula(symbols[index] for index in members)
 
 
 def choose_escaping(symbols, labels, wanted, generator,

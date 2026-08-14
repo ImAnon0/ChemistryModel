@@ -338,6 +338,14 @@ def run_one(mixture, seed, options, progress=None,
                 dissociation=options.strike_dissociation,
             )
 
+            recorder.record_external_event(
+                simulation.elapsed_femtoseconds,
+                "strike",
+                deposited_eV=float(report.get("deposited", 0.0)),
+                struck_atoms=int(report.get("struck", 0)),
+                dissociated_bonds=int(report.get("dissociated", 0)),
+            )
+
             if options.verbose:
                 # bonds_in_channel as well as dissociated: a strike that
                 # catches atoms but finds no whole bond among them reports
@@ -715,6 +723,15 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
         ):
             reports = strike_group(simulation, generators, options)
 
+            for recorder, report in zip(recorders, reports):
+                recorder.record_external_event(
+                    simulation.elapsed_femtoseconds,
+                    "strike",
+                    deposited_eV=float(report.get("deposited", 0.0)),
+                    struck_atoms=int(report.get("struck", 0)),
+                    dissociated_bonds=int(report.get("dissociated", 0)),
+                )
+
             if options.verbose:
                 broken = sum(
                     report["dissociated"] for report in reports
@@ -885,6 +902,25 @@ def summarise_run(recorder, simulation, seed, seconds, strikes,
         "species_count": result["species_count"],
         "stable": result.get("stable", True),
         "energy_jumps": result.get("energy_jumps", 0),
+        "spontaneous_energy_jumps": result.get(
+            "spontaneous_energy_jumps", result.get("energy_jumps", 0)
+        ),
+        "external_energy_injections": result.get(
+            "external_energy_injections", 0
+        ),
+        "declared_external_energy_events": result.get(
+            "declared_external_energy_events", 0
+        ),
+        "total_declared_external_energy_eV": result.get(
+            "total_declared_external_energy_eV", 0.0
+        ),
+        "largest_declared_external_energy_eV": result.get(
+            "largest_declared_external_energy_eV", 0.0
+        ),
+        "largest_external_energy_injection": result.get(
+            "largest_external_energy_injection", 0.0
+        ),
+        "numerical_failures": result.get("numerical_failures", 0),
         "largest_energy_jump": result.get(
             "largest_energy_jump", 0.0
         ),
@@ -1153,12 +1189,19 @@ def continue_one(path, options, progress=None):
             and simulation.elapsed_femtoseconds >= next_strike
             and strikes_done < options.strikes
         ):
-            discharge.apply_to(
+            report = discharge.apply_to(
                 simulation,
                 generator,
                 radius=options.strike_radius,
                 temperature=options.strike_temperature,
                 dissociation=options.strike_dissociation,
+            )
+            recorder.record_external_event(
+                simulation.elapsed_femtoseconds,
+                "strike",
+                deposited_eV=float(report.get("deposited", 0.0)),
+                struck_atoms=int(report.get("struck", 0)),
+                dissociated_bonds=int(report.get("dissociated", 0)),
             )
 
             strikes_done += 1
@@ -1824,6 +1867,25 @@ def run_continuation(options):
             "species_count": result["species_count"],
             "stable": result.get("stable", True),
             "energy_jumps": result.get("energy_jumps", 0),
+            "spontaneous_energy_jumps": result.get(
+                "spontaneous_energy_jumps", result.get("energy_jumps", 0)
+            ),
+            "external_energy_injections": result.get(
+                "external_energy_injections", 0
+            ),
+            "declared_external_energy_events": result.get(
+                "declared_external_energy_events", 0
+            ),
+            "total_declared_external_energy_eV": result.get(
+                "total_declared_external_energy_eV", 0.0
+            ),
+            "largest_declared_external_energy_eV": result.get(
+                "largest_declared_external_energy_eV", 0.0
+            ),
+            "largest_external_energy_injection": result.get(
+                "largest_external_energy_injection", 0.0
+            ),
+            "numerical_failures": result.get("numerical_failures", 0),
             "largest_energy_jump": result.get(
                 "largest_energy_jump", 0.0
             ),
@@ -2367,6 +2429,25 @@ def run_all(planned, mixture, options, index, index_path, progress):
             "species_count": result["species_count"],
             "stable": result.get("stable", True),
             "energy_jumps": result.get("energy_jumps", 0),
+            "spontaneous_energy_jumps": result.get(
+                "spontaneous_energy_jumps", result.get("energy_jumps", 0)
+            ),
+            "external_energy_injections": result.get(
+                "external_energy_injections", 0
+            ),
+            "declared_external_energy_events": result.get(
+                "declared_external_energy_events", 0
+            ),
+            "total_declared_external_energy_eV": result.get(
+                "total_declared_external_energy_eV", 0.0
+            ),
+            "largest_declared_external_energy_eV": result.get(
+                "largest_declared_external_energy_eV", 0.0
+            ),
+            "largest_external_energy_injection": result.get(
+                "largest_external_energy_injection", 0.0
+            ),
+            "numerical_failures": result.get("numerical_failures", 0),
             "largest_energy_jump": result.get("largest_energy_jump", 0.0),
             "move_cap_events": int(simulation.capped_steps),
             "isomers": result.get("isomers", {}),

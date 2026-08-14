@@ -1,4 +1,5 @@
 import numpy as np
+from chemistry_format import molecular_formula
 
 from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
@@ -22,6 +23,68 @@ import bonding
 HEAVY = ("C", "N", "O")
 
 EXPECTED_BONDS = {"H": 1, "C": 4, "N": 3, "O": 2}
+
+
+def classify_stability(recorder):
+    """Separate deliberate external energy input from unexplained jumps."""
+    times = np.asarray(recorder.times, dtype=float)
+    potential = np.asarray(recorder.potential, dtype=float)
+    kinetic = np.asarray(recorder.kinetic, dtype=float)
+    temperature = np.asarray(recorder.temperature, dtype=float)
+    totals = potential + kinetic
+    rises = np.diff(totals)
+    threshold = max(80.0, 0.08 * abs(float(potential[-1])))
+    candidates = np.where(rises > threshold)[0]
+    external_events = [
+        event for event in getattr(recorder, "events", [])
+        if event.get("external_energy") is True
+        and np.isfinite(float(event.get("time_fs", np.nan)))
+    ]
+
+    def externally_driven(index):
+        start, end = float(times[index]), float(times[index + 1])
+        epsilon = max(1e-7, abs(end - start) * 1e-9)
+        return any(
+            start - epsilon <= float(event["time_fs"]) < end - epsilon
+            for event in external_events
+        )
+
+    external = np.asarray([
+        int(index) for index in candidates if externally_driven(int(index))
+    ], dtype=int)
+    spontaneous = np.asarray([
+        int(index) for index in candidates
+        if not externally_driven(int(index))
+    ], dtype=int)
+    finite = all(np.all(np.isfinite(values)) for values in (
+        potential, kinetic, temperature,
+    )) and all(
+        np.all(np.isfinite(frame)) for frame in recorder.positions
+    )
+    deposits = [
+        float(event["deposited_eV"]) for event in external_events
+        if np.isfinite(float(event.get("deposited_eV", np.nan)))
+    ]
+    return {
+        "threshold_eV": float(threshold),
+        "spontaneous_indices": spontaneous,
+        "external_indices": external,
+        "spontaneous_energy_jumps": int(len(spontaneous)),
+        "external_energy_injections": int(len(external)),
+        "declared_external_energy_events": int(len(external_events)),
+        "total_declared_external_energy_eV": float(sum(deposits)),
+        "largest_declared_external_energy_eV": (
+            float(max(deposits)) if deposits else 0.0
+        ),
+        "largest_spontaneous_energy_jump": (
+            float(np.max(rises[spontaneous])) if len(spontaneous) else 0.0
+        ),
+        "largest_external_energy_injection": (
+            float(np.max(rises[external])) if len(external) else 0.0
+        ),
+        "numerical_failures": 0 if finite else 1,
+        "stable": len(spontaneous) == 0 and finite,
+    }
 
 
 def pair_indices(count):
@@ -64,17 +127,7 @@ def label_frame(count, bond_first, bond_second):
 
 
 def formula_for(symbols, members):
-    counts = {}
-
-    for member in members:
-        symbol = symbols[member]
-        counts[symbol] = counts.get(symbol, 0) + 1
-
-    return "".join(
-        symbol + (str(counts[symbol]) if counts[symbol] > 1 else "")
-        for symbol in ["C", "N", "O", "H"]
-        if symbol in counts
-    )
+    return molecular_formula(symbols[member] for member in members)
 
 
 
@@ -506,26 +559,44 @@ def analyse(recorder, stride=1, threshold=0.35, late_fs=2500.0,
         80.0, 0.08 * abs(float(recorder.potential[-1]))
     )
 
-    bad = np.where(rises > threshold)[0]
-
-    energy_jumps = int(len(bad))
-
-    largest_jump = float(rises.max()) if len(rises) else 0.0
+    health = classify_stability(recorder)
+    bad = health["spontaneous_indices"]
+    energy_jumps = health["spontaneous_energy_jumps"]
+    external_energy_injections = health["external_energy_injections"]
+    numerical_failures = health["numerical_failures"]
+    largest_jump = health["largest_spontaneous_energy_jump"]
 
     first_jump_fs = (
         float(times[bad[0] + 1]) if len(bad) else 0.0
     )
 
-    return {
+    largest_external_injection = health["largest_external_energy_injection"]
+
+    result = {
         "frames_examined": examined,
         "unconfirmed_pairs": (
             tracker.pending if tracker is not None else 0
         ),
         "final_density": count / (box ** 3),
         "energy_jumps": energy_jumps,
+        "spontaneous_energy_jumps": energy_jumps,
         "largest_energy_jump": round(largest_jump, 1),
         "first_energy_jump_fs": first_jump_fs,
-        "stable": energy_jumps == 0,
+        "external_energy_injections": external_energy_injections,
+        "declared_external_energy_events": health[
+            "declared_external_energy_events"
+        ],
+        "total_declared_external_energy_eV": round(
+            health["total_declared_external_energy_eV"], 1
+        ),
+        "largest_declared_external_energy_eV": round(
+            health["largest_declared_external_energy_eV"], 1
+        ),
+        "largest_external_energy_injection": round(
+            largest_external_injection, 1
+        ),
+        "numerical_failures": numerical_failures,
+        "stable": health["stable"],
         "box_changed": recorder.box_changed,
         "box_start": recorder.box_at(0),
         "box_end": box,
@@ -546,11 +617,6 @@ def analyse(recorder, stride=1, threshold=0.35, late_fs=2500.0,
         "best_head": lipid["best_head"],
         "best_shape": lipid["best_shape"],
         "vesicle_ready": lipid["vesicle_ready"],
-        "isomers": registry.isomers() if structures else {},
-        "structures": {
-            registry.name(key): registry.structure(key)
-            for key in registry.details
-        } if structures else {},
         "duration_fs": float(times[-1] - times[0]),
         "final": final,
         "seen": seen,
@@ -566,6 +632,24 @@ def analyse(recorder, stride=1, threshold=0.35, late_fs=2500.0,
             "min": float(np.min(recorder.potential)),
         },
     }
+
+    # Structural analysis is optional and potentially sizeable. Keep the
+    # result sparse: absent analysis or an empty detector result is absence,
+    # not a meaningful zero/null/false payload. The same rule applies to any
+    # future amino-acid recogniser: only attach ``amino_structure`` when it
+    # contains real identified structure data.
+    if structures:
+        isomers = registry.isomers()
+        structure_details = {
+            registry.name(key): registry.structure(key)
+            for key in registry.details
+        }
+        if isomers:
+            result["isomers"] = isomers
+        if structure_details:
+            result["structures"] = structure_details
+
+    return result
 
 
 def headline(result):
@@ -617,11 +701,22 @@ def summary_lines(result):
         f"{result['potential']['final']:.1f} eV"
     )
 
+    if result.get("declared_external_energy_events", 0):
+        lines.append(
+            f"  strike input  {result['declared_external_energy_events']:>10} "
+            f"declared event(s); largest measured deposit "
+            f"{result.get('largest_declared_external_energy_eV', 0):.0f} eV"
+        )
+
+    if result.get("numerical_failures", 0):
+        lines.append("")
+        lines.append("  NUMERICAL FAILURE: non-finite recorded state.")
+
     if not result.get("stable", True):
         lines.append("")
         lines.append("  " + "!" * 56)
         lines.append(
-            f"  INTEGRATION FAILURE: total energy jumped "
+            f"  UNEXPLAINED ENERGY JUMP: total energy rose "
             f"{result['largest_energy_jump']:.0f} eV in one frame"
         )
         lines.append(
@@ -629,10 +724,10 @@ def summary_lines(result):
             f"{' and ' + str(result['energy_jumps'] - 1) + ' other times' if result['energy_jumps'] > 1 else ''}."
         )
         lines.append(
-            "  Energy cannot appear from nowhere, so two atoms got"
+            "  This rise was outside any declared external-energy event."
         )
         lines.append(
-            "  too close and the integrator launched them. Anything"
+            "  Inspect the trajectory and integration diagnostics. Anything"
         )
         lines.append(
             "  after that point happened in a box that was briefly"

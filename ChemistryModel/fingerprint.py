@@ -1,4 +1,5 @@
 import hashlib
+from chemistry_format import molecular_formula
 
 import numpy as np
 
@@ -74,17 +75,7 @@ def fingerprint(symbols, members, bonds, orders=None):
 
 
 def formula_for(symbols, members):
-    counts = {}
-
-    for member in members:
-        symbol = symbols[member]
-        counts[symbol] = counts.get(symbol, 0) + 1
-
-    return "".join(
-        symbol + (str(counts[symbol]) if counts[symbol] > 1 else "")
-        for symbol in ["C", "N", "O", "H"]
-        if symbol in counts
-    )
+    return molecular_formula(symbols[member] for member in members)
 
 
 def describe(symbols, members, bonds):

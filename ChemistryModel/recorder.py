@@ -81,6 +81,24 @@ class Recorder:
         self.events = []
         self.adaptive_dropped_frames = 0
 
+    def record_external_event(self, time_fs, event_type, **details):
+        """Record an observational event that deliberately changes energy.
+
+        The event is metadata only: callers invoke it after applying the
+        external operation.  Keeping the exact simulation timestamp lets
+        analysis distinguish the next captured energy interval from an
+        unexplained integrator jump without changing capture scheduling.
+        """
+        event = {
+            "time_fs": float(time_fs),
+            "type": str(event_type),
+            "external_energy": True,
+        }
+        event.update({key: value for key, value in details.items()
+                      if value is not None})
+        self.events.append(event)
+        return event
+
     def __len__(self):
         return len(self.positions)
 
@@ -409,6 +427,15 @@ class Recorder:
             versioned["adaptive_dropped_frames"] = np.array(
                 self.adaptive_dropped_frames, dtype=np.uint64
             )
+            versioned["events_json"] = np.asarray(
+                [json.dumps(event, separators=(",", ":")) for event in self.events],
+                dtype=np.str_,
+            )
+
+        # Event annotations are a backward-compatible optional extension for
+        # fixed-cadence recordings too. Old readers ignore the extra NPZ key;
+        # current readers can classify deliberate discharge energy correctly.
+        if self.events and "events_json" not in versioned:
             versioned["events_json"] = np.asarray(
                 [json.dumps(event, separators=(",", ":")) for event in self.events],
                 dtype=np.str_,

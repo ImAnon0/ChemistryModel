@@ -7,6 +7,7 @@ import zipfile
 import numpy as np
 
 import bonding
+from chemistry_format import molecular_formula
 from recorder import Recorder
 
 
@@ -70,20 +71,7 @@ def _next_id(root):
 
 
 def _formula(symbols):
-    counts = {}
-
-    for symbol in symbols:
-        symbol = str(symbol)
-        counts[symbol] = counts.get(symbol, 0) + 1
-
-    ordered = ["C", "N", "O", "H"]
-    extras = sorted(symbol for symbol in counts if symbol not in ordered)
-
-    return "".join(
-        symbol + (str(counts[symbol]) if counts[symbol] > 1 else "")
-        for symbol in ordered + extras
-        if symbol in counts
-    )
+    return molecular_formula(symbols)
 
 
 def _heavy_count(symbols):
@@ -497,6 +485,10 @@ def list_molecules(root=DEFAULT_ROOT):
         try:
             with open(path, encoding="utf-8") as handle:
                 item = _normalise_metadata(json.load(handle))
+            payload = os.path.join(root, item.get("payload", ""))
+            if os.path.isfile(payload):
+                with np.load(payload, allow_pickle=False) as data:
+                    item["formula"] = molecular_formula(data["symbols"])
         except (OSError, json.JSONDecodeError):
             continue
 
@@ -560,6 +552,7 @@ def load_molecule(molecule_id, root=DEFAULT_ROOT):
 
     result = dict(metadata)
     result["symbols"] = [str(value) for value in data["symbols"]]
+    result["formula"] = molecular_formula(result["symbols"])
     result["positions"] = np.asarray(data["positions"], dtype=np.float32)
     result["bonds"] = np.asarray(data["bonds"], dtype=np.int32).reshape(-1, 2)
     result["source_atom_ids"] = np.asarray(
