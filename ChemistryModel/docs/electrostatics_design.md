@@ -149,10 +149,62 @@ References:
 - [Fennell/Gezelter-style DSF discussion and energy-force consistency](https://pmc.ncbi.nlm.nih.gov/articles/PMC4636498/)
 - [GPU Wolf assessment and polarity limitation](https://doi.org/10.1039/C4FD00012A)
 
-## Parameter provenance gate
+## Locked standalone reference convention and parameter audit
 
-No production H/C/N/O values are selected in this design phase. A compatible
-QTPIE parameter set requires, as one convention-matched unit:
+The standalone reference is locked to Chen, Hundertmark and Martinez,
+*The dissociation catastrophe in fluctuating-charge models and its
+implications for the concept of atomic electronegativity* (2008), together
+with their exact atom-space reformulation. It uses equations 22 and 28--30,
+the primitive s-Gaussian Coulomb integral in equation 33, and the fitted
+Gaussian exponents in Table 1. This is not the newer LAMMPS/ReaxFF shield.
+
+Equation mapping in `electrostatics.py` is:
+
+- normalized primitive-orbital overlap -> `gaussian_overlap_matrix`;
+- equation 30 -> `effective_electronegativity`;
+- equation 33 generalized to unlike Gaussian exponents ->
+  `hardness_matrix`, with `J_ii` replaced by the published atomic hardness;
+- equations 28 and 37 -> the float64 KKT system in `solve_charges`;
+- plain QEq comparator -> the same hardness/KKT system with bare `chi_i`.
+
+The unlike-Gaussian result follows by the Gaussian product theorem. For
+normalized primitive orbitals `phi_i ~ exp(-alpha_i r^2)`, their charge
+densities have exponents `2 alpha_i`, hence
+
+```
+beta_ij = 2 alpha_i alpha_j / (alpha_i + alpha_j)
+J_ij(R) = erf(sqrt(beta_ij) R) / R       (atomic units)
+```
+
+and the equal-exponent limit is exactly published equation 33. Positions are
+converted from angstrom to Bohr and Hartree to eV exactly once.
+
+| element | chi (eV) | full J_ii (eV) | Slater exponent | Gaussian alpha (Bohr^-2) | provenance |
+|---|---:|---:|---:|---:|---|
+| H | 4.528 | 13.890 | 1.0698 | 0.5434 | QEq values reused by QTPIE; Chen et al. Table 1 |
+| C | 5.343 | 10.126 | 0.8563 | 0.2069 | same |
+| N | 6.899 | 11.760 | 0.9089 | 0.2214 | same |
+| O | 8.741 | 13.364 | 0.9745 | 0.2240 | same |
+
+No value in this table was fitted to ChemistryModel. The Slater column is
+recorded for provenance but is not used by the Gaussian reference.
+
+The compatibility audit subsequently identified an extra factor of two inside
+the Gaussian Coulomb error-function argument in this first implementation.
+That error, retained as formulation A for regression evidence, makes the water
+hardness matrix indefinite and causes the unphysical +6.52 e oxygen result.
+The corrected published Gaussian mapping restores water polarity, but is only
+a diagnostic pending selection of a complete production parameter convention.
+See `docs/qtpie_compatibility_report.md`.
+
+Within its well-conditioned dissociation interval, the exact convention is
+continuous and shows the intended QTPIE asymptotic result: neutral H and O
+fragments lose charge transfer, while the otherwise-identical QEq comparator
+retains fractional charge. Molecular-fragment claims and all charged-fragment
+claims remain out of scope for a single global KKT constraint.
+
+A production-compatible QTPIE parameter set would require, as one
+convention-matched unit:
 
 - `chi`: absolute electronegativity, eV;
 - `eta`: full diagonal self-Coulomb hardness, eV (not the half-hardness used by
@@ -162,16 +214,10 @@ QTPIE parameter set requires, as one convention-matched unit:
 - optional pair overlap scale `k_ij`, initially fixed at one and fitted only if
   a declared fit/hold-out split justifies it.
 
-The original QTPIE work reused QEq electronegativities, hardnesses and orbital
-radii, while the current LAMMPS QTPIE implementation separately requires
-`chi`, full `eta`, `gamma`, and Gaussian `alpha`. These conventions must not be
-mixed. For context only, LAMMPS documents Gaussian exponents 0.2240 for O and
-0.5434 for H from Chen's thesis; these two numbers are not an H/C/N/O parameter
-table and are not adopted here.
-
-The next parameter task is to reproduce one complete published convention,
-then label every value as literature, derived, fitted, or empirical. If a
-fit is required, proposed fit targets are H2O, NH3, CO and CH2O dipoles plus
+The current LAMMPS QTPIE implementation separately combines these overlaps
+with ReaxFF-style `gamma` shielding. That is a different convention and is not
+silently substituted here. If a fit is later authorized, proposed fit targets
+are H2O, NH3, CO and CH2O dipoles plus
 small geometry-response curves; CH3OH, CH3NH2, H2O2 and NH2OH remain hold-outs.
 
 ## Validation plan
