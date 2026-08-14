@@ -536,7 +536,7 @@
       "status": "FIT TARGET - NOT INDEPENDENT"
     }
   ],
-  "git_revision": "0eb378989fa849b7e234d454c8e544e0ec312e7d",
+  "git_revision": "dd06d9c3c87dcac0e028199b90c769ad54daaa59",
   "harmonic_curvature": [
     {
       "absolute_error": -0.0052011990464961855,
@@ -1024,10 +1024,10 @@
   "performance": {
     "device": "cpu",
     "gpu_memory": "not measured in quick local probe",
-    "median_seconds": 0.24622670000098879,
+    "median_seconds": 0.22608849999994618,
     "status": "GOOD",
     "steps": 100,
-    "steps_per_second": 406.129798269637
+    "steps_per_second": 442.30467272782033
   },
   "potential_curves": [
     {
@@ -1175,7 +1175,7 @@
       "scan_kind": "relaxed",
       "status": "WEAK",
       "system": "formaldehyde",
-      "wall_seconds": 10.67814830000134
+      "wall_seconds": 25.42776570000001
     },
     {
       "absolute_error_eV": 0.01959494338265977,
@@ -1201,7 +1201,7 @@
       "scan_kind": "relaxed",
       "status": "GOOD",
       "system": "water",
-      "wall_seconds": 36.670392200001515
+      "wall_seconds": 37.765386000000035
     },
     {
       "absolute_error_eV": 0.47501986436489874,
@@ -1227,7 +1227,7 @@
       "scan_kind": "relaxed",
       "status": "WEAK",
       "system": "methane",
-      "wall_seconds": 12.092722699999285
+      "wall_seconds": 11.098359899999991
     },
     {
       "caution": null,
@@ -1247,7 +1247,7 @@
       "scan_kind": "relaxed",
       "status": "INSUFFICIENT REFERENCE DATA",
       "system": "ammonia",
-      "wall_seconds": 10.84372810000059
+      "wall_seconds": 10.629170099999897
     }
   ],
   "rules": {
@@ -1372,7 +1372,7 @@
     "oxygen": "[validation] oxygen radicals",
     "stable": "[validation] stable small molecules"
   },
-  "wall_seconds": 109.32846810000046,
+  "wall_seconds": 123.24703799999997,
   "whole_model_reaction_energies": [
     {
       "absolute_error": 0.05852702166866078,

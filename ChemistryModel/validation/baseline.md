@@ -1,6 +1,6 @@
 # ChemistryModel independent validation report
 
-Revision: `0eb378989fa849b7e234d454c8e544e0ec312e7d`
+Revision: `dd06d9c3c87dcac0e028199b90c769ad54daaa59`
 Mode: `full`
 Force-field parameters changed by this report: **no**
 
@@ -146,7 +146,7 @@ Frozen scans are screening diagnostics; relaxed full-mode scans are the stronger
 
 ## 13. Performance
 
-- CPU probe: 406.1 steps/s (0.246 s for 100 steps).
+- CPU probe: 442.3 steps/s (0.226 s for 100 steps).
 
 ## 14. Transferability
 
