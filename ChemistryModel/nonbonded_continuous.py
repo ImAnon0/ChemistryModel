@@ -76,6 +76,16 @@ SINGLE_BOND_RE = {
 # This is NOT fitted to a reaction barrier.
 MULTIPLE_COMPRESSION_FRACTION = 0.15
 
+# Numerical geometry-support scale for the local-plane tensor.
+#
+# The normalized plane direction is not meaningful when all bonded
+# axes are nearly collinear. For the simplest two-axis case,
+# trace(N) = sin(theta)^2, so 0.01 corresponds to full activation
+# once the axes are separated by roughly 5.7 degrees.
+#
+# This is a smooth regularization scale, not a SAPT fit parameter.
+PLANE_TRACE_FULL_SCALE = 0.01
+
 
 # ============================================================
 # DATA
@@ -932,8 +942,18 @@ def perpendicular_projector_value(
         atom_index,
     )
 
+    # The normalized tensor direction becomes ill-conditioned as the
+    # bonded geometry approaches collinearity: numerator and trace both
+    # vanish, while their ratio can jump from 0 to nearly 1 over an
+    # arbitrarily tiny angle. Fade the plane response out according to
+    # the actual geometric support of the plane.
+    geometry_support = smootherstep01(
+        trace / PLANE_TRACE_FULL_SCALE
+    )
+
     return (
         support
+        * geometry_support
         * directional
     )
 
@@ -1181,6 +1201,7 @@ __all__ = [
     "ContinuousFragment",
     "SINGLE_BOND_RE",
     "MULTIPLE_COMPRESSION_FRACTION",
+    "PLANE_TRACE_FULL_SCALE",
     "smootherstep01",
     "presence_gate",
     "multibond_gate",
