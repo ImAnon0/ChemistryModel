@@ -1,0 +1,242 @@
+{
+  "schema_version": 1,
+  "note": "Exact hf_surface_scan frozen geometries at current SAPT barrier cells, split into physically meaningful diabatic fragments.",
+  "cases": {
+    "formaldehyde": {
+      "donor_A": 1.28,
+      "transfer_A": 1.01,
+      "spectators": [
+        1.2,
+        1.09,
+        122.0,
+        122.0
+      ],
+      "symbols": [
+        "C",
+        "O",
+        "H",
+        "H",
+        "H"
+      ],
+      "positions_A": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.2,
+          0.0
+        ],
+        [
+          1.0855015630802254,
+          -0.6782966582185022,
+          0.0
+        ],
+        [
+          -0.9243724248105045,
+          -0.5776119980141933,
+          0.0
+        ],
+        [
+          1.9420301401982156,
+          -1.2135151150940389,
+          0.0
+        ]
+      ],
+      "states": {
+        "reactant": {
+          "fragment_a": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "fragment_b": [
+            4
+          ],
+          "charge_a": 0,
+          "mult_a": 1,
+          "charge_b": 0,
+          "mult_b": 2
+        },
+        "product": {
+          "fragment_a": [
+            0,
+            1,
+            3
+          ],
+          "fragment_b": [
+            2,
+            4
+          ],
+          "charge_a": 0,
+          "mult_a": 2,
+          "charge_b": 0,
+          "mult_b": 1
+        }
+      }
+    },
+    "water": {
+      "donor_A": 1.1,
+      "transfer_A": 1.3,
+      "spectators": [
+        0.96,
+        0.96,
+        75.53,
+        75.53
+      ],
+      "symbols": [
+        "O",
+        "H",
+        "H",
+        "O",
+        "H"
+      ],
+      "positions_A": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.1,
+          0.0,
+          0.0
+        ],
+        [
+          -0.23987812688347643,
+          5.691836620404761e-17,
+          0.9295474620711278
+        ],
+        [
+          2.4000000000000004,
+          0.0,
+          0.0
+        ],
+        [
+          2.6398781268834766,
+          5.691836620404761e-17,
+          0.9295474620711278
+        ]
+      ],
+      "states": {
+        "reactant": {
+          "fragment_a": [
+            0,
+            1,
+            2
+          ],
+          "fragment_b": [
+            3,
+            4
+          ],
+          "charge_a": 0,
+          "mult_a": 1,
+          "charge_b": 0,
+          "mult_b": 2
+        },
+        "product": {
+          "fragment_a": [
+            0,
+            2
+          ],
+          "fragment_b": [
+            1,
+            3,
+            4
+          ],
+          "charge_a": 0,
+          "mult_a": 2,
+          "charge_b": 0,
+          "mult_b": 1
+        }
+      }
+    },
+    "methane": {
+      "donor_A": 1.44,
+      "transfer_A": 0.85,
+      "spectators": [
+        1.09,
+        1.09,
+        1.09,
+        109.47
+      ],
+      "symbols": [
+        "C",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H"
+      ],
+      "positions_A": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.44
+        ],
+        [
+          1.0276695955775725,
+          0.0,
+          -0.36331143984937864
+        ],
+        [
+          -0.513834797788786,
+          0.8899879764670581,
+          -0.36331143984937864
+        ],
+        [
+          -0.5138347977887867,
+          -0.889987976467058,
+          -0.36331143984937864
+        ],
+        [
+          0.0,
+          0.0,
+          2.29
+        ]
+      ],
+      "states": {
+        "reactant": {
+          "fragment_a": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "fragment_b": [
+            5
+          ],
+          "charge_a": 0,
+          "mult_a": 1,
+          "charge_b": 0,
+          "mult_b": 2
+        },
+        "product": {
+          "fragment_a": [
+            0,
+            2,
+            3,
+            4
+          ],
+          "fragment_b": [
+            1,
+            5
+          ],
+          "charge_a": 0,
+          "mult_a": 2,
+          "charge_b": 0,
+          "mult_b": 1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,828 @@
+{
+  "schema_version": 1,
+  "description": "Five representative cells from the current frozen minimax path, with ChemistryModel SAPT-H-state diabatic diagonals and exact geometries for open-shell SAPT fragment calculations.",
+  "systems": {
+    "formaldehyde": {
+      "barrier_index": 13,
+      "barrier_relative_eV": 0.7504821630758638,
+      "points": [
+        {
+          "label": "reactant_side",
+          "path_index": 4,
+          "donor_A": 1.08,
+          "transfer_A": 1.1700000000000004,
+          "relative_path_energy_eV": 0.00975488454040807,
+          "model_reactant_diagonal_eV": -7.50608778214431,
+          "model_product_diagonal_eV": 5.608930060412574,
+          "model_signed_gap_product_minus_reactant_eV": 13.115017842556885,
+          "model_abs_gap_eV": 13.115017842556885,
+          "symbols": [
+            "C",
+            "O",
+            "H",
+            "H",
+            "H"
+          ],
+          "positions_A": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.2,
+              0.0
+            ],
+            [
+              0.9158919438489402,
+              -0.5723128053718612,
+              0.0
+            ],
+            [
+              -0.9243724248105045,
+              -0.5776119980141933,
+              0.0
+            ],
+            [
+              1.908108216351959,
+              -1.1923183445247112,
+              0.0
+            ]
+          ],
+          "states": {
+            "reactant": {
+              "fragment_a": [
+                0,
+                1,
+                2,
+                3
+              ],
+              "fragment_b": [
+                4
+              ],
+              "charge_a": 0,
+              "mult_a": 1,
+              "charge_b": 0,
+              "mult_b": 2
+            },
+            "product": {
+              "fragment_a": [
+                0,
+                1,
+                3
+              ],
+              "fragment_b": [
+                2,
+                4
+              ],
+              "charge_a": 0,
+              "mult_a": 2,
+              "charge_b": 0,
+              "mult_b": 1
+            }
+          }
+        },
+        {
+          "label": "early_climb",
+          "path_index": 8,
+          "donor_A": 1.2400000000000002,
+          "transfer_A": 1.1700000000000004,
+          "relative_path_energy_eV": 0.22958431181885075,
+          "model_reactant_diagonal_eV": -7.286256553980231,
+          "model_product_diagonal_eV": 2.4574587732582347,
+          "model_signed_gap_product_minus_reactant_eV": 9.743715327238466,
+          "model_abs_gap_eV": 9.743715327238466,
+          "symbols": [
+            "C",
+            "O",
+            "H",
+            "H",
+            "H"
+          ],
+          "positions_A": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.2,
+              0.0
+            ],
+            [
+              1.0515796392339685,
+              -0.657099887649174,
+              0.0
+            ],
+            [
+              -0.9243724248105045,
+              -0.5776119980141933,
+              0.0
+            ],
+            [
+              2.0437959117369875,
+              -1.2771054268020239,
+              0.0
+            ]
+          ],
+          "states": {
+            "reactant": {
+              "fragment_a": [
+                0,
+                1,
+                2,
+                3
+              ],
+              "fragment_b": [
+                4
+              ],
+              "charge_a": 0,
+              "mult_a": 1,
+              "charge_b": 0,
+              "mult_b": 2
+            },
+            "product": {
+              "fragment_a": [
+                0,
+                1,
+                3
+              ],
+              "fragment_b": [
+                2,
+                4
+              ],
+              "charge_a": 0,
+              "mult_a": 2,
+              "charge_b": 0,
+              "mult_b": 1
+            }
+          }
+        },
+        {
+          "label": "barrier",
+          "path_index": 13,
+          "donor_A": 1.2800000000000002,
+          "transfer_A": 1.0100000000000002,
+          "relative_path_energy_eV": 0.7504821630758638,
+          "model_reactant_diagonal_eV": -5.972713276452382,
+          "model_product_diagonal_eV": -2.2363174350008403,
+          "model_signed_gap_product_minus_reactant_eV": 3.7363958414515412,
+          "model_abs_gap_eV": 3.7363958414515412,
+          "symbols": [
+            "C",
+            "O",
+            "H",
+            "H",
+            "H"
+          ],
+          "positions_A": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.2,
+              0.0
+            ],
+            [
+              1.0855015630802256,
+              -0.6782966582185023,
+              0.0
+            ],
+            [
+              -0.9243724248105045,
+              -0.5776119980141933,
+              0.0
+            ],
+            [
+              1.942030140198216,
+              -1.2135151150940393,
+              0.0
+            ]
+          ],
+          "states": {
+            "reactant": {
+              "fragment_a": [
+                0,
+                1,
+                2,
+                3
+              ],
+              "fragment_b": [
+                4
+              ],
+              "charge_a": 0,
+              "mult_a": 1,
+              "charge_b": 0,
+              "mult_b": 2
+            },
+            "product": {
+              "fragment_a": [
+                0,
+                1,
+                3
+              ],
+              "fragment_b": [
+                2,
+                4
+              ],
+              "charge_a": 0,
+              "mult_a": 2,
+              "charge_b": 0,
+              "mult_b": 1
+            }
+          }
+        },
+        {
+          "label": "closest_gap",
+          "path_index": 19,
+          "donor_A": 1.3600000000000003,
+          "transfer_A": 0.8500000000000002,
+          "relative_path_energy_eV": 0.7418256366267855,
+          "model_reactant_diagonal_eV": -4.506156703352435,
+          "model_product_diagonal_eV": -4.637073576546307,
+          "model_signed_gap_product_minus_reactant_eV": -0.1309168731938719,
+          "model_abs_gap_eV": 0.1309168731938719,
+          "symbols": [
+            "C",
+            "O",
+            "H",
+            "H",
+            "H"
+          ],
+          "positions_A": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.2,
+              0.0
+            ],
+            [
+              1.1533454107727397,
+              -0.7206901993571587,
+              0.0
+            ],
+            [
+              -0.9243724248105045,
+              -0.5776119980141933,
+              0.0
+            ],
+            [
+              1.874186292505702,
+              -1.1711215739553829,
+              0.0
+            ]
+          ],
+          "states": {
+            "reactant": {
+              "fragment_a": [
+                0,
+                1,
+                2,
+                3
+              ],
+              "fragment_b": [
+                4
+              ],
+              "charge_a": 0,
+              "mult_a": 1,
+              "charge_b": 0,
+              "mult_b": 2
+            },
+            "product": {
+              "fragment_a": [
+                0,
+                1,
+                3
+              ],
+              "fragment_b": [
+                2,
+                4
+              ],
+              "charge_a": 0,
+              "mult_a": 2,
+              "charge_b": 0,
+              "mult_b": 1
+            }
+          }
+        },
+        {
+          "label": "product_side",
+          "path_index": 31,
+          "donor_A": 1.7200000000000006,
+          "transfer_A": 0.7300000000000001,
+          "relative_path_energy_eV": -0.43236341353407326,
+          "model_reactant_diagonal_eV": 1.4735585488542067,
+          "model_product_diagonal_eV": -8.261581481361041,
+          "model_signed_gap_product_minus_reactant_eV": -9.735140030215248,
+          "model_abs_gap_eV": 9.735140030215248,
+          "symbols": [
+            "C",
+            "O",
+            "H",
+            "H",
+            "H"
+          ],
+          "positions_A": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              1.2,
+              0.0
+            ],
+            [
+              1.4586427253890535,
+              -0.9114611344811125,
+              0.0
+            ],
+            [
+              -0.9243724248105045,
+              -0.5776119980141933,
+              0.0
+            ],
+            [
+              2.0777178355832446,
+              -1.2983021973713522,
+              0.0
+            ]
+          ],
+          "states": {
+            "reactant": {
+              "fragment_a": [
+                0,
+                1,
+                2,
+                3
+              ],
+              "fragment_b": [
+                4
+              ],
+              "charge_a": 0,
+              "mult_a": 1,
+              "charge_b": 0,
+              "mult_b": 2
+            },
+            "product": {
+              "fragment_a": [
+                0,
+                1,
+                3
+              ],
+              "fragment_b": [
+                2,
+                4
+              ],
+              "charge_a": 0,
+              "mult_a": 2,
+              "charge_b": 0,
+              "mult_b": 1
+            }
+          }
+        }
+      ]
+    },
+    "methane": {
+      "barrier_index": 21,
+      "barrier_relative_eV": 0.9572742409227324,
+      "points": [
+        {
+          "label": "reactant_side",
+          "path_index": 4,
+          "donor_A": 1.08,
+          "transfer_A": 1.1700000000000004,
+          "relative_path_energy_eV": 0.009754134373661572,
+          "model_reactant_diagonal_eV": -18.172888392278818,
+          "model_product_diagonal_eV": -4.307350399936029,
+          "model_signed_gap_product_minus_reactant_eV": 13.865537992342789,
+          "model_abs_gap_eV": 13.865537992342789,
+          "symbols": [
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H"
+          ],
+          "positions_A": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.08
+            ],
+            [
+              1.0276695955775725,
+              0.0,
+              -0.36331143984937864
+            ],
+            [
+              -0.513834797788786,
+              0.8899879764670581,
+              -0.36331143984937864
+            ],
+            [
+              -0.5138347977887867,
+              -0.889987976467058,
+              -0.36331143984937864
+            ],
+            [
+              0.0,
+              0.0,
+              2.2500000000000004
+            ]
+          ],
+          "states": {
+            "reactant": {
+              "fragment_a": [
+                0,
+                1,
+                2,
+                3,
+                4
+              ],
+              "fragment_b": [
+                5
+              ],
+              "charge_a": 0,
+              "mult_a": 1,
+              "charge_b": 0,
+              "mult_b": 2
+            },
+            "product": {
+              "fragment_a": [
+                0,
+                2,
+                3,
+                4
+              ],
+              "fragment_b": [
+                1,
+                5
+              ],
+              "charge_a": 0,
+              "mult_a": 2,
+              "charge_b": 0,
+              "mult_b": 1
+            }
+          }
+        },
+        {
+          "label": "early_climb",
+          "path_index": 12,
+          "donor_A": 1.2400000000000002,
+          "transfer_A": 1.0100000000000002,
+          "relative_path_energy_eV": 0.7411437456232939,
+          "model_reactant_diagonal_eV": -16.699665147103975,
+          "model_product_diagonal_eV": -11.587922931581186,
+          "model_signed_gap_product_minus_reactant_eV": 5.1117422155227885,
+          "model_abs_gap_eV": 5.1117422155227885,
+          "symbols": [
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H"
+          ],
+          "positions_A": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.2400000000000002
+            ],
+            [
+              1.0276695955775725,
+              0.0,
+              -0.36331143984937864
+            ],
+            [
+              -0.513834797788786,
+              0.8899879764670581,
+              -0.36331143984937864
+            ],
+            [
+              -0.5138347977887867,
+              -0.889987976467058,
+              -0.36331143984937864
+            ],
+            [
+              0.0,
+              0.0,
+              2.2500000000000004
+            ]
+          ],
+          "states": {
+            "reactant": {
+              "fragment_a": [
+                0,
+                1,
+                2,
+                3,
+                4
+              ],
+              "fragment_b": [
+                5
+              ],
+              "charge_a": 0,
+              "mult_a": 1,
+              "charge_b": 0,
+              "mult_b": 2
+            },
+            "product": {
+              "fragment_a": [
+                0,
+                2,
+                3,
+                4
+              ],
+              "fragment_b": [
+                1,
+                5
+              ],
+              "charge_a": 0,
+              "mult_a": 2,
+              "charge_b": 0,
+              "mult_b": 1
+            }
+          }
+        },
+        {
+          "label": "barrier",
+          "path_index": 21,
+          "donor_A": 1.4400000000000004,
+          "transfer_A": 0.8500000000000002,
+          "relative_path_energy_eV": 0.9572742409227324,
+          "model_reactant_diagonal_eV": -14.324910411334532,
+          "model_product_diagonal_eV": -15.44342232405276,
+          "model_signed_gap_product_minus_reactant_eV": -1.118511912718228,
+          "model_abs_gap_eV": 1.118511912718228,
+          "symbols": [
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H"
+          ],
+          "positions_A": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.4400000000000004
+            ],
+            [
+              1.0276695955775725,
+              0.0,
+              -0.36331143984937864
+            ],
+            [
+              -0.513834797788786,
+              0.8899879764670581,
+              -0.36331143984937864
+            ],
+            [
+              -0.5138347977887867,
+              -0.889987976467058,
+              -0.36331143984937864
+            ],
+            [
+              0.0,
+              0.0,
+              2.2900000000000005
+            ]
+          ],
+          "states": {
+            "reactant": {
+              "fragment_a": [
+                0,
+                1,
+                2,
+                3,
+                4
+              ],
+              "fragment_b": [
+                5
+              ],
+              "charge_a": 0,
+              "mult_a": 1,
+              "charge_b": 0,
+              "mult_b": 2
+            },
+            "product": {
+              "fragment_a": [
+                0,
+                2,
+                3,
+                4
+              ],
+              "fragment_b": [
+                1,
+                5
+              ],
+              "charge_a": 0,
+              "mult_a": 2,
+              "charge_b": 0,
+              "mult_b": 1
+            }
+          }
+        },
+        {
+          "label": "closest_gap",
+          "path_index": 19,
+          "donor_A": 1.4000000000000004,
+          "transfer_A": 0.8900000000000002,
+          "relative_path_energy_eV": 0.8950843289435007,
+          "model_reactant_diagonal_eV": -15.025379567305254,
+          "model_product_diagonal_eV": -14.776362770675556,
+          "model_signed_gap_product_minus_reactant_eV": 0.24901679662969833,
+          "model_abs_gap_eV": 0.24901679662969833,
+          "symbols": [
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H"
+          ],
+          "positions_A": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.4000000000000004
+            ],
+            [
+              1.0276695955775725,
+              0.0,
+              -0.36331143984937864
+            ],
+            [
+              -0.513834797788786,
+              0.8899879764670581,
+              -0.36331143984937864
+            ],
+            [
+              -0.5138347977887867,
+              -0.889987976467058,
+              -0.36331143984937864
+            ],
+            [
+              0.0,
+              0.0,
+              2.2900000000000005
+            ]
+          ],
+          "states": {
+            "reactant": {
+              "fragment_a": [
+                0,
+                1,
+                2,
+                3,
+                4
+              ],
+              "fragment_b": [
+                5
+              ],
+              "charge_a": 0,
+              "mult_a": 1,
+              "charge_b": 0,
+              "mult_b": 2
+            },
+            "product": {
+              "fragment_a": [
+                0,
+                2,
+                3,
+                4
+              ],
+              "fragment_b": [
+                1,
+                5
+              ],
+              "charge_a": 0,
+              "mult_a": 2,
+              "charge_b": 0,
+              "mult_b": 1
+            }
+          }
+        },
+        {
+          "label": "product_side",
+          "path_index": 31,
+          "donor_A": 1.7200000000000006,
+          "transfer_A": 0.7300000000000001,
+          "relative_path_energy_eV": 0.06408853567590356,
+          "model_reactant_diagonal_eV": -8.407838707106928,
+          "model_product_diagonal_eV": -18.140425490259886,
+          "model_signed_gap_product_minus_reactant_eV": -9.732586783152959,
+          "model_abs_gap_eV": 9.732586783152959,
+          "symbols": [
+            "C",
+            "H",
+            "H",
+            "H",
+            "H",
+            "H"
+          ],
+          "positions_A": [
+            [
+              0.0,
+              0.0,
+              0.0
+            ],
+            [
+              0.0,
+              0.0,
+              1.7200000000000006
+            ],
+            [
+              1.0276695955775725,
+              0.0,
+              -0.36331143984937864
+            ],
+            [
+              -0.513834797788786,
+              0.8899879764670581,
+              -0.36331143984937864
+            ],
+            [
+              -0.5138347977887867,
+              -0.889987976467058,
+              -0.36331143984937864
+            ],
+            [
+              0.0,
+              0.0,
+              2.4500000000000006
+            ]
+          ],
+          "states": {
+            "reactant": {
+              "fragment_a": [
+                0,
+                1,
+                2,
+                3,
+                4
+              ],
+              "fragment_b": [
+                5
+              ],
+              "charge_a": 0,
+              "mult_a": 1,
+              "charge_b": 0,
+              "mult_b": 2
+            },
+            "product": {
+              "fragment_a": [
+                0,
+                2,
+                3,
+                4
+              ],
+              "fragment_b": [
+                1,
+                5
+              ],
+              "charge_a": 0,
+              "mult_a": 2,
+              "charge_b": 0,
+              "mult_b": 1
+            }
+          }
+        }
+      ]
+    }
+  }
+}
