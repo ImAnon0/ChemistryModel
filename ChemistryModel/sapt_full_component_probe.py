@@ -64,6 +64,7 @@ import argparse
 import csv
 import json
 import math
+import os
 from pathlib import Path
 import sys
 import time
@@ -124,6 +125,56 @@ OUTPUT_FIELDS = (
     "status",
     "error",
 )
+
+
+NUMERIC_OUTPUT_FIELDS = (
+    "contact_distance_A",
+    "stored_exch10_eV",
+    "rerun_exch10_eV",
+    "exch10_difference_eV",
+    "exchange_component_eV",
+    "electrostatics_eV",
+    "induction_eV",
+    "dispersion_eV",
+    "nonexchange_sum_eV",
+    "sapt_total_eV",
+    "component_sum_eV",
+    "total_minus_component_sum_eV",
+    "attractive_offset_from_exchange_eV",
+    "exchange_cancelled_percent",
+    "elapsed_s",
+)
+
+
+def _coerce_result_row(
+    row,
+):
+    """
+    csv.DictReader yields every field as a string, whereas freshly
+    computed rows hold floats. Without this the cached path crashes in
+    the float formatting used for reporting. Fields that will not parse
+    are left as read.
+    """
+
+    coerced = dict(
+        row
+    )
+
+    for name in NUMERIC_OUTPUT_FIELDS:
+        if name not in coerced:
+            continue
+
+        try:
+            coerced[name] = float(
+                coerced[name]
+            )
+        except (
+            TypeError,
+            ValueError,
+        ):
+            pass
+
+    return coerced
 
 
 def _float(
@@ -348,23 +399,39 @@ def build_geometry_text(
 def get_variable(
     psi4,
     *names,
+    reject_zero=False,
 ):
     """
     Psi4 renamed some aggregate SAPT total variables across versions.
     Try documented alternatives in order.
+
+    Some of those names exist but are left unset for a given SAPT
+    level, in which case Psi4 returns exactly 0.0 instead of raising.
+    Pass reject_zero=True for aggregates where 0.0 is not a physically
+    possible answer, so that lookup continues to the next candidate
+    instead of silently accepting the placeholder.
     """
 
     last_error = None
 
     for name in names:
         try:
-            return float(
+            value = float(
                 psi4.core.variable(
                     name
                 )
             )
         except Exception as exc:
             last_error = exc
+            continue
+
+        if (
+            reject_zero
+            and value == 0.0
+        ):
+            continue
+
+        return value
 
     joined = ", ".join(
         names
@@ -400,7 +467,26 @@ def run_sapt(
 
     # Quiet the enormous SAPT printout; this script reports the numbers we
     # actually need.
-    psi4.core.be_quiet()
+    #
+    # psi4.core.be_quiet() hardcodes the Unix null device /dev/null and
+    # therefore raises on Windows. Route output to the platform null device
+    # instead, and fall back to a real log file if that also fails.
+    _null_device = (
+        "nul"
+        if os.name == "nt"
+        else "/dev/null"
+    )
+
+    try:
+        psi4.core.set_output_file(
+            _null_device,
+            False,
+        )
+    except Exception:
+        psi4.core.set_output_file(
+            "psi4_probe.log",
+            False,
+        )
 
     molecule = psi4.geometry(
         build_geometry_text(
@@ -453,12 +539,37 @@ def run_sapt(
         ),
         "total": get_variable(
             psi4,
-            "SAPT ENERGY",
             "SAPT TOTAL ENERGY",
             "SAPT0 TOTAL ENERGY",
             "SAPT SAPT0 ENERGY",
+            "SAPT ENERGY",
+            reject_zero=True,
         ),
     }
+
+    # For SAPT0 the four aggregate components sum to the reported total.
+    # Cross-check that here so a wrong or stale total variable cannot
+    # quietly corrupt the offset column the way "SAPT ENERGY" did.
+    component_sum = (
+        values_h["electrostatics"]
+        + values_h["exchange"]
+        + values_h["induction"]
+        + values_h["dispersion"]
+    )
+
+    mismatch = abs(
+        component_sum
+        - values_h["total"]
+    )
+
+    if mismatch > 1.0e-6:
+        raise RuntimeError(
+            "SAPT total does not match the sum of its components "
+            f"(total={values_h['total']:.9f} Eh, "
+            f"sum={component_sum:.9f} Eh, "
+            f"difference={mismatch:.9f} Eh). "
+            "Refusing to report an offset built on an inconsistent total."
+        )
 
     return (
         {
@@ -507,7 +618,9 @@ def load_existing_results(
     return {
         result_key(
             row
-        ): row
+        ): _coerce_result_row(
+            row
+        )
         for row in rows
         if row.get(
             "status"
