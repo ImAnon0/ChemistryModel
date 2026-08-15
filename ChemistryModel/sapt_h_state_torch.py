@@ -111,6 +111,260 @@ def _sapt_pair_energy(
     return radial * angular
 
 
+def _symmetric_pair_basis(
+    atom_count,
+    first,
+    second,
+    *,
+    like,
+):
+    """Constant symmetric matrix selecting one undirected atom pair."""
+
+    basis = torch.zeros(
+        (
+            atom_count,
+            atom_count,
+        ),
+        dtype=like.dtype,
+        device=like.device,
+    )
+
+    basis[
+        first,
+        second,
+    ] = 1.0
+
+    basis[
+        second,
+        first,
+    ] = 1.0
+
+    return basis
+
+
+def _descriptor_weights_for_state(
+    *,
+    box,
+    per_box,
+    types_numpy,
+    neighbours,
+    neighbour_mask,
+    taper,
+    edge_atoms,
+    edge_tapers,
+    state,
+):
+    """
+    Build the continuous covalent-environment matrix seen by SAPT.
+
+    Two kinds of covalent information enter:
+
+      heavy-heavy:
+          state-independent reactive contacts, weighted continuously by
+          the same smooth taper already used by ChemistryModel.
+
+      H-containing:
+          only the H-state edges occupied in this diabatic state, again
+          weighted by their current smooth contact taper.
+
+    This is the bridge required for carbonyl chemistry. Without the
+    heavy-heavy part a C=O bond disappears from the SAPT descriptor, so
+    the independently calibrated polar-pi / zeta response cannot operate.
+
+    Important limitation:
+    ChemistryModel does not yet have an explicit heavy-atom covalent-state
+    graph. The reactive taper is therefore the only smooth bond-activation
+    variable available for heavy-heavy contacts. This helper does NOT use
+    a hard bond threshold, so forces can still flow continuously through
+    the descriptor weights.
+    """
+
+    zero = (
+        taper.sum()
+        * 0.0
+    )
+
+    weights = torch.zeros(
+        (
+            per_box,
+            per_box,
+        ),
+        dtype=taper.dtype,
+        device=taper.device,
+    ) + zero
+
+    start = (
+        box
+        * per_box
+    )
+
+    stop = (
+        start
+        + per_box
+    )
+
+    hydrogen = int(
+        R.ELEMENT_INDEX[
+            "H"
+        ]
+    )
+
+    neighbours_numpy = (
+        neighbours
+        .detach()
+        .cpu()
+        .numpy()
+    )
+
+    mask_numpy = (
+        neighbour_mask
+        .detach()
+        .cpu()
+        .numpy()
+        .astype(bool)
+    )
+
+    seen_heavy_pairs = set()
+
+    for centre in range(
+        start,
+        stop,
+    ):
+        for slot in range(
+            neighbours_numpy.shape[1]
+        ):
+            if not mask_numpy[
+                centre,
+                slot,
+            ]:
+                continue
+
+            other = int(
+                neighbours_numpy[
+                    centre,
+                    slot,
+                ]
+            )
+
+            if not (
+                start
+                <= other
+                < stop
+            ):
+                continue
+
+            first = min(
+                centre,
+                other,
+            )
+
+            second = max(
+                centre,
+                other,
+            )
+
+            if first == second:
+                continue
+
+            pair = (
+                first,
+                second,
+            )
+
+            if pair in seen_heavy_pairs:
+                continue
+
+            if (
+                int(
+                    types_numpy[
+                        first
+                    ]
+                )
+                == hydrogen
+                or int(
+                    types_numpy[
+                        second
+                    ]
+                )
+                == hydrogen
+            ):
+                continue
+
+            seen_heavy_pairs.add(
+                pair
+            )
+
+            local_first = (
+                first
+                - start
+            )
+
+            local_second = (
+                second
+                - start
+            )
+
+            # Use this directed copy of the symmetric reactive taper.
+            # No threshold: outside the covalent cutoff it is already
+            # exactly zero, while inside the fade region it remains smooth.
+            contact = taper[
+                centre,
+                slot,
+            ]
+
+            weights = (
+                weights
+                + _symmetric_pair_basis(
+                    per_box,
+                    local_first,
+                    local_second,
+                    like=taper,
+                )
+                * contact
+            )
+
+    # H edges are state-specific. Unoccupied alternatives must NOT appear
+    # as covalent neighbours in the SAPT environment descriptor.
+    for edge_index in state:
+
+        global_first, global_second = (
+            edge_atoms[
+                edge_index
+            ]
+        )
+
+        local_first = (
+            global_first
+            - start
+        )
+
+        local_second = (
+            global_second
+            - start
+        )
+
+        weights = (
+            weights
+            + _symmetric_pair_basis(
+                per_box,
+                local_first,
+                local_second,
+                like=taper,
+            )
+            * edge_tapers[
+                edge_index
+            ]
+        )
+
+    # Every pair belongs to exactly one category above, so values should
+    # already lie in [0, 1]. Clamp only for sub-ulp numerical excursions.
+    return torch.clamp(
+        weights,
+        min=0.0,
+        max=1.0,
+    )
+
+
 class SaptHStateBatchedSimulation(
     hs.HStateReferenceBatchedSimulation
 ):
@@ -120,6 +374,13 @@ class SaptHStateBatchedSimulation(
 
     Everything outside the H state correction remains the ordinary
     ChemistryModel potential.
+
+    SAPT environment descriptors receive:
+      - state-independent heavy-heavy reactive covalent contacts
+      - state-dependent occupied H contacts
+
+    That keeps C=O/C=C/etc. chemistry visible to the frozen SAPT descriptor
+    while unoccupied H-transfer alternatives remain noncovalent.
     """
 
     physics_model_name = (
@@ -127,7 +388,7 @@ class SaptHStateBatchedSimulation(
     )
 
     physics_model_revision = (
-        "sapt-wall-v1"
+        "sapt-wall-v2-heavy-env"
     )
 
     def __init__(
@@ -279,54 +540,35 @@ class SaptHStateBatchedSimulation(
             )
         ]
 
+        neighbours = values[
+            "neighbours"
+        ]
+
+        neighbour_mask = (
+            self.neighbour_mask
+        )
+
         diagonals = []
 
         for state in states:
 
-            weights = torch.zeros(
-                (
-                    self.per_box,
-                    self.per_box,
-                ),
-                dtype=positions.dtype,
-                device=positions.device,
+            weights = (
+                _descriptor_weights_for_state(
+                    box=box,
+                    per_box=self.per_box,
+                    types_numpy=(
+                        self.types_numpy
+                    ),
+                    neighbours=neighbours,
+                    neighbour_mask=(
+                        neighbour_mask
+                    ),
+                    taper=taper,
+                    edge_atoms=edge_atoms,
+                    edge_tapers=edge_tapers,
+                    state=state,
+                )
             )
-
-            for edge_index in state:
-
-                global_a, global_b = (
-                    edge_atoms[
-                        edge_index
-                    ]
-                )
-
-                local_a = (
-                    global_a
-                    - start
-                )
-
-                local_b = (
-                    global_b
-                    - start
-                )
-
-                # Continuous occupancy follows the same contact taper
-                # already used by the reactive state machinery.
-                occupancy = (
-                    edge_tapers[
-                        edge_index
-                    ]
-                )
-
-                weights[
-                    local_a,
-                    local_b,
-                ] = occupancy
-
-                weights[
-                    local_b,
-                    local_a,
-                ] = occupancy
 
             fragment = (
                 nb.ContinuousTorchFragment(
