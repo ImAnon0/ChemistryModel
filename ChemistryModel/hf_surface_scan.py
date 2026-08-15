@@ -1,3 +1,4 @@
+
 """Map the H-transfer surface in the two distances that matter.
 
     py hf_surface_scan.py                       # frozen spectator geometry
@@ -55,6 +56,7 @@ import torch
 
 from batched_torch import BatchedReactiveSimulation
 from high_fidelity_torch import HighFidelityBatchedReactiveSimulation
+from h_state_torch import HStateReferenceBatchedSimulation
 
 
 BOX = 20.0
@@ -137,7 +139,7 @@ WATER_SYMBOLS = ["O", "H", "H", "O", "H"]
 
 # Spectator coordinates: the two O-H bonds that are not transferring, and the
 # angle each makes with the transfer axis.
-WATER_FROZEN = np.array([0.96, 0.96, 104.5, 104.5])
+WATER_FROZEN = np.array([0.96, 0.96, 75.53, 75.53])
 
 # These angles are measured from the transfer axis, not between the two
 # bonds, so a spectator value of 75.53 is an H-O-H angle of 104.47. The two
@@ -540,10 +542,21 @@ def build(physics="high_fidelity", mixing=None, sato=None,
           flatten=None, cap=None, softening=None,
           depth_power=None, over_weight=None, pair_depths=None,
           sato_pairs=None, boxes=None):
-    cls = (
-        HighFidelityBatchedReactiveSimulation if physics == "high_fidelity"
-        else BatchedReactiveSimulation
-    )
+    if physics == "high_fidelity":
+        cls = HighFidelityBatchedReactiveSimulation
+    elif physics == "h_state":
+        cls = HStateReferenceBatchedSimulation
+    else:
+        cls = BatchedReactiveSimulation
+
+    # The h-state reference is a holdout model here: its single mixing
+    # constant is calibrated against H + H2 and deliberately frozen while
+    # formaldehyde, water, methane and ammonia are measured as predictions.
+    if physics == "h_state" and mixing is not None:
+        raise SystemExit(
+            "--mixing is disabled for --physics h_state; "
+            "H_STATE_MIXING is fixed at 0.472744 for validation"
+        )
 
     # The correction reads these names from module scope on every call, so
     # rebinding them here changes the physics without editing the file.  Only
@@ -2298,7 +2311,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--physics", default="high_fidelity",
-        choices=["high_fidelity", "base"],
+        choices=["high_fidelity", "h_state", "base"],
     )
     parser.add_argument(
         "--powell", action="store_true",
@@ -2537,6 +2550,8 @@ def main():
         options.transfer_min, options.transfer_max, transfer_step
     )
 
+    gradient_based = not options.powell
+
     if options.agreement:
         agreement_report(
             options.physics, relax=options.relax, mixing=options.mixing,
@@ -2549,8 +2564,6 @@ def main():
             sato=options.sato,
         )
         return
-
-    gradient_based = not options.powell
 
     if options.slope:
         slope_report(
