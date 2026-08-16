@@ -1,0 +1,16 @@
+{
+  "input": "research_data\\qm_residual\\geometries_qm.json",
+  "input_sha256": "b62749a1306e207b18321111629de1b39b1a4f591c2f75b6fb70bffb9e227081",
+  "method": "wb97x-d",
+  "basis": "jun-cc-pvdz",
+  "reference": "uks",
+  "scf_type": "df",
+  "threads": 8,
+  "memory": "4 GB",
+  "selected_geometry_count_this_invocation": 347,
+  "stored_ok_count": 347,
+  "stored_failed_count": 0,
+  "psi4_version": "1.11",
+  "python_version": "3.12.13",
+  "hartree_to_eV": 27.211386245988
+}

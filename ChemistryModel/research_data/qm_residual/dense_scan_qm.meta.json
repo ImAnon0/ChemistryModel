@@ -1,0 +1,16 @@
+{
+  "input": "research_data\\qm_residual\\dense_scan_geometries.json",
+  "input_sha256": "944b73f4c99087bb49b496a16f8278a584e471e0c1083c3cad5d406d6979ffc8",
+  "method": "wb97x-d",
+  "basis": "jun-cc-pvdz",
+  "reference": "uks",
+  "scf_type": "df",
+  "threads": 8,
+  "memory": "4 GB",
+  "selected_geometry_count_this_invocation": 106,
+  "stored_ok_count": 106,
+  "stored_failed_count": 0,
+  "psi4_version": "1.11",
+  "python_version": "3.12.13",
+  "hartree_to_eV": 27.211386245988
+}

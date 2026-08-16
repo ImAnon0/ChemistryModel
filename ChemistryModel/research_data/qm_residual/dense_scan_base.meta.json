@@ -1,0 +1,21 @@
+{
+  "input": "research_data\\qm_residual\\dense_scan_geometries.json",
+  "input_sha256": "944b73f4c99087bb49b496a16f8278a584e471e0c1083c3cad5d406d6979ffc8",
+  "output": "research_data\\qm_residual\\dense_scan_base.csv",
+  "evaluated_geometry_count": 106,
+  "system_counts": {
+    "h3": 25,
+    "water": 31,
+    "formaldehyde": 25,
+    "methane": 25
+  },
+  "requested_limit": null,
+  "engine": "reactive_torch.ReactiveSimulation",
+  "device": "cpu",
+  "dtype": "torch.float64",
+  "box_size_angstrom": 30.0,
+  "relax_on_start": false,
+  "target_temperature_K": 0.0,
+  "torch_version": "2.13.0+cu132",
+  "python_version": "3.12.5"
+}

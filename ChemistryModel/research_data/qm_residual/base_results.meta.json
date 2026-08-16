@@ -1,0 +1,21 @@
+{
+  "input": "research_data\\qm_residual\\geometries.json",
+  "input_sha256": "05f6f8d9b8190b6c997c42d5d87869d8df2d39e67f5f193e49a2b66994c5c7c5",
+  "output": "research_data\\qm_residual\\base_results.csv",
+  "evaluated_geometry_count": 360,
+  "system_counts": {
+    "h3": 90,
+    "water": 90,
+    "formaldehyde": 90,
+    "methane": 90
+  },
+  "requested_limit": null,
+  "engine": "reactive_torch.ReactiveSimulation",
+  "device": "cpu",
+  "dtype": "torch.float64",
+  "box_size_angstrom": 30.0,
+  "relax_on_start": false,
+  "target_temperature_K": 0.0,
+  "torch_version": "2.13.0+cu132",
+  "python_version": "3.12.5"
+}
