@@ -59,7 +59,7 @@ CACHED_H_TOPOLOGY_MODEL_NAME = (
     "reactive_v6_factorisable_h_cached_topology_batched_heavy_experimental"
 )
 
-CACHED_H_TOPOLOGY_MODEL_REVISION = 0
+CACHED_H_TOPOLOGY_MODEL_REVISION = 1
 
 
 class CachedHFastValenceStateBatchedSimulation(

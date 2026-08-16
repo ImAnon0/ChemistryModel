@@ -15,9 +15,12 @@ For a fixed (N,V), the state basis, state/contact membership matrix, and
 one-exchange transition graph are identical.  Only the live taper/depth/shift
 values differ.  Those live tensors remain in Torch/autograd.
 
-One batched torch.linalg.eigh() is therefore used per (N,V) group.
+One batched matrix exponential is therefore used per (N,V) group.  Heavy
+state membership is the diagonal of a finite-temperature density matrix,
+which is basis independent and remains differentiable at degeneracy.
 
-No chemistry parameter or equation is changed.
+The 10 meV density-matrix temperature is the only intentional physics
+parameter introduced by this revision; base and hydrogen physics are unchanged.
 """
 
 from __future__ import annotations
@@ -35,6 +38,10 @@ from h_state_torch import (
     _contact_overlap,
     _crowding_normalisation,
 )
+from heavy_valence_density import (
+    DEFAULT_HEAVY_VALENCE_TEMPERATURE,
+    thermal_state_probabilities,
+)
 from valence_state_torch import (
     MAX_LOCAL_CANDIDATES,
     MAX_LOCAL_STATES,
@@ -48,8 +55,7 @@ BATCHED_HEAVY_VALENCE_MODEL_NAME = (
     "reactive_v5_factorisable_h_grouped_heavy_valence_experimental"
 )
 
-BATCHED_HEAVY_VALENCE_MODEL_REVISION = 0
-
+BATCHED_HEAVY_VALENCE_MODEL_REVISION = 1
 
 class BatchedHeavyValenceStateBatchedSimulation(
     GroupedFactorisableValenceStateBatchedSimulation
@@ -69,6 +75,7 @@ class BatchedHeavyValenceStateBatchedSimulation(
     def __init__(
         self,
         *args,
+        heavy_valence_temperature=DEFAULT_HEAVY_VALENCE_TEMPERATURE,
         **kwargs,
     ):
         # Must exist before parent construction because the parent can evaluate
@@ -76,10 +83,93 @@ class BatchedHeavyValenceStateBatchedSimulation(
         self._heavy_valence_structure_cache = {}
         self._heavy_valence_capacity_numpy = None
         self._heavy_valence_diagnostics = {}
+        self.heavy_valence_temperature = float(
+            heavy_valence_temperature
+        )
+        if self.heavy_valence_temperature <= 0.0:
+            raise ValueError(
+                "heavy_valence_temperature must be positive"
+            )
+
+        # Cumulative state-pressure diagnostics for a whole simulation/group.
+        # Observational only: solver decisions and forces do not depend on it.
+        self._heavy_valence_run_diagnostics = {
+            "evaluation_count": 0,
+            "max_candidate_count": 0,
+            "max_state_count": 0,
+            "centre_evaluations_over_128": 0,
+            "centre_evaluations_over_200": 0,
+            "evaluations_with_over_128": 0,
+            "evaluations_with_over_200": 0,
+            "max_topology_group": 0,
+            "max_total_states_solved": 0,
+            "max_competitive_atom_count": 0,
+            "max_state_shape": (),
+        }
 
         super().__init__(
             *args,
             **kwargs,
+        )
+
+    def _record_heavy_valence_run_diagnostics(
+        self,
+        current,
+    ):
+        # Accumulate cheap Python-side state-space pressure counters.
+
+        run = self._heavy_valence_run_diagnostics
+
+        run["evaluation_count"] += 1
+
+        run["max_candidate_count"] = max(
+            int(run["max_candidate_count"]),
+            int(current.get("largest_candidate_count", 0)),
+        )
+
+        current_state_count = int(
+            current.get("largest_state_count", 0)
+        )
+
+        if current_state_count > int(run["max_state_count"]):
+            run["max_state_count"] = current_state_count
+            run["max_state_shape"] = tuple(
+                int(value)
+                for value in current.get(
+                    "largest_state_shape",
+                    (),
+                )
+            )
+
+        over_128 = int(
+            current.get("centres_over_128", 0)
+        )
+        over_200 = int(
+            current.get("centres_over_200", 0)
+        )
+
+        run["centre_evaluations_over_128"] += over_128
+        run["centre_evaluations_over_200"] += over_200
+
+        if over_128:
+            run["evaluations_with_over_128"] += 1
+
+        if over_200:
+            run["evaluations_with_over_200"] += 1
+
+        run["max_topology_group"] = max(
+            int(run["max_topology_group"]),
+            int(current.get("largest_topology_group", 0)),
+        )
+
+        run["max_total_states_solved"] = max(
+            int(run["max_total_states_solved"]),
+            int(current.get("total_states_solved", 0)),
+        )
+
+        run["max_competitive_atom_count"] = max(
+            int(run["max_competitive_atom_count"]),
+            int(current.get("competitive_atom_count", 0)),
         )
 
     # ------------------------------------------------------------------
@@ -469,6 +559,12 @@ class BatchedHeavyValenceStateBatchedSimulation(
 
         competitive_atom_count = 0
 
+        largest_candidate_count = 0
+        largest_state_count = 0
+        largest_state_shape = ()
+        centres_over_128 = 0
+        centres_over_200 = 0
+
         for atom in range(
             taper.shape[0]
         ):
@@ -508,6 +604,11 @@ class BatchedHeavyValenceStateBatchedSimulation(
                 active_slots.size
             )
 
+            largest_candidate_count = max(
+                largest_candidate_count,
+                candidate_count,
+            )
+
             if (
                 candidate_count
                 <= capacity
@@ -529,6 +630,20 @@ class BatchedHeavyValenceStateBatchedSimulation(
                 candidate_count,
                 capacity,
             )
+
+            if state_count > largest_state_count:
+                largest_state_count = state_count
+                largest_state_shape = (
+                    candidate_count,
+                    capacity,
+                    state_count,
+                )
+
+            if state_count > 128:
+                centres_over_128 += 1
+
+            if state_count > 200:
+                centres_over_200 += 1
 
             if (
                 state_count
@@ -814,33 +929,10 @@ class BatchedHeavyValenceStateBatchedSimulation(
                     )
                 )
 
-                _, eigenvectors = (
-                    torch.linalg.eigh(
-                        hamiltonian
-                    )
-                )
-
-                ground = (
-                    eigenvectors[
-                        :,
-                        :,
-                        0,
-                    ]
-                )
-
                 probabilities = (
-                    ground
-                    * ground
-                )
-
-                probabilities = (
-                    probabilities
-                    / torch.clamp(
-                        probabilities.sum(
-                            dim=1,
-                            keepdim=True,
-                        ),
-                        min=1e-12,
+                    thermal_state_probabilities(
+                        hamiltonian,
+                        self.heavy_valence_temperature,
                     )
                 )
 
@@ -915,7 +1007,27 @@ class BatchedHeavyValenceStateBatchedSimulation(
                     in groups.items()
                 )
             ),
+            "largest_candidate_count": int(
+                largest_candidate_count
+            ),
+            "largest_state_count": int(
+                largest_state_count
+            ),
+            "largest_state_shape": tuple(
+                int(value)
+                for value in largest_state_shape
+            ),
+            "centres_over_128": int(
+                centres_over_128
+            ),
+            "centres_over_200": int(
+                centres_over_200
+            ),
         }
+
+        self._record_heavy_valence_run_diagnostics(
+            self._heavy_valence_diagnostics
+        )
 
         return membership
 

@@ -39,7 +39,7 @@ OPTIMISED_VALENCE_MODEL_NAME = (
     "reactive_v7_factorisable_valence_optimised_experimental"
 )
 
-OPTIMISED_VALENCE_MODEL_REVISION = 0
+OPTIMISED_VALENCE_MODEL_REVISION = 1
 
 
 def _resolved_device_type(requested_device):

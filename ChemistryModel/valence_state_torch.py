@@ -53,10 +53,14 @@ from h_state_torch import (
     _contact_overlap,
     _crowding_normalisation,
 )
+from heavy_valence_density import (
+    DEFAULT_HEAVY_VALENCE_TEMPERATURE,
+    thermal_state_probabilities,
+)
 
 
 VALENCE_STATE_MODEL_NAME = "reactive_v3_valence_state_experimental"
-VALENCE_STATE_MODEL_REVISION = 0
+VALENCE_STATE_MODEL_REVISION = 1
 
 # Safety limits for the research implementation. These are not chemistry
 # parameters; they prevent accidental combinatorial explosions before a more
@@ -94,11 +98,23 @@ class ValenceStateBatchedSimulation(HStateReferenceBatchedSimulation):
     physics_model_name = VALENCE_STATE_MODEL_NAME
     physics_model_revision = VALENCE_STATE_MODEL_REVISION
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        *args,
+        heavy_valence_temperature=DEFAULT_HEAVY_VALENCE_TEMPERATURE,
+        **kwargs,
+    ):
         # reactive_torch normally keeps detached diagnostic energy parts.
         # We also need the live tensors so the old heavy topology terms can
         # be replaced without breaking autograd.
         self._profile_energy_part_gradients = True
+        self.heavy_valence_temperature = float(
+            heavy_valence_temperature
+        )
+        if self.heavy_valence_temperature <= 0.0:
+            raise ValueError(
+                "heavy_valence_temperature must be positive"
+            )
 
         super().__init__(*args, **kwargs)
 
@@ -156,8 +172,8 @@ class ValenceStateBatchedSimulation(HStateReferenceBatchedSimulation):
             N > V:
                 enumerate all size-V contact sets
                 build an H-state-style Hamiltonian
-                diagonalise it
-                convert ground-state probabilities into expected contact
+                form its finite-temperature density matrix
+                convert state probabilities into expected contact
                 membership
 
         The returned tensor has the same shape as values["taper"].
@@ -389,22 +405,10 @@ class ValenceStateBatchedSimulation(HStateReferenceBatchedSimulation):
 
                 hamiltonian = torch.stack(rows)
 
-                _, eigenvectors = torch.linalg.eigh(
-                    hamiltonian
-                )
-
-                ground = eigenvectors[:, 0]
-
-                # Eigenvector sign is arbitrary, but |c_s|^2 is invariant.
-                probabilities = ground * ground
-
-                probabilities = (
-                    probabilities
-                    / torch.clamp(
-                        probabilities.sum(),
-                        min=1e-12,
-                    )
-                )
+                probabilities = thermal_state_probabilities(
+                    hamiltonian.unsqueeze(0),
+                    self.heavy_valence_temperature,
+                )[0]
 
             slot_values = [
                 zero for _ in range(taper.shape[1])

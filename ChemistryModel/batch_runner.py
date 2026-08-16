@@ -872,6 +872,13 @@ def summarise_run(recorder, simulation, seed, seconds, strikes,
         "physics_model_revision": getattr(
             simulation, "physics_model_revision", 0
         ),
+        "heavy_valence_group_diagnostics": dict(
+            getattr(
+                simulation,
+                "_heavy_valence_run_diagnostics",
+                {},
+            )
+        ),
         "number": 0,
         "file": f"run_s{seed:04d}.npz",
         "mixture": options.mixture,
@@ -1016,6 +1023,51 @@ def run_grouped(planned, mixture, options, progress):
                 f"seed {seed:<5d} {each:6.1f} s  "
                 f"{len(recorder):5d} frames  "
                 f"-> {entry['headline']}"
+            )
+
+        heavy_diagnostics = getattr(
+            simulation,
+            "_heavy_valence_run_diagnostics",
+            None,
+        )
+
+        if heavy_diagnostics:
+            print()
+            print("  heavy valence state pressure (group):")
+            print(
+                "    max candidates / states : "
+                f"{heavy_diagnostics.get('max_candidate_count', 0)} / "
+                f"{heavy_diagnostics.get('max_state_count', 0)}"
+            )
+            print(
+                "    max state shape         : "
+                f"{heavy_diagnostics.get('max_state_shape', ())}"
+            )
+            print(
+                "    >128 centre-evaluations : "
+                f"{heavy_diagnostics.get('centre_evaluations_over_128', 0)} "
+                "across "
+                f"{heavy_diagnostics.get('evaluations_with_over_128', 0)} "
+                "evaluations"
+            )
+            print(
+                "    >200 centre-evaluations : "
+                f"{heavy_diagnostics.get('centre_evaluations_over_200', 0)} "
+                "across "
+                f"{heavy_diagnostics.get('evaluations_with_over_200', 0)} "
+                "evaluations"
+            )
+            print(
+                "    max competing centres   : "
+                f"{heavy_diagnostics.get('max_competitive_atom_count', 0)}"
+            )
+            print(
+                "    max states solved/call  : "
+                f"{heavy_diagnostics.get('max_total_states_solved', 0)}"
+            )
+            print(
+                "    max topology group      : "
+                f"{heavy_diagnostics.get('max_topology_group', 0)}"
             )
 
         rebuild_index(options.out)
