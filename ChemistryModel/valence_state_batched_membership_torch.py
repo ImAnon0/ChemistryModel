@@ -277,34 +277,24 @@ class BatchedHeavyValenceStateBatchedSimulation(
             transition_first
         )
 
-        transition_basis = torch.zeros(
-            (
-                transition_count,
-                state_count,
-                state_count,
-            ),
-            device=self.device,
-            dtype=self.dtype,
-        )
-
+        # Compact representation of symmetric off-diagonal placements.
+        # The old T x S x S transition basis exploded in memory for larger
+        # exact local state spaces.
         if transition_count:
-            transition_index = torch.arange(
-                transition_count,
+            transition_flat_index = torch.cat(
+                (
+                    transition_first_tensor * state_count
+                    + transition_second_tensor,
+                    transition_second_tensor * state_count
+                    + transition_first_tensor,
+                )
+            )
+        else:
+            transition_flat_index = torch.zeros(
+                (0,),
                 device=self.device,
                 dtype=torch.long,
             )
-
-            transition_basis[
-                transition_index,
-                transition_first_tensor,
-                transition_second_tensor,
-            ] = 1.0
-
-            transition_basis[
-                transition_index,
-                transition_second_tensor,
-                transition_first_tensor,
-            ] = 1.0
 
         cached = {
             "candidate_count": (
@@ -330,8 +320,8 @@ class BatchedHeavyValenceStateBatchedSimulation(
             "transition_new": (
                 transition_new_tensor
             ),
-            "transition_basis": (
-                transition_basis
+            "transition_flat_index": (
+                transition_flat_index
             ),
         }
 
@@ -340,6 +330,84 @@ class BatchedHeavyValenceStateBatchedSimulation(
         ] = cached
 
         return cached
+
+    # ------------------------------------------------------------------
+    # Compact differentiable Hamiltonian assembly
+    # ------------------------------------------------------------------
+
+    def _assemble_heavy_hamiltonian(
+        self,
+        diagonal,
+        coupling,
+        structure,
+    ):
+        # Same symmetric Hamiltonian as the former transition-basis einsum,
+        # assembled from compact flat transition indices.
+
+        hamiltonian = torch.diag_embed(
+            diagonal
+        )
+
+        transition_count = int(
+            structure[
+                "transition_first"
+            ].numel()
+        )
+
+        if transition_count == 0:
+            return hamiltonian
+
+        state_count = int(
+            structure[
+                "state_count"
+            ]
+        )
+
+        group_size = int(
+            diagonal.shape[0]
+        )
+
+        flat_index = structure[
+            "transition_flat_index"
+        ]
+
+        flat_values = torch.cat(
+            (
+                -coupling,
+                -coupling,
+            ),
+            dim=1,
+        )
+
+        off_diagonal = torch.zeros(
+            (
+                group_size,
+                state_count * state_count,
+            ),
+            device=self.device,
+            dtype=self.dtype,
+        )
+
+        off_diagonal = off_diagonal.scatter_add(
+            1,
+            flat_index[
+                None,
+                :,
+            ].expand(
+                group_size,
+                -1,
+            ),
+            flat_values,
+        )
+
+        return (
+            hamiltonian
+            + off_diagonal.reshape(
+                group_size,
+                state_count,
+                state_count,
+            )
+        )
 
     # ------------------------------------------------------------------
     # Batched heavy membership
@@ -739,15 +807,10 @@ class BatchedHeavyValenceStateBatchedSimulation(
                 )
 
                 hamiltonian = (
-                    torch.diag_embed(
-                        diagonal
-                    )
-                    + torch.einsum(
-                        "bt,tij->bij",
-                        -coupling,
-                        structure[
-                            "transition_basis"
-                        ],
+                    self._assemble_heavy_hamiltonian(
+                        diagonal,
+                        coupling,
+                        structure,
                     )
                 )
 

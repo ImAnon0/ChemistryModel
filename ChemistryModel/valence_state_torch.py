@@ -62,7 +62,7 @@ VALENCE_STATE_MODEL_REVISION = 0
 # parameters; they prevent accidental combinatorial explosions before a more
 # efficient state solver is implemented.
 MAX_LOCAL_CANDIDATES = 12
-MAX_LOCAL_STATES = 128
+MAX_LOCAL_STATES = 512
 
 
 def _states_differ_by_one_exchange(first, second):
