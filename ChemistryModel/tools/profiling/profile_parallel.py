@@ -75,7 +75,9 @@ def run_group(worker_path, mixture, box, steps, count):
             [
                 sys.executable, worker_path,
                 mixture, str(box), str(steps), str(700 + index),
-                os.path.abspath(os.path.dirname(__file__)) or ".",
+                os.path.abspath(
+                    os.path.join(os.path.dirname(__file__), "..", "..")
+                ),
             ],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

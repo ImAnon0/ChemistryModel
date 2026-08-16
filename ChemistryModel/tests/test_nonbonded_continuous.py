@@ -10,7 +10,7 @@ import nonbonded_continuous as con
 
 
 DATA = (
-    Path(__file__).parent
+    Path(__file__).resolve().parents[1]
     / "research_data"
     / "sapt"
 )

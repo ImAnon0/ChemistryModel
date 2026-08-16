@@ -9,7 +9,7 @@ import pytest
 import nonbonded_reference as nb
 
 
-DATA = Path(__file__).parent / "research_data" / "sapt"
+DATA = Path(__file__).resolve().parents[1] / "research_data" / "sapt"
 
 
 # ============================================================

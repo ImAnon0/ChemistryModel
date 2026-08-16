@@ -12,7 +12,7 @@ import nonbonded_continuous_torch as thcon
 
 
 DATA = (
-    Path(__file__).parent
+    Path(__file__).resolve().parents[1]
     / "research_data"
     / "sapt"
 )
