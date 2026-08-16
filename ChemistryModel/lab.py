@@ -151,6 +151,7 @@ def matching_folder(root, wanted):
         strikes = int(first.get("strikes", 0))
 
         found = {
+            "physics": first.get("physics", "reactive"),
             "mixture": first.get("mixture"),
             "box": round(float(first.get("box", 0)), 2),
             "picoseconds": round(
@@ -852,6 +853,26 @@ class Lab(QtWidgets.QWidget):
         )
         self.grouped.stateChanged.connect(self.refresh_existing)
         execution.addWidget(self.grouped)
+
+        self.physics_box = QtWidgets.QComboBox()
+        self.physics_box.addItem(
+            "Reactive base (current default)",
+            "reactive",
+        )
+        self.physics_box.addItem(
+            "Optimised valence state (experimental)",
+            "optimised-valence",
+        )
+        self.physics_box.setToolTip(
+            "Uses the validated factorisable H-state and heavy-valence "
+            "engine. This is opt-in; the historical reactive engine remains "
+            "the default."
+        )
+        self.physics_box.currentIndexChanged.connect(
+            self.on_physics_changed
+        )
+        execution.addWidget(self.physics_box)
+
         self.execution_preview = QtWidgets.QLabel("")
         self.execution_preview.setObjectName("sectionSubtitle")
         execution.addWidget(self.execution_preview)
@@ -973,6 +994,12 @@ class Lab(QtWidgets.QWidget):
 
         self.mixture_box.blockSignals(False)
 
+    def on_physics_changed(self):
+        if self.physics_box.currentData() == "optimised-valence":
+            self.grouped.setChecked(True)
+
+        self.refresh_existing()
+
     def on_mode(self):
         continuing = self.mode_box.currentIndex() == 1
 
@@ -985,7 +1012,7 @@ class Lab(QtWidgets.QWidget):
             self.mixture_box, self.box_size, self.seeds,
             self.first_seed, self.hot_temperature, self.hot_until,
             self.capture_every,
-            self.grouped,
+            self.grouped, self.physics_box,
         ):
             widget.setEnabled(not continuing)
 
@@ -1019,6 +1046,7 @@ class Lab(QtWidgets.QWidget):
 
     def conditions(self):
         return {
+            "physics": self.physics_box.currentData(),
             "mixture": self.mixture_box.currentText(),
             "box": round(self.box_size.value(), 2),
             "picoseconds": round(self.picoseconds.value(), 3),
@@ -1349,6 +1377,7 @@ class Lab(QtWidgets.QWidget):
             return self.build_continue_arguments()
 
         arguments = [
+            "--physics", str(self.physics_box.currentData()),
             "--mixture", self.mixture_box.currentText(),
             "--box", f"{self.box_size.value():g}",
             "--ps", f"{self.picoseconds.value():g}",
@@ -4508,6 +4537,7 @@ class Lab(QtWidgets.QWidget):
             "save_every": self.save_every.value(),
             "character_capture": self.character_capture.value(),
             "grouped": self.grouped.isChecked(),
+            "physics": self.physics_box.currentData(),
             "folder_name": self.folder_name.text(),
         }
 
@@ -4545,6 +4575,14 @@ class Lab(QtWidgets.QWidget):
         )
 
         self.grouped.setChecked(bool(stored.get("grouped", False)))
+
+        physics = stored.get("physics", "reactive")
+        physics_index = self.physics_box.findData(physics)
+        if physics_index < 0:
+            physics_index = self.physics_box.findData("reactive")
+        if physics_index >= 0:
+            self.physics_box.setCurrentIndex(physics_index)
+
         self.folder_name.setText(stored.get("folder_name", ""))
 
         self.refresh_existing()

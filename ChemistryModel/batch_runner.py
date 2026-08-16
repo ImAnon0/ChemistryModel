@@ -508,6 +508,23 @@ def build_group(mixture, seeds, options):
     return boxes
 
 
+def grouped_simulation_class(options):
+    # Historical reactive physics remains the default.
+    physics = getattr(options, "physics", "reactive")
+
+    if physics == "reactive":
+        from batched_torch import BatchedReactiveSimulation
+        return BatchedReactiveSimulation
+
+    if physics == "optimised-valence":
+        from valence_state_optimised_torch import (
+            OptimisedValenceStateBatchedSimulation,
+        )
+        return OptimisedValenceStateBatchedSimulation
+
+    raise ValueError(f"unknown physics engine: {physics!r}")
+
+
 def run_group(mixture, seeds, options, progress=None, folder=None):
     # Several boxes advanced together in one process.
     #
@@ -523,7 +540,9 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
 
     boxes = build_group(mixture, seeds, options)
 
-    simulation = BatchedReactiveSimulation(
+    SimulationClass = grouped_simulation_class(options)
+
+    simulation = SimulationClass(
         boxes=boxes,
         box_size=options.box,
         time_step=options.time_step,
@@ -846,6 +865,13 @@ def summarise_run(recorder, simulation, seed, seconds, strikes,
         ))
 
     return {
+        "physics": getattr(options, "physics", "reactive"),
+        "physics_model": getattr(
+            simulation, "physics_model_name", "reactive_base"
+        ),
+        "physics_model_revision": getattr(
+            simulation, "physics_model_revision", 0
+        ),
         "number": 0,
         "file": f"run_s{seed:04d}.npz",
         "mixture": options.mixture,
@@ -1519,6 +1545,7 @@ def condition_key(options):
     # conditions produces a number that describes neither.
 
     return {
+        "physics": getattr(options, "physics", "reactive"),
         "mixture": options.mixture,
         "box": round(float(options.box), 2),
         "picoseconds": round(float(options.picoseconds), 3),
@@ -1574,6 +1601,9 @@ def folder_name(options):
     # says what it holds without opening it.
 
     safe = options.mixture.strip().replace("+", "plus")
+
+    if getattr(options, "physics", "reactive") != "reactive":
+        safe += "_optimised_valence"
     safe = "-".join(safe.replace("_", " ").split())
 
     parts = [
@@ -1630,6 +1660,7 @@ def existing_batch(directory):
     # when there are no strikes.
 
     found = {
+        "physics": first.get("physics", "reactive"),
         "mixture": first.get("mixture"),
         "box": round(float(first.get("box", 0)), 2),
         "picoseconds": round(float(
@@ -2043,6 +2074,16 @@ def main():
         )
     )
     parser.add_argument(
+        "--physics",
+        choices=("reactive", "optimised-valence"),
+        default="reactive",
+        help=(
+            "physics engine. reactive preserves the historical default; "
+            "optimised-valence enables the validated factorisable "
+            "H-state/heavy-valence engine for fresh grouped runs"
+        ),
+    )
+    parser.add_argument(
         "--group", type=int, default=16,
         help=(
             "how many boxes to advance together in one process. "
@@ -2080,6 +2121,25 @@ def main():
 
     adaptive_explicit = "--adaptive-recording" in sys.argv[1:]
     options = parser.parse_args()
+
+
+    if (
+        options.physics == "optimised-valence"
+        and options.continue_from
+    ):
+        raise SystemExit(
+            "--physics optimised-valence is not wired to continuation yet. "
+            "Use it for a fresh grouped run."
+        )
+
+    if (
+        options.physics == "optimised-valence"
+        and options.group <= 1
+    ):
+        raise SystemExit(
+            "--physics optimised-valence currently requires --group 2 "
+            "or greater. The historical single-box path is unchanged."
+        )
 
     if options.expand_to:
         raise SystemExit(
