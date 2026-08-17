@@ -46,6 +46,7 @@ POLL_MILLISECONDS = 1500
 DEFAULT_CONCURRENCY = 3
 GROUP_SIZE = 16
 CHARACTERISATION_ROOT = "characterisation"
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
 STATES = ("queued", "running", "done", "stopped", "failed")
@@ -64,24 +65,68 @@ def read_index(path):
         return []
 
 
-def read_heartbeat(folder, pid):
-    # What the process is partway through right now. Named by
-    # process id so several jobs sharing a folder each read their
-    # own.
+def _heartbeat_matches_seeds(payload, seeds):
+    if not seeds:
+        return True
 
-    if not pid:
-        return None
+    label = payload.get("seed")
+    if label is None:
+        return False
 
-    path = os.path.join(folder, f".progress_{int(pid)}.json")
-
-    if not os.path.exists(path):
-        return None
+    wanted = {int(seed) for seed in seeds}
+    text = str(label)
 
     try:
-        with open(path) as handle:
-            return json.load(handle)
-    except (json.JSONDecodeError, OSError):
-        return None
+        if "-" in text:
+            first, last = text.split("-", 1)
+            return int(first) in wanted and int(last) in wanted
+        return int(text) in wanted
+    except (TypeError, ValueError):
+        return False
+
+
+def read_heartbeat(folder, pid, seeds=None):
+    # Prefer the exact child-process heartbeat. If Lab has been restarted
+    # from an older queue file whose PID was never persisted, fall back to
+    # the newest heartbeat whose seed label belongs to this job. The runner
+    # writes heartbeat files atomically, so a successful JSON load is a
+    # complete update rather than a half-written one.
+
+    candidates = []
+    if pid:
+        exact = os.path.join(folder, f".progress_{int(pid)}.json")
+        if os.path.exists(exact):
+            candidates.append(exact)
+
+    if not candidates:
+        candidates = glob.glob(os.path.join(folder, ".progress_*.json"))
+
+    best = None
+    best_updated = -1.0
+
+    for path in candidates:
+        try:
+            with open(path) as handle:
+                payload = json.load(handle)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+        if pid and int(payload.get("pid", -1)) == int(pid):
+            return payload
+
+        if not _heartbeat_matches_seeds(payload, seeds):
+            continue
+
+        try:
+            updated = float(payload.get("updated", 0.0))
+        except (TypeError, ValueError):
+            updated = 0.0
+
+        if updated >= best_updated:
+            best = payload
+            best_updated = updated
+
+    return best
 
 
 def entry_seeds(folder):
@@ -136,37 +181,84 @@ def find_batches(root):
 
 
 def matching_folder(root, wanted):
-    # Any existing folder whose runs were made under the same
-    # conditions. Used to tell the person which seeds are already
-    # taken before they queue more.
+    # Mirror batch_runner's experiment identity. Adaptive-v2 fields that
+    # were not written by older Lab batches are interpreted as the recorder
+    # defaults that Lab used at the time; new runner entries record them
+    # explicitly.
 
     for label, path in find_batches(root):
         index = read_index(path)
-
         if not index:
             continue
 
         first = index[0]
-
         strikes = int(first.get("strikes", 0))
+        adaptive = bool(first.get("adaptive_recording", False))
 
         found = {
             "physics": first.get("physics", "reactive"),
             "mixture": first.get("mixture"),
             "box": round(float(first.get("box", 0)), 2),
-            "picoseconds": round(
-                float(first.get("picoseconds", 0)), 3
-            ),
+            "picoseconds": round(float(
+                first.get("requested_picoseconds", first.get("picoseconds", 0))
+            ), 3),
             "strikes": strikes,
+            "strike_temperature": (
+                round(float(first.get("strike_temperature", 0) or 0), 0)
+                if strikes else 0.0
+            ),
+            "strike_dissociation": (
+                round(float(first.get("strike_dissociation", 0) or 0), 3)
+                if strikes else 0.0
+            ),
+            "expand_to": round(float(first.get("expand_to", 0) or 0), 2),
+            "hot_temperature": round(
+                float(first.get("hot_temperature", 500) or 500), 0
+            ),
             "cool_temperature": round(
                 float(first.get("cool_temperature", 250) or 250), 0
             ),
-            "adaptive_recording": bool(
-                first.get("adaptive_recording", False)
-            ),
+            "adaptive_recording": adaptive,
+            "adaptive_candidate_fs": round(float(
+                first.get("adaptive_candidate_fs", 2.0 if adaptive else 0.0)
+                or 0.0
+            ), 3),
+            "adaptive_pre_event_fs": round(float(
+                first.get("adaptive_pre_event_fs", 100.0 if adaptive else 0.0)
+                or 0.0
+            ), 3),
+            "adaptive_post_event_fs": round(float(
+                first.get("adaptive_post_event_fs", 100.0 if adaptive else 0.0)
+                or 0.0
+            ), 3),
+            "adaptive_energy_jump_ev": round(float(
+                first.get("adaptive_energy_jump_ev", 20.0 if adaptive else 0.0)
+                or 0.0
+            ), 6),
+            "adaptive_close_contact_scale": round(float(
+                first.get("adaptive_close_contact_scale", 0.35 if adaptive else 0.0)
+                or 0.0
+            ), 4),
+            "adaptive_reaction_window_fs": round(float(
+                first.get("adaptive_reaction_window_fs", 20.0 if adaptive else 0.0)
+                or 0.0
+            ), 3),
+            "adaptive_chemical_context_fs": round(float(
+                first.get("adaptive_chemical_context_fs", 10.0 if adaptive else 0.0)
+                or 0.0
+            ), 3),
+            "compiled_forces": bool(first.get("compiled_forces", False)),
         }
 
-        if found == wanted:
+        differs = False
+        for key, requested in wanted.items():
+            existing = found.get(key)
+            if key == "picoseconds":
+                differs |= abs(float(existing) - float(requested)) > 0.011
+            else:
+                differs |= existing != requested
+
+        if not differs:
             return label, path, index
 
     return None, None, []
@@ -333,6 +425,10 @@ class Job:
         self.completed = 0
         self.headlines = []
         self.live_chemistry = None
+        self.run_phase = "queued"
+        self.results_done = 0
+        self.results_total = 0
+        self.log_path = None
 
     def as_dict(self):
         return {
@@ -376,9 +472,19 @@ class Job:
 
             mine = sorted(done)
 
-        beat = read_heartbeat(self.out, self.pid)
+        beat = read_heartbeat(self.out, self.pid, self.seeds)
 
         if beat and beat.get("steps_total"):
+            heartbeat_pid = beat.get("pid")
+            if heartbeat_pid:
+                try:
+                    self.pid = int(heartbeat_pid)
+                except (TypeError, ValueError):
+                    pass
+
+            self.run_phase = str(beat.get("phase", "running"))
+            self.results_done = int(beat.get("results_done", 0) or 0)
+            self.results_total = int(beat.get("results_total", 0) or 0)
             self.run_fraction = min(
                 beat["steps_done"] / beat["steps_total"], 1.0
             )
@@ -427,6 +533,9 @@ class Job:
             self.run_seed = None
             self.inflight_runs = 1
             self.live_chemistry = None
+            self.run_phase = "waiting"
+            self.results_done = 0
+            self.results_total = 0
 
         index = read_index(self.out)
 
@@ -1045,18 +1154,32 @@ class Lab(QtWidgets.QWidget):
         self.source_box.blockSignals(False)
 
     def conditions(self):
+        strikes = int(self.strikes.value())
+        adaptive = strikes == 0
         return {
             "physics": self.physics_box.currentData(),
             "mixture": self.mixture_box.currentText(),
             "box": round(self.box_size.value(), 2),
             "picoseconds": round(self.picoseconds.value(), 3),
-            "strikes": int(self.strikes.value()),
-            "cool_temperature": round(
-                self.cool_temperature.value(), 0
+            "strikes": strikes,
+            "strike_temperature": (
+                round(self.strike_temperature.value(), 0) if strikes else 0.0
             ),
-            # Lightning still uses the compatibility recorder because its
-            # independent action cadence has not yet been decoupled.
-            "adaptive_recording": self.strikes.value() == 0,
+            "strike_dissociation": (
+                round(self.strike_dissociation.value(), 3) if strikes else 0.0
+            ),
+            "expand_to": 0.0,
+            "hot_temperature": round(self.hot_temperature.value(), 0),
+            "cool_temperature": round(self.cool_temperature.value(), 0),
+            "adaptive_recording": adaptive,
+            "adaptive_candidate_fs": 2.0 if adaptive else 0.0,
+            "adaptive_pre_event_fs": 100.0 if adaptive else 0.0,
+            "adaptive_post_event_fs": 100.0 if adaptive else 0.0,
+            "adaptive_energy_jump_ev": 20.0 if adaptive else 0.0,
+            "adaptive_close_contact_scale": 0.35 if adaptive else 0.0,
+            "adaptive_reaction_window_fs": 20.0 if adaptive else 0.0,
+            "adaptive_chemical_context_fs": 10.0 if adaptive else 0.0,
+            "compiled_forces": False,
         }
 
     def refresh_existing(self):
@@ -1500,6 +1623,8 @@ class Lab(QtWidgets.QWidget):
         # watch the right folder before the batch has made it.
 
         safe = self.mixture_box.currentText().strip().replace("+", "plus")
+        if self.physics_box.currentData() != "reactive":
+            safe += "_optimised_valence"
         safe = "-".join(safe.replace("_", " ").split())
 
         parts = [
@@ -3376,24 +3501,38 @@ class Lab(QtWidgets.QWidget):
     def start_job(self, job):
         os.makedirs(job.out, exist_ok=True)
 
-        command = [
-            sys.executable, job.runner
-        ] + job.arguments
+        runner = (
+            job.runner if os.path.isabs(job.runner)
+            else os.path.join(PROJECT_ROOT, job.runner)
+        )
+        command = [sys.executable, runner] + job.arguments
 
         if "--out" not in job.arguments:
             command += ["--out", job.out]
 
-        job.process = subprocess.Popen(
-            command,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.STDOUT,
-        )
+        # Keep the child's output instead of discarding the only useful error
+        # message when argparse/condition validation rejects a job.
+        job.log_path = os.path.join(job.out, "lab_runner.log")
+        with open(job.log_path, "a", encoding="utf-8") as log:
+            log.write("\n=== " + time.strftime("%Y-%m-%d %H:%M:%S") + " ===\n")
+            log.write(" ".join(str(piece) for piece in command) + "\n")
+            log.flush()
+            job.process = subprocess.Popen(
+                command,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                cwd=PROJECT_ROOT,
+            )
 
         job.pid = job.process.pid
         job.reattached = False
-
         job.state = "running"
+        job.run_phase = "initialising"
         job.started = time.time()
+
+        # Persist the PID/state immediately. Previously lab_queue.json still
+        # said queued/pid=null for an already-running child.
+        self.save_queue()
 
     @staticmethod
     def job_uses_grouped_gpu(job):
@@ -3420,6 +3559,8 @@ class Lab(QtWidgets.QWidget):
         return group > 1
 
     def tick(self):
+        queue_dirty = False
+
         for job in self.jobs:
             if job.state != "running":
                 continue
@@ -3433,6 +3574,7 @@ class Lab(QtWidgets.QWidget):
                     job.finished = time.time()
 
                     job.state = "done" if code == 0 else "failed"
+                    queue_dirty = True
 
             elif job.reattached:
                 # Started by an earlier session, so there is no
@@ -3448,6 +3590,7 @@ class Lab(QtWidgets.QWidget):
                         "done" if job.completed >= job.runs
                         else "stopped"
                     )
+                    queue_dirty = True
 
         if not self.queue_paused:
             # Named 'active' rather than 'running': a local called
@@ -3502,6 +3645,9 @@ class Lab(QtWidgets.QWidget):
                 if self.job_uses_grouped_gpu(job):
                     grouped_gpu_active = True
 
+        if queue_dirty:
+            self.save_queue()
+
         self.draw_jobs()
 
     def draw_jobs(self):
@@ -3542,18 +3688,29 @@ class Lab(QtWidgets.QWidget):
                 return "#" * filled + "-" * (width - filled)
 
             if job.state == "running":
-                run_bar = (
-                    f"[{bar(job.run_fraction)}] "
-                    f"{job.run_fraction:3.0%}"
-                )
-
-                if job.run_seed is not None:
-                    label = str(job.run_seed)
-                    run_bar += (
-                        f"  seeds {label}"
-                        if job.inflight_runs > 1 or "-" in label
-                        else f"  seed {label}"
+                if job.run_phase == "initialising":
+                    run_bar = "initialising engine"
+                elif job.run_phase == "saving_results":
+                    if job.results_total:
+                        run_bar = (
+                            f"saving results {job.results_done}/"
+                            f"{job.results_total}"
+                        )
+                    else:
+                        run_bar = "saving results"
+                else:
+                    run_bar = (
+                        f"[{bar(job.run_fraction)}] "
+                        f"{job.run_fraction:3.0%}"
                     )
+
+                    if job.run_seed is not None:
+                        label = str(job.run_seed)
+                        run_bar += (
+                            f"  seeds {label}"
+                            if job.inflight_runs > 1 or "-" in label
+                            else f"  seed {label}"
+                        )
             else:
                 run_bar = "-"
 
@@ -4659,9 +4816,10 @@ class Lab(QtWidgets.QWidget):
         abandoned = []
 
         for job in self.jobs:
-            if job.state not in ("running", "queued"):
-                continue
-
+            # Trust the live process/lock over the persisted queue state.
+            # An older Lab session could write "stopped" even while the
+            # detached batch was still running; skipping terminal-looking
+            # queue entries here made that mistake permanent on every reopen.
             state, lock = running.state_of(job.out, job.pid)
 
             if state == "running":
@@ -4669,13 +4827,18 @@ class Lab(QtWidgets.QWidget):
                 job.reattached = True
                 job.pid = (lock or {}).get("pid", job.pid)
                 job.started = (lock or {}).get("started", time.time())
+                job.finished = None
                 job.refresh()
 
                 alive.append(job.name)
+            elif job.state not in ("running", "queued"):
+                # No live process backs this completed/stopped/failed entry,
+                # so leave its persisted terminal state alone.
+                continue
             elif state == "stale":
                 # A lock left behind by something that died.
 
-                running.remove_lock(job.out)
+                running.remove_lock(job.out, job.pid)
 
                 job.refresh()
 
@@ -4716,6 +4879,10 @@ class Lab(QtWidgets.QWidget):
                 self, "Picking up where you left off",
                 "\n\n".join(message),
             )
+
+        # Keep recovered PIDs and reconciled states on disk too.
+        if alive or finished or abandoned:
+            self.save_queue()
 
     def closeEvent(self, event):
         running = [
@@ -4794,6 +4961,7 @@ class MixtureDialog(QtWidgets.QDialog):
 
 
 def main():
+    os.chdir(PROJECT_ROOT)
     pg.setConfigOptions(antialias=True)
 
     application = QtWidgets.QApplication(sys.argv)

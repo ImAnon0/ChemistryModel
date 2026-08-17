@@ -906,6 +906,30 @@ def summarise_run(recorder, simulation, seed, seconds, strikes,
             float(options.adaptive_candidate_fs)
             if getattr(options, "adaptive_recording", False) else None
         ),
+        "adaptive_pre_event_fs": (
+            float(options.adaptive_pre_event_fs)
+            if getattr(options, "adaptive_recording", False) else None
+        ),
+        "adaptive_post_event_fs": (
+            float(options.adaptive_post_event_fs)
+            if getattr(options, "adaptive_recording", False) else None
+        ),
+        "adaptive_energy_jump_ev": (
+            float(options.adaptive_energy_jump_ev)
+            if getattr(options, "adaptive_recording", False) else None
+        ),
+        "adaptive_close_contact_scale": (
+            float(options.adaptive_close_contact_scale)
+            if getattr(options, "adaptive_recording", False) else None
+        ),
+        "adaptive_reaction_window_fs": (
+            float(options.adaptive_reaction_window_fs)
+            if getattr(options, "adaptive_recording", False) else None
+        ),
+        "adaptive_chemical_context_fs": (
+            float(options.adaptive_chemical_context_fs)
+            if getattr(options, "adaptive_recording", False) else None
+        ),
         "wall_seconds": round(seconds, 1),
         "headline": analysis.headline(result),
         "final_species": sorted({
@@ -989,6 +1013,15 @@ def run_grouped(planned, mixture, options, progress):
     for group in groups:
         progress.start_run()
 
+        seed_label = (
+            str(group[0]) if len(group) == 1
+            else f"{group[0]}-{group[-1]}"
+        )
+        write_heartbeat(
+            options.out, seed_label, 0, progress.steps_per_run,
+            time.time(), boxes_in_group=len(group), phase="initialising",
+        )
+
         outcome = run_group(
             mixture, group, options, progress, options.out
         )
@@ -997,6 +1030,16 @@ def run_grouped(planned, mixture, options, progress):
 
         progress.finish_run()
         progress.clear()
+
+        # Dynamics are complete, but saving/analyzing every recorder can still
+        # take time. Keep Lab informed instead of leaving it at a mysterious
+        # 100% until the process exits.
+        write_heartbeat(
+            options.out, seed_label, progress.steps_per_run,
+            progress.steps_per_run, time.time(), boxes_in_group=len(group),
+            phase="saving_results", results_done=0,
+            results_total=len(group),
+        )
 
         # The time is shared, so each run is charged its share.
 
@@ -1018,6 +1061,13 @@ def run_grouped(planned, mixture, options, progress):
             entry["finished"] = True
 
             write_entry(options.out, entry)
+            rebuild_index(options.out)
+            write_heartbeat(
+                options.out, seed_label, progress.steps_per_run,
+                progress.steps_per_run, time.time(),
+                boxes_in_group=len(group), phase="saving_results",
+                results_done=index + 1, results_total=len(group),
+            )
 
             print(
                 f"seed {seed:<5d} {each:6.1f} s  "
@@ -1415,7 +1465,8 @@ def live_chemistry_summary(simulation, seeds, positions_per_box,
 
 
 def write_heartbeat(folder, seed, done, total, started, boxes_in_group=1,
-                    live=None):
+                    live=None, phase="running", results_done=None,
+                    results_total=None):
     # How far through the current run this process is.
     #
     # The control panel cannot see the progress bar printed to the
@@ -1434,9 +1485,14 @@ def write_heartbeat(folder, seed, done, total, started, boxes_in_group=1,
                 "run_started": started,
                 "updated": time.time(),
                 "boxes_in_group": int(boxes_in_group),
+                "phase": str(phase),
             }
             if live is not None:
                 payload["live"] = live
+            if results_done is not None:
+                payload["results_done"] = int(results_done)
+            if results_total is not None:
+                payload["results_total"] = int(results_total)
             json.dump(payload, handle)
         os.replace(temporary, heartbeat_path(folder))
     except OSError:
@@ -1704,6 +1760,7 @@ def existing_batch(directory):
     first = index[0]
 
     strikes = int(first.get("strikes", 0))
+    adaptive = bool(first.get("adaptive_recording", False))
 
     # A quiet run stores whatever the strike defaults happened to
     # be, even though none were fired. Comparing those against a
@@ -1734,33 +1791,41 @@ def existing_batch(directory):
         "cool_temperature": round(
             float(first.get("cool_temperature", 250) or 250), 0
         ),
-        # Indexes written before version-2 recording existed are legacy by
-        # definition. Missing adaptive fields must compare as disabled rather
-        # than making an old folder unreadable or raising a KeyError.
-        "adaptive_recording": bool(
-            first.get("adaptive_recording", False)
-        ),
+        # v1 indexes have adaptive_recording false. Early v2 Lab indexes did
+        # not persist every adaptive setting, so missing v2 fields below use
+        # the recorder defaults that those Lab runs were launched with.
+        "adaptive_recording": adaptive,
         "compiled_forces": bool(first.get("compiled_forces", False)),
+        # Compatibility for v2 entries written before these settings were
+        # persisted. Lab only exposed the defaults, so those old Lab batches
+        # can still be resumed without being misidentified as legacy v1.
         "adaptive_candidate_fs": round(float(
-            first.get("adaptive_candidate_fs", 0) or 0
+            first.get("adaptive_candidate_fs", 2.0 if adaptive else 0.0)
+            or 0.0
         ), 3),
         "adaptive_pre_event_fs": round(float(
-            first.get("adaptive_pre_event_fs", 0) or 0
+            first.get("adaptive_pre_event_fs", 100.0 if adaptive else 0.0)
+            or 0.0
         ), 3),
         "adaptive_post_event_fs": round(float(
-            first.get("adaptive_post_event_fs", 0) or 0
+            first.get("adaptive_post_event_fs", 100.0 if adaptive else 0.0)
+            or 0.0
         ), 3),
         "adaptive_energy_jump_ev": round(float(
-            first.get("adaptive_energy_jump_ev", 0) or 0
+            first.get("adaptive_energy_jump_ev", 20.0 if adaptive else 0.0)
+            or 0.0
         ), 6),
         "adaptive_close_contact_scale": round(float(
-            first.get("adaptive_close_contact_scale", 0) or 0
+            first.get("adaptive_close_contact_scale", 0.35 if adaptive else 0.0)
+            or 0.0
         ), 4),
         "adaptive_reaction_window_fs": round(float(
-            first.get("adaptive_reaction_window_fs", 0) or 0
+            first.get("adaptive_reaction_window_fs", 20.0 if adaptive else 0.0)
+            or 0.0
         ), 3),
         "adaptive_chemical_context_fs": round(float(
-            first.get("adaptive_chemical_context_fs", 0) or 0
+            first.get("adaptive_chemical_context_fs", 10.0 if adaptive else 0.0)
+            or 0.0
         ), 3),
     }
 
@@ -2485,12 +2550,20 @@ def run_all(planned, mixture, options, index, index_path, progress):
         result = analysis.analyse(recorder, stride=options.stride)
 
         entry = {
+            "physics": getattr(options, "physics", "reactive"),
+            "physics_model": getattr(
+                simulation, "physics_model_name", "reactive_base"
+            ),
+            "physics_model_revision": getattr(
+                simulation, "physics_model_revision", 0
+            ),
             "number": 0,
             "file": name,
             "mixture": options.mixture,
             "seed": seed,
             "box": options.box,
             "picoseconds": options.picoseconds,
+            "requested_picoseconds": round(float(options.picoseconds), 3),
             "atoms": len(simulation.symbols),
             "strikes": strikes,
             "strike_temperature": options.strike_temperature,
@@ -2503,6 +2576,37 @@ def run_all(planned, mixture, options, index, index_path, progress):
             "cool_temperature": options.cool_temperature,
             "wall_seconds": round(seconds, 1),
             "frames": len(recorder),
+            "recording_format": int(getattr(recorder, "format_version", 1)),
+            "compiled_forces": bool(getattr(options, "compiled_forces", False)),
+            "adaptive_recording": bool(getattr(options, "adaptive_recording", False)),
+            "adaptive_candidate_fs": (
+                float(options.adaptive_candidate_fs)
+                if getattr(options, "adaptive_recording", False) else None
+            ),
+            "adaptive_pre_event_fs": (
+                float(options.adaptive_pre_event_fs)
+                if getattr(options, "adaptive_recording", False) else None
+            ),
+            "adaptive_post_event_fs": (
+                float(options.adaptive_post_event_fs)
+                if getattr(options, "adaptive_recording", False) else None
+            ),
+            "adaptive_energy_jump_ev": (
+                float(options.adaptive_energy_jump_ev)
+                if getattr(options, "adaptive_recording", False) else None
+            ),
+            "adaptive_close_contact_scale": (
+                float(options.adaptive_close_contact_scale)
+                if getattr(options, "adaptive_recording", False) else None
+            ),
+            "adaptive_reaction_window_fs": (
+                float(options.adaptive_reaction_window_fs)
+                if getattr(options, "adaptive_recording", False) else None
+            ),
+            "adaptive_chemical_context_fs": (
+                float(options.adaptive_chemical_context_fs)
+                if getattr(options, "adaptive_recording", False) else None
+            ),
             "headline": analysis.headline(result),
             "final_species": sorted(
                 {
