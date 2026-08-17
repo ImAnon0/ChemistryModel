@@ -28,6 +28,7 @@ from __future__ import annotations
 from collections import defaultdict
 import itertools
 import math
+import time
 
 import numpy as np
 import torch
@@ -83,6 +84,9 @@ class BatchedHeavyValenceStateBatchedSimulation(
         self._heavy_valence_structure_cache = {}
         self._heavy_valence_capacity_numpy = None
         self._heavy_valence_diagnostics = {}
+
+        self._heavy_membership_topology_cache = None
+        self._heavy_membership_cache_signature = None
         self.heavy_valence_temperature = float(
             heavy_valence_temperature
         )
@@ -507,6 +511,14 @@ class BatchedHeavyValenceStateBatchedSimulation(
         self,
         values,
     ):
+        # Optional profiling sink installed only by the dedicated profiler.
+        # Solver decisions and forces never depend on these timings.
+        profile_sink = getattr(
+            self,
+            "_heavy_profile_sink",
+            None,
+        )
+
         taper = values[
             "taper"
         ]
@@ -533,6 +545,11 @@ class BatchedHeavyValenceStateBatchedSimulation(
 
         # One bulk topology snapshot rather than one GPU->CPU synchronisation
         # per atom.
+        if profile_sink is not None:
+            profile_token = profile_sink.stage_begin(
+                "heavy.membership.snapshot"
+            )
+
         active_numpy = (
             (
                 (
@@ -546,6 +563,15 @@ class BatchedHeavyValenceStateBatchedSimulation(
             .cpu()
             .numpy()
         )
+
+        if profile_sink is not None:
+            profile_sink.stage_end(
+                "heavy.membership.snapshot",
+                profile_token,
+            )
+            profile_token = profile_sink.stage_begin(
+                "heavy.membership.cpu_grouping"
+            )
 
         capacities = (
             self._heavy_capacity_numpy()
@@ -673,6 +699,12 @@ class BatchedHeavyValenceStateBatchedSimulation(
 
             competitive_atom_count += 1
 
+        if profile_sink is not None:
+            profile_sink.stage_end(
+                "heavy.membership.cpu_grouping",
+                profile_token,
+            )
+
         # Start from the exact reference result for H atoms and heavy centres
         # without competition.
         membership = (
@@ -717,6 +749,12 @@ class BatchedHeavyValenceStateBatchedSimulation(
                 largest_group,
                 group_size,
             )
+
+            if profile_sink is not None:
+                profile_token = profile_sink.stage_begin(
+                    "heavy.membership.group_prepare",
+                    centres=group_size,
+                )
 
             structure = (
                 self._heavy_structure(
@@ -784,6 +822,16 @@ class BatchedHeavyValenceStateBatchedSimulation(
                 slot_index,
             ]
 
+            if profile_sink is not None:
+                profile_sink.stage_end(
+                    "heavy.membership.group_prepare",
+                    profile_token,
+                )
+                profile_token = profile_sink.stage_begin(
+                    "heavy.membership.group_physics",
+                    centres=group_size,
+                )
+
             group_attractive = (
                 group_taper
                 * 2.0
@@ -812,6 +860,16 @@ class BatchedHeavyValenceStateBatchedSimulation(
                         diagonal
                     )
                 )
+
+                if profile_sink is not None:
+                    profile_sink.stage_end(
+                        "heavy.membership.group_physics",
+                        profile_token,
+                    )
+                    profile_token = profile_sink.stage_begin(
+                        "heavy.membership.reconstruct",
+                        centres=group_size,
+                    )
             else:
                 old_index = structure[
                     "transition_old"
@@ -929,12 +987,24 @@ class BatchedHeavyValenceStateBatchedSimulation(
                     )
                 )
 
+                if profile_sink is not None:
+                    profile_sink.stage_end(
+                        "heavy.membership.group_physics",
+                        profile_token,
+                    )
+
                 probabilities = (
                     thermal_state_probabilities(
                         hamiltonian,
                         self.heavy_valence_temperature,
                     )
                 )
+
+                if profile_sink is not None:
+                    profile_token = profile_sink.stage_begin(
+                        "heavy.membership.reconstruct",
+                        centres=group_size,
+                    )
 
             candidate_membership = (
                 probabilities
@@ -970,6 +1040,12 @@ class BatchedHeavyValenceStateBatchedSimulation(
                     ],
                 )
             )
+
+            if profile_sink is not None:
+                profile_sink.stage_end(
+                    "heavy.membership.reconstruct",
+                    profile_token,
+                )
 
         membership = (
             membership

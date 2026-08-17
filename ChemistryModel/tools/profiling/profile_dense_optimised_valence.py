@@ -51,6 +51,31 @@ class Profile:
             self.calls[label] += 1
             self.wall[label].append(time.perf_counter() - started)
 
+    def stage_begin(self, label, centres=0):
+        """Begin a profiling-only stage with wall time plus sampled CUDA events."""
+        call = self.calls[label]
+        self.calls[label] += 1
+        self.centres[label] += int(centres)
+
+        started_wall = time.perf_counter()
+        start_event = None
+
+        sampled = torch.cuda.is_available() and call % SAMPLE_EVERY == 0
+        if sampled:
+            start_event = torch.cuda.Event(enable_timing=True)
+            start_event.record()
+
+        return started_wall, start_event
+
+    def stage_end(self, label, token):
+        started_wall, start_event = token
+        self.wall[label].append(time.perf_counter() - started_wall)
+
+        if start_event is not None:
+            end_event = torch.cuda.Event(enable_timing=True)
+            end_event.record()
+            self.events[label].append((start_event, end_event))
+
     def report(self):
         if torch.cuda.is_available():
             torch.cuda.synchronize()
@@ -106,6 +131,9 @@ def install():
     import valence_state_batched_membership_torch as heavy
     import valence_state_cached_h_topology_torch as cached_h
 
+    # Profiling-only sink. Normal simulations never set this class attribute.
+    heavy.BatchedHeavyValenceStateBatchedSimulation._heavy_profile_sink = PROFILE
+
     wrap_method(reactive_torch.ReactiveSimulation, "compute_forces", "force.total")
     wrap_method(reactive_torch.ReactiveSimulation, "build_neighbours", "neighbours.rebuild")
     wrap_method(reactive_torch.ReactiveSimulation, "needs_rebuild", "neighbours.check")
@@ -113,8 +141,34 @@ def install():
                 "_hydrogen_state_correction", "energy.h_state")
     wrap_method(heavy.BatchedHeavyValenceStateBatchedSimulation,
                 "_valence_topology_correction", "energy.heavy_topology")
-    wrap_method(heavy.BatchedHeavyValenceStateBatchedSimulation,
-                "_local_valence_membership", "heavy.membership_total")
+    # Membership needs a profiling sink on the *live instance*.  Setting only
+    # a base-class attribute is not reliable through every optimised-valence
+    # inheritance path, so install it immediately around the wrapped call.
+    original_membership = (
+        heavy.BatchedHeavyValenceStateBatchedSimulation._local_valence_membership
+    )
+
+    def timed_membership(self, *args, **kwargs):
+        had_instance_sink = "_heavy_profile_sink" in self.__dict__
+        previous_sink = self.__dict__.get("_heavy_profile_sink")
+        self._heavy_profile_sink = PROFILE
+        try:
+            return PROFILE.cuda_call(
+                "heavy.membership_total",
+                original_membership,
+                self,
+                *args,
+                **kwargs,
+            )
+        finally:
+            if had_instance_sink:
+                self._heavy_profile_sink = previous_sink
+            else:
+                self.__dict__.pop("_heavy_profile_sink", None)
+
+    heavy.BatchedHeavyValenceStateBatchedSimulation._local_valence_membership = (
+        timed_membership
+    )
 
     original_assemble = heavy.BatchedHeavyValenceStateBatchedSimulation._assemble_heavy_hamiltonian
 
