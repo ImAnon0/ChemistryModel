@@ -354,6 +354,12 @@ class ReactiveSimulation:
         )
         self._neighbour_weight = self.neighbour_mask.to(self.dtype)
 
+        # Neighbour topology changed. Any derived heavy-valence topology
+        # state based on the old contact graph is now invalid.
+        if hasattr(self, "_heavy_membership_topology_cache"):
+            self._heavy_membership_topology_cache = None
+            self._heavy_membership_cache_signature = None
+
         self.reference_positions = self.positions.clone()
         self.rebuild_count += 1
 
