@@ -556,21 +556,96 @@ class BatchedHeavyValenceStateBatchedSimulation(
             R.ELEMENT_INDEX["H"]
         )
 
-        # Preserve the reference active-contact semantics exactly.  The wider
-        # neighbour list includes skin entries whose taper is zero, so mask
-        # alone must not define the heavy-valence candidate topology.
-        # One bulk snapshot avoids one GPU->CPU synchronisation per atom.
+        # --------------------------------------------------------------
+        # Exact active topology, kept on the GPU
+        # --------------------------------------------------------------
+        #
+        # Preserve the validated candidate semantics exactly:
+        #
+        #     (mask > 0) & (taper > 0)
+        #
+        # The old implementation copied the complete atom x 12 active bitmap
+        # to CPU and then scanned every atom with np.flatnonzero().  Here the
+        # bitmap, candidate counts and ordered active slots stay on device.
+        #
+        # Eager PyTorch still needs the *small* list of distinct (N,V) groups
+        # on the host so Python can dispatch variable-size Hamiltonians.  Only
+        # two integers per group cross the device boundary, rather than the
+        # full topology table.
+
         if profile_sink is not None:
             profile_token = profile_sink.stage_begin(
                 "heavy.membership.snapshot"
             )
 
-        active_numpy = (
-            ((mask > 0.0) & (taper > 0.0))
-            .detach()
-            .cpu()
-            .numpy()
+        active = (
+            (mask > 0.0)
+            & (taper > 0.0)
         )
+
+        candidate_count = torch.sum(
+            active,
+            dim=1,
+            dtype=torch.long,
+        )
+
+        capacities = torch.clamp(
+            torch.round(
+                self.valence[
+                    self.types
+                ]
+            ).to(
+                torch.long
+            ),
+            min=0,
+        )
+
+        heavy = (
+            self.types
+            != hydrogen
+        )
+
+        zero_row_mask = (
+            heavy
+            & (
+                (capacities <= 0)
+                | (candidate_count == 0)
+            )
+        )
+
+        competitive = (
+            heavy
+            & (capacities > 0)
+            & (candidate_count > capacities)
+        )
+
+        slot_count = int(
+            taper.shape[1]
+        )
+
+        slot_numbers = torch.arange(
+            slot_count,
+            device=self.device,
+            dtype=torch.long,
+        )[None, :].expand(
+            taper.shape[0],
+            -1,
+        )
+
+        # Inactive slots sort behind every real slot.  The first N entries of
+        # each row are therefore the exact ascending active-slot sequence that
+        # np.flatnonzero() returned in the reference implementation.
+        ordered_slots = torch.sort(
+            torch.where(
+                active,
+                slot_numbers,
+                torch.full_like(
+                    slot_numbers,
+                    slot_count,
+                ),
+            ),
+            dim=1,
+        ).values
 
         if profile_sink is not None:
             profile_sink.stage_end(
@@ -581,131 +656,104 @@ class BatchedHeavyValenceStateBatchedSimulation(
                 "heavy.membership.cpu_grouping"
             )
 
-        capacities = (
-            self._heavy_capacity_numpy()
+        # One sortable integer identifies every competitive (N,V) group.
+        # For a competitive centre V < N <= MAX_LOCAL_CANDIDATES, so this
+        # stride is collision-free.
+        key_stride = (
+            MAX_LOCAL_CANDIDATES
+            + 1
         )
 
-        groups = defaultdict(
-            list
+        sentinel_key = (
+            key_stride
+            * key_stride
         )
 
-        zero_rows = []
-
-        competitive_atom_count = 0
-
-        largest_candidate_count = 0
-        largest_state_count = 0
-        largest_state_shape = ()
-        centres_over_128 = 0
-        centres_over_200 = 0
-
-        for atom in range(
-            taper.shape[0]
-        ):
-            if (
-                int(
-                    self.types_numpy[
-                        atom
-                    ]
-                )
-                == hydrogen
-            ):
-                continue
-
-            active_slots = np.flatnonzero(
-                active_numpy[
-                    atom
-                ]
-            )
-
-            capacity = int(
-                capacities[
-                    atom
-                ]
-            )
-
-            if (
-                capacity <= 0
-                or active_slots.size == 0
-            ):
-                # Reference implementation returns row_zero, not mask.
-                zero_rows.append(
-                    atom
-                )
-                continue
-
-            candidate_count = int(
-                active_slots.size
-            )
-
-            largest_candidate_count = max(
-                largest_candidate_count,
+        group_key = torch.where(
+            competitive,
+            candidate_count
+            * key_stride
+            + capacities,
+            torch.full_like(
                 candidate_count,
-            )
+                sentinel_key,
+            ),
+        )
 
-            if (
+        sort_order = torch.argsort(
+            group_key
+        )
+
+        sorted_keys = group_key[
+            sort_order
+        ]
+
+        unique_keys, group_counts = (
+            torch.unique_consecutive(
+                sorted_keys,
+                return_counts=True,
+            )
+        )
+
+        # Preserve the old diagnostics without transferring the full active
+        # bitmap.  This is one compact host transfer containing:
+        #   header: [largest heavy candidate count, zero-row count]
+        #   then:   [group key, group size] for each distinct key.
+        heavy_candidate_count = torch.where(
+            heavy,
+            candidate_count,
+            torch.zeros_like(
                 candidate_count
-                <= capacity
-            ):
-                # Reference implementation returns mask exactly.
-                continue
+            ),
+        )
 
-            if (
-                candidate_count
-                > MAX_LOCAL_CANDIDATES
-            ):
-                raise RuntimeError(
-                    "valence-state topology has "
-                    f"{candidate_count} active contacts around atom {atom}; "
-                    f"research limit is {MAX_LOCAL_CANDIDATES}"
-                )
-
-            state_count = math.comb(
-                candidate_count,
-                capacity,
+        header = torch.stack(
+            (
+                torch.max(
+                    heavy_candidate_count
+                ),
+                torch.sum(
+                    zero_row_mask,
+                    dtype=torch.long,
+                ),
             )
+        )[None, :]
 
-            if state_count > largest_state_count:
-                largest_state_count = state_count
-                largest_state_shape = (
-                    candidate_count,
-                    capacity,
-                    state_count,
-                )
+        group_summary = torch.stack(
+            (
+                unique_keys,
+                group_counts,
+            ),
+            dim=1,
+        )
 
-            if state_count > 128:
-                centres_over_128 += 1
+        compact_summary = torch.cat(
+            (
+                header,
+                group_summary,
+            ),
+            dim=0,
+        ).detach().cpu().tolist()
 
-            if state_count > 200:
-                centres_over_200 += 1
+        largest_candidate_count = int(
+            compact_summary[
+                0
+            ][
+                0
+            ]
+        )
 
-            if (
-                state_count
-                > MAX_LOCAL_STATES
-            ):
-                raise RuntimeError(
-                    "valence-state topology would require "
-                    f"{state_count} local states around atom {atom} "
-                    f"({candidate_count} candidates, valence {capacity}); "
-                    f"research limit is {MAX_LOCAL_STATES}"
-                )
+        zero_row_count = int(
+            compact_summary[
+                0
+            ][
+                1
+            ]
+        )
 
-            groups[
-                (
-                    candidate_count,
-                    capacity,
-                )
-            ].append(
-                (
-                    atom,
-                    tuple(
-                        int(slot)
-                        for slot in active_slots
-                    ),
-                )
-            )
-
-            competitive_atom_count += 1
+        group_rows = compact_summary[
+            1:
+        ]
 
         if profile_sink is not None:
             profile_sink.stage_end(
@@ -713,10 +761,23 @@ class BatchedHeavyValenceStateBatchedSimulation(
                 profile_token,
             )
 
-        # Start from the exact reference result for H atoms and heavy centres
-        # without competition.
+        # --------------------------------------------------------------
+        # Exact reference starting membership
+        # --------------------------------------------------------------
+        #
+        # H rows and heavy rows without competition start as mask. Heavy rows
+        # with no active/capacity contacts are zero.  The discrete zero-row
+        # decision has no gradient in the reference implementation either.
         membership = (
             mask
+            * (
+                ~zero_row_mask[
+                    :,
+                    None,
+                ]
+            ).to(
+                self.dtype
+            )
             + taper.sum()
             * 0.0
         )
@@ -725,38 +786,120 @@ class BatchedHeavyValenceStateBatchedSimulation(
             membership
         )
 
-        if zero_rows:
-            zero_index = torch.tensor(
-                zero_rows,
-                device=self.device,
-                dtype=torch.long,
-            )
-
-            correction = (
-                correction.index_add(
-                    0,
-                    zero_index,
-                    -mask[
-                        zero_index
-                    ],
-                )
-            )
-
+        competitive_atom_count = 0
+        largest_state_count = 0
+        largest_state_shape = ()
+        centres_over_128 = 0
+        centres_over_200 = 0
         largest_group = 0
         total_states_solved = 0
+        group_shapes = []
 
-        for (
-            candidate_count,
-            capacity,
-        ), entries in groups.items():
-            group_size = len(
-                entries
+        offset = 0
+
+        for key_value, group_size_value in group_rows:
+            key_value = int(
+                key_value
+            )
+
+            group_size = int(
+                group_size_value
+            )
+
+            # Noncompetitive atoms were deliberately sorted into one final
+            # sentinel group. They retain their starting membership above.
+            if key_value == sentinel_key:
+                offset += group_size
+                continue
+
+            candidate_count_value = (
+                key_value
+                // key_stride
+            )
+
+            capacity = (
+                key_value
+                % key_stride
+            )
+
+            if (
+                candidate_count_value
+                > MAX_LOCAL_CANDIDATES
+            ):
+                raise RuntimeError(
+                    "valence-state topology has "
+                    f"{candidate_count_value} active contacts; "
+                    f"research limit is {MAX_LOCAL_CANDIDATES}"
+                )
+
+            state_count = math.comb(
+                candidate_count_value,
+                capacity,
+            )
+
+            if (
+                state_count
+                > MAX_LOCAL_STATES
+            ):
+                raise RuntimeError(
+                    "valence-state topology would require "
+                    f"{state_count} local states "
+                    f"({candidate_count_value} candidates, "
+                    f"valence {capacity}); "
+                    f"research limit is {MAX_LOCAL_STATES}"
+                )
+
+            competitive_atom_count += (
+                group_size
             )
 
             largest_group = max(
                 largest_group,
                 group_size,
             )
+
+            total_states_solved += (
+                group_size
+                * state_count
+            )
+
+            group_shapes.append(
+                (
+                    int(
+                        candidate_count_value
+                    ),
+                    int(
+                        capacity
+                    ),
+                    int(
+                        group_size
+                    ),
+                )
+            )
+
+            if (
+                state_count
+                > largest_state_count
+            ):
+                largest_state_count = (
+                    state_count
+                )
+
+                largest_state_shape = (
+                    candidate_count_value,
+                    capacity,
+                    state_count,
+                )
+
+            if state_count > 128:
+                centres_over_128 += (
+                    group_size
+                )
+
+            if state_count > 200:
+                centres_over_200 += (
+                    group_size
+                )
 
             if profile_sink is not None:
                 profile_token = profile_sink.stage_begin(
@@ -766,37 +909,22 @@ class BatchedHeavyValenceStateBatchedSimulation(
 
             structure = (
                 self._heavy_structure(
-                    candidate_count,
+                    candidate_count_value,
                     capacity,
                 )
             )
 
-            total_states_solved += (
-                group_size
-                * structure[
-                    "state_count"
-                ]
-            )
+            atom_index = sort_order[
+                offset:
+                offset
+                + group_size
+            ]
 
-            atom_index = torch.tensor(
-                [
-                    atom
-                    for atom, _
-                    in entries
-                ],
-                device=self.device,
-                dtype=torch.long,
-            )
-
-            slot_index = torch.tensor(
-                [
-                    slots
-                    for _, slots
-                    in entries
-                ],
-                device=self.device,
-                dtype=torch.long,
-            )
+            slot_index = ordered_slots[
+                atom_index,
+                :
+                candidate_count_value,
+            ]
 
             group_taper = taper[
                 atom_index[
@@ -1042,6 +1170,10 @@ class BatchedHeavyValenceStateBatchedSimulation(
                     profile_token,
                 )
 
+            offset += (
+                group_size
+            )
+
         membership = (
             membership
             + correction
@@ -1053,29 +1185,21 @@ class BatchedHeavyValenceStateBatchedSimulation(
             ),
             "topology_group_count": int(
                 len(
-                    groups
+                    group_shapes
                 )
             ),
             "largest_topology_group": int(
                 largest_group
             ),
             "zero_row_count": int(
-                len(
-                    zero_rows
-                )
+                zero_row_count
             ),
             "total_states_solved": int(
                 total_states_solved
             ),
             "group_shapes": tuple(
                 sorted(
-                    (
-                        int(key[0]),
-                        int(key[1]),
-                        int(len(entries)),
-                    )
-                    for key, entries
-                    in groups.items()
+                    group_shapes
                 )
             ),
             "largest_candidate_count": int(
