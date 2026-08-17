@@ -131,7 +131,8 @@ def install():
     import valence_state_batched_membership_torch as heavy
     import valence_state_cached_h_topology_torch as cached_h
 
-    # Profiling-only sink. Normal simulations never set this class attribute.
+    # Profiling-only sinks. Normal simulations never set these class attributes.
+    reactive_torch.ReactiveSimulation._reactive_profile_sink = PROFILE
     heavy.BatchedHeavyValenceStateBatchedSimulation._heavy_profile_sink = PROFILE
 
     wrap_method(reactive_torch.ReactiveSimulation, "compute_forces", "force.total")
