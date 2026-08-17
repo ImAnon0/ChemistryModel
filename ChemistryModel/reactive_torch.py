@@ -510,6 +510,15 @@ class ReactiveSimulation:
         return scale
 
     def energy_per_atom(self, positions):
+        # Optional profiling sink installed only by the dedicated profiler.
+        # Normal simulation physics and execution are unchanged when absent.
+        profile_sink = getattr(self, "_reactive_profile_sink", None)
+
+        if profile_sink is not None:
+            profile_token_geometry = profile_sink.stage_begin(
+                "base.geometry_pairs"
+            )
+
         # Mirrors reactive.potential_energy term for term, in the
         # padded neighbour-table form.
         #
@@ -560,6 +569,15 @@ class ReactiveSimulation:
                 "taper": taper.detach(),
             }
 
+        if profile_sink is not None:
+            profile_sink.stage_end(
+                "base.geometry_pairs",
+                profile_token_geometry,
+            )
+            profile_token_bond_order = profile_sink.stage_begin(
+                "base.bond_order"
+            )
+
         coordination = torch.sum(taper, dim=1)
 
         valence = self.valence[self.types]
@@ -607,6 +625,15 @@ class ReactiveSimulation:
         extra = torch.minimum(share_out, share_back) * taper
 
         order = torch.clamp(1.0 + extra, 0.0, 3.0) * mask
+
+        if profile_sink is not None:
+            profile_sink.stage_end(
+                "base.bond_order",
+                profile_token_bond_order,
+            )
+            profile_token_morse = profile_sink.stage_begin(
+                "base.morse_and_softening"
+            )
 
         # ---- Morse parameters, blended by bond order ----
 
@@ -660,6 +687,7 @@ class ReactiveSimulation:
             self._reactive_intermediates = (positions, {
                 "neighbours": neighbours,
                 "mask": mask,
+                "offsets": offsets,
                 "distances": distances,
                 "centre_types": centre_types,
                 "other_types": other_types,
@@ -683,6 +711,15 @@ class ReactiveSimulation:
 
         bond_per_atom = 0.5 * torch.sum(pair_energy, dim=1)
 
+        if profile_sink is not None:
+            profile_sink.stage_end(
+                "base.morse_and_softening",
+                profile_token_morse,
+            )
+            profile_token_over = profile_sink.stage_begin(
+                "base.over_coordination"
+            )
+
         # ---- over-coordination penalty ----
         #
         # The whole of the model's activation barriers. Halfway
@@ -699,6 +736,15 @@ class ReactiveSimulation:
             )
             * excess ** 2
         )
+
+        if profile_sink is not None:
+            profile_sink.stage_end(
+                "base.over_coordination",
+                profile_token_over,
+            )
+            profile_token_angles = profile_sink.stage_begin(
+                "base.angles"
+            )
 
         # ---- angles, from electron domain counting ----
 
@@ -742,6 +788,16 @@ class ReactiveSimulation:
         )
 
         angle = torch.arccos(cosine)
+
+        # High-fidelity / valence corrections consume the same bond geometry
+        # as the base potential.  Share the live angle tensor so those layers
+        # do not repeat the neighbour gather, periodic wrapping, dot products,
+        # normalization and arccos -- all of which would otherwise create a
+        # second, identical autograd branch.
+        if getattr(self, "_share_reactive_intermediates", False):
+            cached = getattr(self, "_reactive_intermediates", None)
+            if cached is not None and cached[0] is positions:
+                cached[1]["angle"] = angle
 
         angle_pair_taper = taper[:, :, None] * taper[:, None, :]
 
@@ -797,6 +853,12 @@ class ReactiveSimulation:
         )
 
         angle_per_atom = torch.sum(angle_energy, dim=(1, 2))
+
+        if profile_sink is not None:
+            profile_sink.stage_end(
+                "base.angles",
+                profile_token_angles,
+            )
 
         # Temporary: stash the pieces so a scratch script can see which term
         # a barrier is made of. Delete once measured.
@@ -937,7 +999,14 @@ class ReactiveSimulation:
         return movement * scale[:, None]
 
     def compute_forces(self):
+        profile_sink = getattr(self, "_reactive_profile_sink", None)
+
         positions = self.positions.detach().requires_grad_(True)
+
+        if profile_sink is not None:
+            profile_token_forward = profile_sink.stage_begin(
+                "force.forward_energy"
+            )
 
         compiled = getattr(self, "_compiled_energy_per_atom", None)
         per_atom = (
@@ -946,7 +1015,22 @@ class ReactiveSimulation:
         )
         total = torch.sum(per_atom)
 
+        if profile_sink is not None:
+            profile_sink.stage_end(
+                "force.forward_energy",
+                profile_token_forward,
+            )
+            profile_token_backward = profile_sink.stage_begin(
+                "force.autograd_backward"
+            )
+
         gradient, = torch.autograd.grad(total, positions)
+
+        if profile_sink is not None:
+            profile_sink.stage_end(
+                "force.autograd_backward",
+                profile_token_backward,
+            )
 
         # Keep the already-evaluated per-atom energies for batched reporting.
         # A force calculation necessarily constructs these values, so running

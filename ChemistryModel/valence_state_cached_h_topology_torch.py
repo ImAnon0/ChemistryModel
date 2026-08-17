@@ -750,20 +750,6 @@ class CachedHFastValenceStateBatchedSimulation(
             slot_index,
         ]
 
-        pair_width = values[
-            "pair_width"
-        ][
-            row_index,
-            slot_index,
-        ]
-
-        shift = values[
-            "shift"
-        ][
-            row_index,
-            slot_index,
-        ]
-
         repulsive = values[
             "repulsive"
         ][
@@ -771,14 +757,37 @@ class CachedHFastValenceStateBatchedSimulation(
             slot_index,
         ]
 
-        attractive = (
-            2.0
-            * pair_depth
-            * torch.exp(
-                -pair_width
-                * shift
-            )
+        shared_attractive = values.get(
+            "state_attractive"
         )
+
+        if shared_attractive is None:
+            # Defensive fallback for direct research/test calls that bypass
+            # _hydrogen_state_correction(). Normal optimised-valence execution
+            # populates this once before any group solve.
+            shared_attractive = (
+                2.0
+                * values[
+                    "pair_depth"
+                ]
+                * torch.exp(
+                    -values[
+                        "pair_width"
+                    ]
+                    * values[
+                        "shift"
+                    ]
+                )
+            )
+
+            values[
+                "state_attractive"
+            ] = shared_attractive
+
+        attractive = shared_attractive[
+            row_index,
+            slot_index,
+        ]
 
         edge_repulsive = (
             taper
@@ -1022,14 +1031,28 @@ class CachedHFastValenceStateBatchedSimulation(
             "repulsive"
         ]
 
-        attractive = (
-            2.0
-            * pair_depth
-            * torch.exp(
-                -pair_width
-                * shift
-            )
+        # This exact Morse attractive magnitude is consumed by the H-state
+        # correction, every grouped H Hamiltonian, and then the heavy-valence
+        # membership layer later in the same energy evaluation.  Compute it
+        # once and keep the live autograd tensor in the per-evaluation
+        # intermediates instead of rebuilding identical exp() branches.
+        attractive = values.get(
+            "state_attractive"
         )
+
+        if attractive is None:
+            attractive = (
+                2.0
+                * pair_depth
+                * torch.exp(
+                    -pair_width
+                    * shift
+                )
+            )
+
+            values[
+                "state_attractive"
+            ] = attractive
 
         pair_morse = (
             taper

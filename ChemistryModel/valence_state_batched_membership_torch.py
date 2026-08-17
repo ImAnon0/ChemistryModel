@@ -28,7 +28,6 @@ from __future__ import annotations
 from collections import defaultdict
 import itertools
 import math
-import time
 
 import numpy as np
 import torch
@@ -84,9 +83,6 @@ class BatchedHeavyValenceStateBatchedSimulation(
         self._heavy_valence_structure_cache = {}
         self._heavy_valence_capacity_numpy = None
         self._heavy_valence_diagnostics = {}
-
-        self._heavy_membership_topology_cache = None
-        self._heavy_membership_cache_signature = None
         self.heavy_valence_temperature = float(
             heavy_valence_temperature
         )
@@ -507,102 +503,6 @@ class BatchedHeavyValenceStateBatchedSimulation(
     # Batched heavy membership
     # ------------------------------------------------------------------
 
-
-    def _heavy_membership_topology(
-        self,
-        active_numpy,
-        taper,
-        hydrogen,
-    ):
-        capacities = self._heavy_capacity_numpy()
-
-        signature = (
-            active_numpy.shape,
-            active_numpy.tobytes(),
-        )
-
-        if (
-            self._heavy_membership_cache_signature == signature
-            and self._heavy_membership_topology_cache is not None
-        ):
-            return self._heavy_membership_topology_cache
-
-        groups = defaultdict(list)
-        zero_rows = []
-
-        largest_candidate_count = 0
-        largest_state_count = 0
-        largest_state_shape = ()
-        centres_over_128 = 0
-        centres_over_200 = 0
-        competitive_atom_count = 0
-
-        for atom in range(taper.shape[0]):
-            if int(self.types_numpy[atom]) == hydrogen:
-                continue
-
-            active_slots = np.flatnonzero(active_numpy[atom])
-            capacity = int(capacities[atom])
-
-            if capacity <= 0 or active_slots.size == 0:
-                zero_rows.append(atom)
-                continue
-
-            candidate_count = int(active_slots.size)
-
-            largest_candidate_count = max(
-                largest_candidate_count,
-                candidate_count,
-            )
-
-            if candidate_count <= capacity:
-                continue
-
-            state_count = math.comb(
-                candidate_count,
-                capacity,
-            )
-
-            if state_count > largest_state_count:
-                largest_state_count = state_count
-                largest_state_shape = (
-                    candidate_count,
-                    capacity,
-                    state_count,
-                )
-
-            if state_count > 128:
-                centres_over_128 += 1
-
-            if state_count > 200:
-                centres_over_200 += 1
-
-            groups[(candidate_count, capacity)].append(
-                (
-                    atom,
-                    tuple(int(slot) for slot in active_slots),
-                )
-            )
-
-            competitive_atom_count += 1
-
-        result = {
-            "groups": groups,
-            "zero_rows": zero_rows,
-            "largest_candidate_count": largest_candidate_count,
-            "largest_state_count": largest_state_count,
-            "largest_state_shape": largest_state_shape,
-            "centres_over_128": centres_over_128,
-            "centres_over_200": centres_over_200,
-            "competitive_atom_count": competitive_atom_count,
-        }
-
-        self._heavy_membership_cache_signature = signature
-        self._heavy_membership_topology_cache = result
-
-        return result
-
-
     def _local_valence_membership(
         self,
         values,
@@ -627,34 +527,46 @@ class BatchedHeavyValenceStateBatchedSimulation(
             "pair_depth"
         ]
 
-        pair_width = values[
-            "pair_width"
-        ]
+        shared_attractive = values.get(
+            "state_attractive"
+        )
 
-        shift = values[
-            "shift"
-        ]
+        if shared_attractive is None:
+            # Defensive fallback for direct membership tests. In the real
+            # optimised-valence energy path the H-state runs first and
+            # populates this live tensor once per evaluation.
+            shared_attractive = (
+                2.0
+                * pair_depth
+                * torch.exp(
+                    -values[
+                        "pair_width"
+                    ]
+                    * values[
+                        "shift"
+                    ]
+                )
+            )
+
+            values[
+                "state_attractive"
+            ] = shared_attractive
 
         hydrogen = int(
             R.ELEMENT_INDEX["H"]
         )
 
-        # One bulk topology snapshot rather than one GPU->CPU synchronisation
-        # per atom.
+        # Preserve the reference active-contact semantics exactly.  The wider
+        # neighbour list includes skin entries whose taper is zero, so mask
+        # alone must not define the heavy-valence candidate topology.
+        # One bulk snapshot avoids one GPU->CPU synchronisation per atom.
         if profile_sink is not None:
             profile_token = profile_sink.stage_begin(
                 "heavy.membership.snapshot"
             )
 
         active_numpy = (
-            (
-                (
-                    mask > 0.0
-                )
-                & (
-                    taper > 0.0
-                )
-            )
+            ((mask > 0.0) & (taper > 0.0))
             .detach()
             .cpu()
             .numpy()
@@ -669,23 +581,137 @@ class BatchedHeavyValenceStateBatchedSimulation(
                 "heavy.membership.cpu_grouping"
             )
 
-        topology = self._heavy_membership_topology(
-            active_numpy,
-            taper,
-            hydrogen,
+        capacities = (
+            self._heavy_capacity_numpy()
         )
 
-        groups = topology["groups"]
-        zero_rows = topology["zero_rows"]
+        groups = defaultdict(
+            list
+        )
 
-        largest_candidate_count = topology["largest_candidate_count"]
-        largest_state_count = topology["largest_state_count"]
-        largest_state_shape = topology["largest_state_shape"]
+        zero_rows = []
 
-        centres_over_128 = topology["centres_over_128"]
-        centres_over_200 = topology["centres_over_200"]
+        competitive_atom_count = 0
 
-        competitive_atom_count = topology["competitive_atom_count"]
+        largest_candidate_count = 0
+        largest_state_count = 0
+        largest_state_shape = ()
+        centres_over_128 = 0
+        centres_over_200 = 0
+
+        for atom in range(
+            taper.shape[0]
+        ):
+            if (
+                int(
+                    self.types_numpy[
+                        atom
+                    ]
+                )
+                == hydrogen
+            ):
+                continue
+
+            active_slots = np.flatnonzero(
+                active_numpy[
+                    atom
+                ]
+            )
+
+            capacity = int(
+                capacities[
+                    atom
+                ]
+            )
+
+            if (
+                capacity <= 0
+                or active_slots.size == 0
+            ):
+                # Reference implementation returns row_zero, not mask.
+                zero_rows.append(
+                    atom
+                )
+                continue
+
+            candidate_count = int(
+                active_slots.size
+            )
+
+            largest_candidate_count = max(
+                largest_candidate_count,
+                candidate_count,
+            )
+
+            if (
+                candidate_count
+                <= capacity
+            ):
+                # Reference implementation returns mask exactly.
+                continue
+
+            if (
+                candidate_count
+                > MAX_LOCAL_CANDIDATES
+            ):
+                raise RuntimeError(
+                    "valence-state topology has "
+                    f"{candidate_count} active contacts around atom {atom}; "
+                    f"research limit is {MAX_LOCAL_CANDIDATES}"
+                )
+
+            state_count = math.comb(
+                candidate_count,
+                capacity,
+            )
+
+            if state_count > largest_state_count:
+                largest_state_count = state_count
+                largest_state_shape = (
+                    candidate_count,
+                    capacity,
+                    state_count,
+                )
+
+            if state_count > 128:
+                centres_over_128 += 1
+
+            if state_count > 200:
+                centres_over_200 += 1
+
+            if (
+                state_count
+                > MAX_LOCAL_STATES
+            ):
+                raise RuntimeError(
+                    "valence-state topology would require "
+                    f"{state_count} local states around atom {atom} "
+                    f"({candidate_count} candidates, valence {capacity}); "
+                    f"research limit is {MAX_LOCAL_STATES}"
+                )
+
+            groups[
+                (
+                    candidate_count,
+                    capacity,
+                )
+            ].append(
+                (
+                    atom,
+                    tuple(
+                        int(slot)
+                        for slot in active_slots
+                    ),
+                )
+            )
+
+            competitive_atom_count += 1
+
+        if profile_sink is not None:
+            profile_sink.stage_end(
+                "heavy.membership.cpu_grouping",
+                profile_token,
+            )
 
         # Start from the exact reference result for H atoms and heavy centres
         # without competition.
@@ -788,15 +814,7 @@ class BatchedHeavyValenceStateBatchedSimulation(
                 slot_index,
             ]
 
-            group_width = pair_width[
-                atom_index[
-                    :,
-                    None,
-                ],
-                slot_index,
-            ]
-
-            group_shift = shift[
+            group_attractive_magnitude = shared_attractive[
                 atom_index[
                     :,
                     None,
@@ -816,12 +834,7 @@ class BatchedHeavyValenceStateBatchedSimulation(
 
             group_attractive = (
                 group_taper
-                * 2.0
-                * group_depth
-                * torch.exp(
-                    -group_width
-                    * group_shift
-                )
+                * group_attractive_magnitude
             )
 
             diagonal = -(

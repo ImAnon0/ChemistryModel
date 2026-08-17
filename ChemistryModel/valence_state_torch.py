@@ -454,8 +454,6 @@ class ValenceStateBatchedSimulation(HStateReferenceBatchedSimulation):
         taper = values["taper"]
         order = values["order"]
         mask = values["mask"]
-        neighbours = values["neighbours"]
-        distances = values["distances"]
         unsoftened_depth = values["unsoftened_depth"]
 
         membership = self._local_valence_membership(
@@ -540,42 +538,15 @@ class ValenceStateBatchedSimulation(HStateReferenceBatchedSimulation):
 
         stiffness = self.angle_stiffness[self.types]
 
-        gathered = self._gather_neighbours(
-            positions,
-            neighbours,
-            "positions",
-        )
-
-        offsets = gathered - positions[:, None, :]
-
-        offsets = (
-            offsets
-            - self.box_size
-            * torch.round(
-                offsets / self.box_size
+        # reactive_torch has already evaluated this exact angle tensor from
+        # the same positions / neighbour table / periodic wrapping. Reusing
+        # it is algebraically identical and, importantly, shares the autograd
+        # graph instead of building a duplicate geometry -> arccos branch.
+        angle = values.get("angle")
+        if angle is None:
+            raise RuntimeError(
+                "valence-state topology missing shared base angle tensor"
             )
-        )
-
-        left = offsets[:, :, None, :]
-        right = offsets[:, None, :, :]
-
-        dot = torch.sum(
-            left * right,
-            dim=3,
-        )
-
-        cosine = torch.clamp(
-            dot
-            / torch.clamp(
-                distances[:, :, None]
-                * distances[:, None, :],
-                min=1e-9,
-            ),
-            -1.0 + 1e-7,
-            1.0 - 1e-7,
-        )
-
-        angle = torch.arccos(cosine)
 
         angle_pair_taper = (
             topology_taper[:, :, None]
