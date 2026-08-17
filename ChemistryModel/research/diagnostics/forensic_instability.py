@@ -1,5 +1,7 @@
 """Read-only forensic analysis of legacy batch instability recordings."""
 
+import _bootstrap  # noqa: F401 - direct-execution project path
+
 import argparse
 import json
 import os

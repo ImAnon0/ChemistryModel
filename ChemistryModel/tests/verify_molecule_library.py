@@ -1,3 +1,5 @@
+
+import _bootstrap  # noqa: F401 - direct-execution project path
 import json
 import os
 import sys

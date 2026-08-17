@@ -37,6 +37,8 @@ Run:
 
 from __future__ import annotations
 
+import _bootstrap  # noqa: F401 - direct-execution project path
+
 from collections import defaultdict
 import json
 from pathlib import Path

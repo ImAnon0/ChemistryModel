@@ -26,6 +26,8 @@ No production files are changed and no output data file is required.
 
 from __future__ import annotations
 
+import _bootstrap  # noqa: F401 - direct-execution project path
+
 import itertools
 import json
 import math

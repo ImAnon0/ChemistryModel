@@ -1,6 +1,8 @@
 
 from __future__ import annotations
 
+import _bootstrap  # noqa: F401 - direct-execution project path
+
 from pathlib import Path
 from types import SimpleNamespace
 

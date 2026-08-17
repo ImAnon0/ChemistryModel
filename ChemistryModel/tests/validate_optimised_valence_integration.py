@@ -33,6 +33,8 @@ This validator changes no chemistry.
 
 from __future__ import annotations
 
+import _bootstrap  # noqa: F401 - direct-execution project path
+
 import statistics
 import time
 

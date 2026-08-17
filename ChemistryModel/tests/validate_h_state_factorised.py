@@ -16,6 +16,8 @@ Run:
 
 from __future__ import annotations
 
+import _bootstrap  # noqa: F401 - direct-execution project path
+
 import json
 import math
 from pathlib import Path

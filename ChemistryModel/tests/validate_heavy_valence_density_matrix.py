@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import _bootstrap  # noqa: F401 - direct-execution project path
+
 import torch
 
 from heavy_valence_density import (

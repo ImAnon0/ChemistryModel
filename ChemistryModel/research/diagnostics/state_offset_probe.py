@@ -26,6 +26,8 @@ Read the result as a direction, not a calibration. This hardcodes one
 number at every geometry, whereas the real quantity varies along the path.
 """
 
+import _bootstrap  # noqa: F401 - direct-execution project path
+
 import argparse
 
 import numpy as np

@@ -36,6 +36,8 @@ Outputs:
 
 from __future__ import annotations
 
+import _bootstrap  # noqa: F401 - direct-execution project path
+
 import csv
 import math
 from pathlib import Path
