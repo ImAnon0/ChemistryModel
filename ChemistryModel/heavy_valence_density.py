@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import torch
 
 
@@ -9,6 +11,17 @@ import torch
 # 10 meV is deliberately small relative to the calibrated ~0.47 eV state
 # coupling, while making an exact state crossing a well-defined ensemble.
 DEFAULT_HEAVY_VALENCE_TEMPERATURE = 0.01
+
+# Expensive CUDA-to-host diagnostic checks are disabled in normal production
+# execution.  They force GPU synchronisation on every heavy-state solve and
+# therefore serialize a hot path that is otherwise asynchronous.
+#
+# Enable only while investigating numerical failures:
+#   $env:CHEM_HEAVY_VALENCE_DEBUG = "1"
+HEAVY_VALENCE_DEBUG = (
+    os.environ.get("CHEM_HEAVY_VALENCE_DEBUG", "0").strip().lower()
+    in {"1", "true", "yes", "on"}
+)
 
 
 class _ThermalStateDiagonal(torch.autograd.Function):
@@ -25,7 +38,90 @@ class _ThermalStateDiagonal(torch.autograd.Function):
     def forward(ctx, hamiltonian, temperature):
         temperature = float(temperature)
         with torch.no_grad():
-            eigenvalues, eigenvectors = torch.linalg.eigh(hamiltonian)
+            if HEAVY_VALENCE_DEBUG:
+                if not torch.isfinite(hamiltonian).all():
+                    print("NONFINITE HAMILTONIAN")
+                    print("shape:", hamiltonian.shape)
+
+                    finite_mask = torch.isfinite(
+                        hamiltonian
+                    )
+
+                    print(
+                        "finite entries:",
+                        int(finite_mask.sum()),
+                        "/",
+                        hamiltonian.numel(),
+                    )
+
+                    bad_values = hamiltonian[
+                        ~finite_mask
+                    ]
+
+                    print(
+                        "bad value count:",
+                        bad_values.numel()
+                    )
+
+                    print(
+                        "bad sample:",
+                        bad_values.flatten()[:20]
+                    )
+
+                    diagonal = torch.diagonal(
+                        hamiltonian,
+                        dim1=-2,
+                        dim2=-1,
+                    )
+
+                    print(
+                        "diagonal sample:",
+                        diagonal.flatten()[:20]
+                    )
+
+                    print(
+                        "diagonal max:",
+                        float(
+                            torch.nan_to_num(
+                                diagonal
+                            ).abs().max()
+                        )
+                    )
+
+                    raise RuntimeError(
+                        "Hamiltonian contains NaN/Inf"
+                    )
+
+                max_value = float(
+                    hamiltonian.abs().max()
+                )
+
+                if max_value > 1e5:
+                    diagonal = torch.diagonal(
+                        hamiltonian,
+                        dim1=-2,
+                        dim2=-1,
+                    )
+
+                    print("HAMILTONIAN TOO LARGE")
+                    print("shape:", hamiltonian.shape)
+                    print("max:", max_value)
+                    print(
+                        "diag max:",
+                        float(diagonal.abs().max())
+                    )
+                    print(
+                        "diag min:",
+                        float(diagonal.min())
+                    )
+
+                    raise RuntimeError(
+                        "Hamiltonian magnitude exploded"
+                    )
+
+            eigenvalues, eigenvectors = torch.linalg.eigh(
+                hamiltonian
+            )
             ground = eigenvalues[..., :1]
             scaled = -(eigenvalues - ground) / temperature
             weights = torch.exp(scaled)
