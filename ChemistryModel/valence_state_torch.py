@@ -469,37 +469,28 @@ class ValenceStateBatchedSimulation(HStateReferenceBatchedSimulation):
         ).to(self.dtype)
 
         # --------------------------------------------------------------
-        # Heavy-atom overcoordination
+        # Heavy-centred electron domains and angles
         # --------------------------------------------------------------
+        #
+        # Keep the base model's radial over-coordination penalty intact.
+        # Heavy valence membership answers which nearby contacts participate
+        # in chemical topology; it must not make the remaining close contacts
+        # energetically free. In a competitive N > V centre every local state
+        # contains exactly V contacts, so sum(taper * membership) can never
+        # exceed V. Building the over-coordination penalty from that topology
+        # coordination therefore made it identically zero precisely when an
+        # atom was crowded, and the correction below subtracted the entire
+        # base penalty.
+        #
+        # Topology membership is still used for heavy-centred electron-domain
+        # counting and angles. Physical radial crowding remains governed by
+        # reactive_torch's original over-coordination term.
 
         topology_coordination = torch.sum(
             topology_taper,
             dim=1,
         )
 
-        valence = self.valence[self.types]
-
-        topology_excess = torch.clamp(
-            topology_coordination - valence,
-            min=0.0,
-        )
-
-        topology_over_scale = self.over_coordination_scale(
-            topology_taper,
-            unsoftened_depth,
-            mask,
-            cache_key=None,
-        )
-
-        topology_over = (
-            self.over_penalty
-            * topology_over_scale
-            * topology_excess ** 2
-        )
-
-        # --------------------------------------------------------------
-        # Heavy-centred electron domains and angles
-        # --------------------------------------------------------------
 
         topology_bonded_order = torch.sum(
             topology_taper * order,
@@ -633,15 +624,14 @@ class ValenceStateBatchedSimulation(HStateReferenceBatchedSimulation):
                 "reactive_torch did not expose live energy parts"
             )
 
-        original_over = original_parts["over"]
         original_angle = original_parts["angle"]
 
-        # H-state already replaces the hydrogen share of ordinary
-        # overcoordination. This layer changes only heavy-centred topology.
+        # Heavy valence changes chemical topology (electron domains / angles)
+        # only. The base radial over-coordination penalty remains in the
+        # energy so extra close contacts around a saturated heavy atom are
+        # still energetically expensive.
         return heavy * (
-            topology_over
-            - original_over
-            + topology_angle
+            topology_angle
             - original_angle
         )
 
