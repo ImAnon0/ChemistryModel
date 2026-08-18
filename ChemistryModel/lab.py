@@ -839,7 +839,14 @@ class Lab(QtWidgets.QWidget):
         self.reload_mixtures()
         self.mixture_box.currentTextChanged.connect(self.refresh_existing)
         mix_row.addWidget(self.mixture_box, 1)
-        mix_row.addWidget(self.button("Create / edit", self.on_new_mixture))
+        self.new_mixture_button = self.button(
+            "New mixture", self.on_new_mixture
+        )
+        self.edit_mixture_button = self.button(
+            "Edit selected", self.on_edit_mixture
+        )
+        mix_row.addWidget(self.new_mixture_button)
+        mix_row.addWidget(self.edit_mixture_button)
         mix_row.addWidget(self.button("Reload", self.reload_mixtures))
         mixture.addLayout(mix_row)
         self.atom_note = QtWidgets.QLabel("")
@@ -1201,13 +1208,12 @@ class Lab(QtWidgets.QWidget):
         if not entry:
             return 0
         kind, contents = entry
-        if kind == "atoms":
-            return int(sum(contents.values()))
-        sizes = {"H2": 2, "H2O": 3, "NH3": 4, "CH4": 5}
-        return int(sum(
-            sizes.get(molecule, 3) * number
-            for molecule, number in contents.items()
-        ))
+        try:
+            return mixtures.atom_count(kind, contents)
+        except ValueError:
+            # Old manually-authored files remain visible even if they contain
+            # a species the current runtime cannot launch.
+            return 0
 
     def update_experiment_overview(self):
         continuing = self.mode_box.currentIndex() == 1
@@ -1337,17 +1343,11 @@ class Lab(QtWidgets.QWidget):
 
         if entry:
             kind, contents = entry
-
-            total = sum(contents.values())
-
-            if kind == "molecules":
-                # Rough: the atom count depends on which molecules.
-                sizes = {"H2": 2, "H2O": 3, "NH3": 4, "CH4": 5}
-
-                total = sum(
-                    sizes.get(molecule, 3) * number
-                    for molecule, number in contents.items()
-                )
+            try:
+                total = mixtures.atom_count(kind, contents)
+            except ValueError as problem:
+                self.atom_note.setText(f"Cannot launch this mixture: {problem}")
+                return
 
             box = self.box_size.value()
 
@@ -4880,7 +4880,31 @@ class Lab(QtWidgets.QWidget):
     # Mixtures, templates, and keeping the queue on disk
 
     def on_new_mixture(self):
-        dialog = MixtureDialog(self)
+        current = self.available.get(self.mixture_box.currentText())
+        dialog = MixtureDialog(
+            self, box_size=self.box_size.value(),
+            copy_source=(self.mixture_box.currentText(), current),
+        )
+
+        self._save_mixture_dialog(dialog)
+
+    def on_edit_mixture(self):
+        name = self.mixture_box.currentText()
+        entry = self.available.get(name)
+        if not entry:
+            return
+        custom = mixtures.load_custom()
+        editing_name = name if name in custom else None
+        initial_name = name if editing_name else f"{name} copy"
+        title = "Edit mixture" if editing_name else "Copy built-in preset"
+        dialog = MixtureDialog(
+            self, name=initial_name, kind=entry[0], contents=entry[1],
+            box_size=self.box_size.value(), editing_name=editing_name,
+            window_title=title,
+        )
+        self._save_mixture_dialog(dialog)
+
+    def _save_mixture_dialog(self, dialog):
 
         if dialog.exec():
             name, kind, contents = dialog.result()
@@ -4889,6 +4913,8 @@ class Lab(QtWidgets.QWidget):
                 return
 
             custom = mixtures.load_custom()
+            if dialog.editing_name and dialog.editing_name != name:
+                custom.pop(dialog.editing_name, None)
             custom[name] = (kind, contents)
 
             mixtures.save_custom(custom)
@@ -5143,59 +5169,632 @@ class Lab(QtWidgets.QWidget):
         event.accept()
 
 
+class MixtureRow(QtWidgets.QWidget):
+
+    changed = QtCore.Signal()
+    removeRequested = QtCore.Signal(object)
+
+    def __init__(self, options, species=None, amount=1, parent=None):
+        super().__init__(parent)
+        self._amount_sync = False
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.species = QtWidgets.QComboBox()
+        self.species.setEditable(True)
+        self.species.setInsertPolicy(
+            QtWidgets.QComboBox.InsertPolicy.NoInsert
+        )
+        completer = self.species.completer()
+        completer.setCompletionMode(
+            QtWidgets.QCompleter.CompletionMode.PopupCompletion
+        )
+        completer.setFilterMode(QtCore.Qt.MatchFlag.MatchContains)
+        completer.setCaseSensitivity(
+            QtCore.Qt.CaseSensitivity.CaseInsensitive
+        )
+        for label, value in options:
+            self.species.addItem(label, value)
+        if species is not None:
+            index = self.species.findData(species)
+            if index < 0:
+                self.species.addItem(f"{species}  (unsupported legacy entry)", species)
+                index = self.species.count() - 1
+            self.species.setCurrentIndex(index)
+        self.amount = QtWidgets.QSpinBox()
+        self.amount.setRange(1, 2_000_000_000)
+        self.amount.setValue(max(1, int(amount)))
+        self.amount.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
+        self.amount.setMinimumWidth(112)
+        self.amount.setStyleSheet(
+            "QSpinBox { padding-left: 8px; padding-right: 30px; }"
+        )
+        self.amount.setToolTip(
+            "Exact integer amount. Values above the normal slider range remain valid."
+        )
+        self.amount_slider = QtWidgets.QSlider(
+            QtCore.Qt.Orientation.Horizontal
+        )
+        self.amount_slider.setRange(1, max(500, int(amount)))
+        self.amount_slider.setValue(max(1, int(amount)))
+        self.amount_slider.setMinimumWidth(130)
+        self.amount_slider.setToolTip(
+            "Absolute species amount; changing this does not alter other species."
+        )
+        remove = QtWidgets.QToolButton()
+        remove.setText("Remove")
+        remove.setToolTip("Remove this species from the composition")
+        remove.clicked.connect(lambda: self.removeRequested.emit(self))
+        self.species.currentIndexChanged.connect(self.changed.emit)
+        self.amount.valueChanged.connect(self.on_amount_changed)
+        self.amount_slider.valueChanged.connect(self.on_slider_changed)
+        layout.addWidget(self.species, 2)
+        layout.addWidget(self.amount_slider, 4)
+        layout.addWidget(self.amount, 1)
+        layout.addWidget(remove)
+
+    def value(self):
+        return self.species.currentData(), int(self.amount.value())
+
+    def set_amount(self, amount):
+        amount = max(1, int(amount))
+        if amount > self.amount_slider.maximum():
+            self.amount_slider.setMaximum(amount)
+        self._amount_sync = True
+        self.amount.setValue(amount)
+        self.amount_slider.setValue(amount)
+        self._amount_sync = False
+        self.changed.emit()
+
+    def on_amount_changed(self, amount):
+        if self._amount_sync:
+            return
+        if amount > self.amount_slider.maximum():
+            self.amount_slider.setMaximum(int(amount))
+        self._amount_sync = True
+        self.amount_slider.setValue(int(amount))
+        self._amount_sync = False
+        self.changed.emit()
+
+    def on_slider_changed(self, amount):
+        if self._amount_sync:
+            return
+        self._amount_sync = True
+        self.amount.setValue(int(amount))
+        self._amount_sync = False
+        self.changed.emit()
+
+
 class MixtureDialog(QtWidgets.QDialog):
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, name="", kind="atoms", contents=None,
+                 box_size=19.0, editing_name=None, window_title="New mixture",
+                 copy_source=None):
         super().__init__(parent)
+        self.editing_name = editing_name
+        self.box_size = float(box_size)
+        self.copy_source = copy_source
+        self.rows = []
+        self._raw_sync = False
+        self._raw_dirty = False
+        self._final_result = None
+        self._known_custom = set(mixtures.load_custom())
+        self._species_options_cache = {}
 
-        self.setWindowTitle("New mixture")
-        self.resize(420, 300)
+        self.setWindowTitle(window_title)
+        self.resize(680, 700)
+        outer = QtWidgets.QVBoxLayout(self)
+        outer.setContentsMargins(18, 18, 18, 18)
+        outer.setSpacing(10)
 
-        layout = QtWidgets.QFormLayout(self)
+        heading = QtWidgets.QLabel("Mixture Builder")
+        heading.setObjectName("heroTitle")
+        outer.addWidget(heading)
+        help_text = QtWidgets.QLabel(
+            "Build the same atom or molecule composition used by the existing "
+            "runtime without editing its text format."
+        )
+        help_text.setWordWrap(True)
+        help_text.setObjectName("sectionSubtitle")
+        outer.addWidget(help_text)
 
-        self.name = QtWidgets.QLineEdit()
-        layout.addRow("name", self.name)
+        identity = QtWidgets.QFormLayout()
+        identity.setHorizontalSpacing(16)
+        self.name = QtWidgets.QLineEdit(name)
+        self.name.setPlaceholderText("e.g. Carbon-rich experiment")
+        self.name.textChanged.connect(self.update_feedback)
+        identity.addRow("Name", self.name)
 
         self.kind = QtWidgets.QComboBox()
-        self.kind.addItems(["atoms", "molecules"])
-        layout.addRow("kind", self.kind)
+        self.kind.addItem("Loose atoms", "atoms")
+        self.kind.addItem("Molecules", "molecules")
+        self.kind.setCurrentIndex(0 if kind == "atoms" else 1)
+        self.kind.currentIndexChanged.connect(self.on_kind_changed)
+        identity.addRow("Composition type", self.kind)
 
-        self.contents = QtWidgets.QPlainTextEdit()
-        self.contents.setPlaceholderText(
-            "one per line, for example\n\n"
-            "C 80\nH 200\nN 20\nO 30\n\n"
-            "or for molecules\n\nCH4 6\nNH3 4\nH2O 6\nH2 8"
+        if copy_source and copy_source[1]:
+            self.start_from = QtWidgets.QComboBox()
+            self.start_from.addItem("Empty", None)
+            self.start_from.addItem(
+                f"Copy current: {copy_source[0]}", copy_source[0]
+            )
+            self.start_from.currentIndexChanged.connect(self.on_start_from)
+            identity.addRow("Start from", self.start_from)
+        else:
+            self.start_from = None
+        outer.addLayout(identity)
+
+        self.runtime_note = QtWidgets.QLabel()
+        self.runtime_note.setWordWrap(True)
+        self.runtime_note.setObjectName("sectionSubtitle")
+        outer.addWidget(self.runtime_note)
+
+        composition_group = QtWidgets.QGroupBox("Composition")
+        composition_layout = QtWidgets.QVBoxLayout(composition_group)
+        labels = QtWidgets.QHBoxLayout()
+        species_label = QtWidgets.QLabel("Species")
+        species_label.setStyleSheet("font-weight: bold;")
+        slider_label = QtWidgets.QLabel("Amount slider")
+        slider_label.setStyleSheet("font-weight: bold;")
+        amount_label = QtWidgets.QLabel("Amount")
+        amount_label.setStyleSheet("font-weight: bold;")
+        labels.addWidget(species_label, 2)
+        labels.addWidget(slider_label, 4)
+        labels.addWidget(amount_label, 1)
+        labels.addSpacing(72)
+        composition_layout.addLayout(labels)
+
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setMinimumHeight(185)
+        scroll.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        self.rows_widget = QtWidgets.QWidget()
+        self.rows_layout = QtWidgets.QVBoxLayout(self.rows_widget)
+        self.rows_layout.setContentsMargins(0, 0, 4, 0)
+        self.rows_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+        scroll.setWidget(self.rows_widget)
+        composition_layout.addWidget(scroll)
+        add_button = QtWidgets.QPushButton("+ Add species")
+        add_button.clicked.connect(self.add_row)
+        composition_layout.addWidget(add_button, alignment=QtCore.Qt.AlignmentFlag.AlignLeft)
+        outer.addWidget(composition_group, 2)
+
+        feedback_group = QtWidgets.QGroupBox("Live composition")
+        feedback_layout = QtWidgets.QVBoxLayout(feedback_group)
+        self.feedback = QtWidgets.QLabel()
+        self.feedback.setTextFormat(QtCore.Qt.TextFormat.RichText)
+        self.feedback.setWordWrap(True)
+        self.feedback.setTextInteractionFlags(
+            QtCore.Qt.TextInteractionFlag.TextSelectableByMouse
         )
-        layout.addRow("contents", self.contents)
+        feedback_layout.addWidget(self.feedback)
+
+        density_line = QtWidgets.QFrame()
+        density_line.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        feedback_layout.addWidget(density_line)
+        target_row = QtWidgets.QHBoxLayout()
+        target_row.addWidget(QtWidgets.QLabel("Target density"))
+        self.density_preset = QtWidgets.QComboBox()
+        for label, value in (
+            ("Dilute soup", 0.010),
+            ("Light soup", 0.020),
+            ("Standard soup", 0.040),
+            ("Dense soup", 0.050),
+            ("Custom", None),
+        ):
+            self.density_preset.addItem(label, value)
+        self.density_preset.setCurrentIndex(2)
+        self.custom_density_index = self.density_preset.count() - 1
+        self.target_density = QtWidgets.QDoubleSpinBox()
+        self.target_density.setDecimals(6)
+        self.target_density.setRange(0.000001, 100.0)
+        self.target_density.setSingleStep(0.001)
+        self.target_density.setValue(0.040)
+        self.target_density.setMinimumWidth(120)
+        self.target_density.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
+        self.target_density.setStyleSheet(
+            "QDoubleSpinBox { padding-left: 8px; padding-right: 30px; }"
+        )
+        target_row.addWidget(self.density_preset)
+        target_row.addWidget(self.target_density)
+        target_row.addWidget(QtWidgets.QLabel("atoms/Å³"))
+        target_row.addStretch(1)
+        feedback_layout.addLayout(target_row)
+        self.density_preview = QtWidgets.QLabel()
+        self.density_preview.setWordWrap(True)
+        self.density_preview.setTextInteractionFlags(
+            QtCore.Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        feedback_layout.addWidget(self.density_preview)
+        self.apply_density_button = QtWidgets.QPushButton()
+        self.apply_density_button.setToolTip(
+            "Changes particle loading while preserving composition. Density is "
+            "atoms per Å³; this is not a direct pressure calculation."
+        )
+        self.apply_density_button.clicked.connect(self.apply_target_density)
+        feedback_layout.addWidget(
+            self.apply_density_button,
+            alignment=QtCore.Qt.AlignmentFlag.AlignLeft,
+        )
+        density_help = QtWidgets.QLabel(
+            "Convenience loading targets for ps-scale soup discovery. The fixed "
+            "box does not resize, and these values are not atmospheric pressure."
+        )
+        density_help.setWordWrap(True)
+        density_help.setObjectName("sectionSubtitle")
+        feedback_layout.addWidget(density_help)
+        self.density_preset.currentIndexChanged.connect(
+            self.on_density_preset_changed
+        )
+        self.target_density.valueChanged.connect(
+            self.on_target_density_changed
+        )
+        outer.addWidget(feedback_group)
+
+        self.advanced = QtWidgets.QGroupBox("Advanced — raw mixture definition")
+        self.advanced.setCheckable(True)
+        self.advanced.setChecked(False)
+        advanced_layout = QtWidgets.QVBoxLayout(self.advanced)
+        advanced_help = QtWidgets.QLabel(
+            "Legacy one-entry-per-line form. Closing Advanced reparses it into "
+            "the structured rows; invalid text is never silently discarded."
+        )
+        advanced_help.setWordWrap(True)
+        self.raw_contents = QtWidgets.QPlainTextEdit()
+        self.raw_contents.setMinimumHeight(110)
+        self.raw_contents.textChanged.connect(self.on_raw_changed)
+        advanced_layout.addWidget(advanced_help)
+        advanced_layout.addWidget(self.raw_contents)
+        self.advanced.toggled.connect(self.on_advanced_toggled)
+        self.raw_contents.setVisible(False)
+        advanced_help.setVisible(False)
+        self.advanced_help = advanced_help
+        outer.addWidget(self.advanced)
+
+        self.error = QtWidgets.QLabel()
+        self.error.setWordWrap(True)
+        self.error.setStyleSheet("color: #ff8a80;")
+        outer.addWidget(self.error)
 
         buttons = QtWidgets.QDialogButtonBox(
-            QtWidgets.QDialogButtonBox.StandardButton.Ok
+            QtWidgets.QDialogButtonBox.StandardButton.Save
             | QtWidgets.QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
+        self.save_button = buttons.button(
+            QtWidgets.QDialogButtonBox.StandardButton.Save
+        )
+        outer.addWidget(buttons)
 
-        layout.addRow(buttons)
+        self.set_contents(kind, contents or {})
+        self.update_runtime_note()
+        self.update_feedback()
+        if parent is not None and hasattr(parent, "box_size"):
+            try:
+                changed = parent.box_size.valueChanged
+                if callable(changed) and not hasattr(changed, "connect"):
+                    changed = changed()
+                changed.connect(self.on_parent_box_changed)
+            except Exception:
+                pass
+
+    def current_kind(self):
+        return str(self.kind.currentData())
+
+    def species_options(self):
+        kind = self.current_kind()
+        if kind in self._species_options_cache:
+            return self._species_options_cache[kind]
+        species = mixtures.supported_species(kind)
+        if kind == "atoms":
+            options = [(symbol, symbol) for symbol in species]
+            self._species_options_cache[kind] = options
+            return options
+        sightings = {}
+        try:
+            for item in molecule_store.list_molecules():
+                formula = str(item.get("formula", ""))
+                sightings[formula] = sightings.get(formula, 0) + 1
+        except Exception:
+            sightings = {}
+        options = [
+            (
+                f"{formula}  ({sightings[formula]} saved structure"
+                f"{'s' if sightings[formula] != 1 else ''})"
+                if sightings.get(formula) else formula,
+                formula,
+            )
+            for formula in species
+        ]
+        self._species_options_cache[kind] = options
+        return options
+
+    def update_runtime_note(self):
+        if self.current_kind() == "atoms":
+            self.runtime_note.setText(
+                "Supported loose elements come directly from the reactive engine."
+            )
+            return
+        try:
+            discovered = len(molecule_store.list_molecules())
+        except Exception:
+            discovered = 0
+        self.runtime_note.setText(
+            f"The runtime currently has {len(mixtures.supported_species('molecules'))} "
+            f"launchable molecule geometries. Molecule Lab contains {discovered} "
+            "discovered structures; unsupported discoveries are not offered because "
+            "the current soup schema cannot launch them safely yet."
+        )
+
+    def add_row(self, checked=False, species=None, amount=1):
+        options = self.species_options()
+        if not options:
+            return
+        if species is None:
+            used = {row.value()[0] for row in self.rows}
+            species = next((value for _, value in options if value not in used), options[0][1])
+        row = MixtureRow(options, species, amount, self.rows_widget)
+        row.changed.connect(self.on_rows_changed)
+        row.removeRequested.connect(self.remove_row)
+        self.rows.append(row)
+        self.rows_layout.addWidget(row)
+        self.on_rows_changed()
+
+    def remove_row(self, row):
+        if row not in self.rows:
+            return
+        self.rows.remove(row)
+        self.rows_layout.removeWidget(row)
+        row.deleteLater()
+        self.on_rows_changed()
+
+    def row_contents(self):
+        contents = {}
+        for row in self.rows:
+            species, amount = row.value()
+            if species:
+                contents[species] = contents.get(species, 0) + int(amount)
+        return contents
+
+    def clear_rows(self):
+        for row in self.rows:
+            self.rows_layout.removeWidget(row)
+            row.deleteLater()
+        self.rows = []
+
+    def set_contents(self, kind, contents):
+        index = self.kind.findData(kind)
+        if index >= 0 and self.kind.currentIndex() != index:
+            self.kind.blockSignals(True)
+            self.kind.setCurrentIndex(index)
+            self.kind.blockSignals(False)
+        self.clear_rows()
+        for species, amount in contents.items():
+            self.add_row(species=species, amount=amount)
+        if not self.rows:
+            self.add_row()
+        self._raw_dirty = False
+        self.sync_raw_from_rows()
+        self.update_runtime_note()
+        self.update_feedback()
+
+    def on_kind_changed(self, unused=None):
+        self.set_contents(self.current_kind(), {})
+
+    def on_start_from(self, index):
+        if index == 1 and self.copy_source and self.copy_source[1]:
+            kind, contents = self.copy_source[1]
+            self.set_contents(kind, contents)
+        elif index == 0:
+            self.set_contents(self.current_kind(), {})
+
+    def on_rows_changed(self):
+        if not self._raw_dirty:
+            self.sync_raw_from_rows()
+        self.update_feedback()
+
+    def sync_raw_from_rows(self):
+        self._raw_sync = True
+        self.raw_contents.setPlainText(
+            mixtures.format_definition(self.row_contents())
+        )
+        self._raw_sync = False
+
+    def on_raw_changed(self):
+        if not self._raw_sync:
+            self._raw_dirty = True
+            self.update_feedback()
+
+    def apply_raw(self):
+        try:
+            contents = mixtures.parse_definition(
+                self.raw_contents.toPlainText(), self.current_kind()
+            )
+        except ValueError as problem:
+            self.error.setText(f"Advanced definition: {problem}")
+            return False
+        self.set_contents(self.current_kind(), contents)
+        self.error.setText("")
+        return True
+
+    def on_advanced_toggled(self, visible):
+        self.raw_contents.setVisible(visible)
+        self.advanced_help.setVisible(visible)
+        if visible:
+            if not self._raw_dirty:
+                self.sync_raw_from_rows()
+        elif self._raw_dirty and not self.apply_raw():
+            self.advanced.blockSignals(True)
+            self.advanced.setChecked(True)
+            self.advanced.blockSignals(False)
+            self.raw_contents.setVisible(True)
+            self.advanced_help.setVisible(True)
+        self.adjustSize()
+
+    def validated_result(self):
+        name = self.name.text().strip()
+        if not name:
+            raise ValueError("Give the mixture a name.")
+        if name in mixtures.BUILT_IN:
+            raise ValueError(
+                "Built-in presets are read-only. Choose a new name for this copy."
+            )
+        if name in self._known_custom and name != self.editing_name:
+            raise ValueError(
+                "A custom mixture already uses that name. Edit it directly or choose another name."
+            )
+        if self._raw_dirty:
+            contents = mixtures.parse_definition(
+                self.raw_contents.toPlainText(), self.current_kind()
+            )
+        else:
+            contents = mixtures.validate_contents(
+                self.current_kind(), self.row_contents()
+            )
+        return name, self.current_kind(), contents
+
+    def actual_box_size(self):
+        parent = self.parent()
+        if parent is not None and hasattr(parent, "box_size"):
+            try:
+                value = float(parent.box_size.value())
+                if value > 0:
+                    self.box_size = value
+            except Exception:
+                pass
+        return self.box_size
+
+    def on_parent_box_changed(self, unused=None):
+        self.update_feedback()
+
+    def on_density_preset_changed(self, index):
+        value = self.density_preset.itemData(index)
+        if value is None:
+            return
+        self.target_density.blockSignals(True)
+        self.target_density.setValue(float(value))
+        self.target_density.blockSignals(False)
+        self.update_density_preview()
+
+    def on_target_density_changed(self, value):
+        matching = self.custom_density_index
+        for index in range(self.density_preset.count()):
+            preset = self.density_preset.itemData(index)
+            if preset is not None and abs(float(preset) - float(value)) < 5e-7:
+                matching = index
+                break
+        self.density_preset.blockSignals(True)
+        self.density_preset.setCurrentIndex(matching)
+        self.density_preset.blockSignals(False)
+        self.update_density_preview()
+
+    def density_contents(self):
+        return (
+            mixtures.parse_definition(
+                self.raw_contents.toPlainText(), self.current_kind()
+            ) if self._raw_dirty else
+            mixtures.validate_contents(self.current_kind(), self.row_contents())
+        )
+
+    def update_density_preview(self):
+        try:
+            contents = self.density_contents()
+            preview = mixtures.scale_to_density(
+                self.current_kind(), contents, self.actual_box_size(),
+                self.target_density.value(),
+            )
+        except ValueError as problem:
+            self.density_preview.setText(f"Cannot scale composition: {problem}")
+            self.apply_density_button.setText("Adjust composition first")
+            self.apply_density_button.setEnabled(False)
+            return
+        same = preview["contents"] == contents
+        direction = (
+            "Pressurise" if preview["result_atoms"] > preview["current_atoms"]
+            else "Depressurise"
+        )
+        self.density_preview.setText(
+            f"Current atoms <b>{preview['current_atoms']:,}</b>&nbsp;&nbsp; "
+            f"Target atoms <b>{preview['target_atoms']:,}</b>&nbsp;&nbsp; "
+            f"Scale <b>×{preview['scale']:.3g}</b><br>"
+            f"Result after integer apportionment: <b>{preview['result_atoms']:,} atoms</b>, "
+            f"<b>{preview['result_density_atoms_per_A3']:.6f} atoms/Å³</b>"
+        )
+        if same:
+            self.apply_density_button.setText("✓ At target density")
+            self.apply_density_button.setEnabled(False)
+        else:
+            self.apply_density_button.setText(f"{direction} to target")
+            self.apply_density_button.setEnabled(True)
+
+    def apply_target_density(self):
+        try:
+            preview = mixtures.scale_to_density(
+                self.current_kind(), self.density_contents(),
+                self.actual_box_size(), self.target_density.value(),
+            )
+        except ValueError as problem:
+            self.error.setText(str(problem))
+            return
+        # Rebuild unique rows from the apportioned ordinary integer counts.
+        # The target field is deliberately untouched.
+        self.set_contents(self.current_kind(), preview["contents"])
+        self.error.setText("")
+
+    def update_feedback(self):
+        try:
+            contents = (
+                mixtures.parse_definition(
+                    self.raw_contents.toPlainText(), self.current_kind()
+                ) if self._raw_dirty else
+                mixtures.validate_contents(self.current_kind(), self.row_contents())
+            )
+            metrics = mixtures.composition_metrics(
+                self.current_kind(), contents, self.actual_box_size()
+            )
+            elements = metrics["elements"]
+            element_lines = []
+            for symbol, amount in sorted(
+                elements.items(), key=lambda item: (-item[1], item[0])
+            ):
+                percent = 100.0 * amount / metrics["atoms"]
+                blocks = "▰" * max(1, int(round(percent / 5.0)))
+                element_lines.append(
+                    f"<b>{symbol}</b>&nbsp;&nbsp;{amount:,}&nbsp;&nbsp;"
+                    f"{percent:5.1f}%&nbsp;&nbsp;<span style='color:#58a6ff'>{blocks}</span>"
+                )
+            molecule_text = (
+                f"&nbsp;&nbsp; Molecules <b>{metrics['molecules']:,}</b>"
+                if metrics["molecules"] is not None else ""
+            )
+            self.feedback.setText(
+                f"Total atoms <b>{metrics['atoms']:,}</b>{molecule_text}"
+                f"&nbsp;&nbsp; Box <b>{metrics['box_A']:g} Å</b>"
+                f"&nbsp;&nbsp; Density <b>{metrics['density_atoms_per_A3']:.4f} atoms/Å³</b>"
+                "<br><br>" + "<br>".join(element_lines)
+            )
+            self.error.setText("")
+            valid = bool(self.name.text().strip())
+        except ValueError as problem:
+            self.feedback.setText("Composition incomplete.")
+            self.error.setText(str(problem))
+            valid = False
+        self.save_button.setEnabled(valid)
+        self.update_density_preview()
+
+    def accept(self):
+        try:
+            self._final_result = self.validated_result()
+        except ValueError as problem:
+            self.error.setText(str(problem))
+            self.save_button.setEnabled(False)
+            return
+        super().accept()
 
     def result(self):
-        contents = {}
-
-        for line in self.contents.toPlainText().splitlines():
-            parts = line.split()
-
-            if len(parts) != 2:
-                continue
-
-            try:
-                contents[parts[0]] = int(parts[1])
-            except ValueError:
-                continue
-
-        return (
-            self.name.text().strip(),
-            self.kind.currentText(),
-            contents,
-        )
+        if self._final_result is not None:
+            return self._final_result
+        return self.validated_result()
 
 
 def main():
