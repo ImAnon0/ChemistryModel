@@ -1,6 +1,6 @@
 # ChemistryModel independent validation report
 
-Revision: `2db384ca64b46493d6c7827282d0fde69b322d93`
+Revision: `750c5622e732142ab77930a3fa1fcc0fa69b5fc0`
 Mode: `full`
 Force-field parameters changed by this report: **no**
 
@@ -10,26 +10,26 @@ Fit targets are labelled and are not counted as independent validation.
 
 **FINAL GOLDEN RESULT: PASS**
 
-- **main runtime imports**: PASS (2.03 s)
-- **heavy overcoordination guard**: PASS (1.91 s)
-- **runner physics selection**: PASS (1.90 s)
-- **heavy valence density matrix**: PASS (1.67 s)
-- **optimised valence integration**: PASS (30.95 s)
-- **batched heavy valence**: PASS (127.44 s)
-- **large heavy valence states**: PASS (2.11 s)
-- **cached H topology**: PASS (11.29 s)
-- **factorised H grouped execution**: PASS (20.49 s)
-- **H-state components**: PASS (3.01 s)
-- **H-state factorised**: PASS (4.04 s)
-- **H-state factorised NVE**: PASS (14.19 s)
-- **index-select gather**: PASS (41.22 s)
-- **smooth valence NVE**: PASS (22.30 s)
-- **valence-state factorised fixed**: PASS (12.74 s)
-- **valence-state promotion**: PASS (12.47 s)
-- **molecule library**: PASS (2.93 s)
+- **main runtime imports**: PASS (2.94 s)
+- **heavy overcoordination guard**: PASS (2.14 s)
+- **runner physics selection**: PASS (1.97 s)
+- **heavy valence density matrix**: PASS (1.76 s)
+- **optimised valence integration**: PASS (56.28 s)
+- **batched heavy valence**: PASS (227.08 s)
+- **large heavy valence states**: PASS (2.12 s)
+- **cached H topology**: PASS (19.44 s)
+- **factorised H grouped execution**: PASS (37.36 s)
+- **H-state components**: PASS (3.04 s)
+- **H-state factorised**: PASS (4.32 s)
+- **H-state factorised NVE**: PASS (27.75 s)
+- **index-select gather**: PASS (58.55 s)
+- **smooth valence NVE**: PASS (45.50 s)
+- **valence-state factorised fixed**: PASS (24.96 s)
+- **valence-state promotion**: PASS (16.96 s)
+- **molecule library**: PASS (3.13 s)
 - **heavy state pressure diagnostics**: PASS (1.93 s)
-- **smooth valence force probe**: PASS (3.53 s)
-- **pytest suite**: PASS (103.37 s)
+- **smooth valence force probe**: PASS (3.87 s)
+- **pytest suite**: PASS (202.78 s)
 - **Dense optimised-valence soup stress**: PASS
   - seed 0: final C/N over-valent 0/0; max C/N coordination 4/4
   - seed 1: final C/N over-valent 0/0; max C/N coordination 4/3
@@ -174,7 +174,7 @@ Frozen scans are screening diagnostics; relaxed full-mode scans are the stronger
 
 ## 13. Performance
 
-- CPU probe: 444.8 steps/s (0.225 s for 100 steps).
+- CPU probe: 446.1 steps/s (0.224 s for 100 steps).
 
 ## 14. Transferability
 

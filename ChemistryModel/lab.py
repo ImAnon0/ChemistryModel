@@ -15,6 +15,7 @@ import mixtures
 import running
 import molecule_library as molecule_store
 import molecule_scanner
+import qm_structure_validator as qm_validator
 from high_fidelity_torch import HF_MODEL_REVISION
 import characterisation_results as character_results
 
@@ -2207,6 +2208,63 @@ class Lab(QtWidgets.QWidget):
         library_splitter.setSizes([230, 390, 220])
         library.addWidget(library_splitter, stretch=1)
 
+        qm_panel = QtWidgets.QGroupBox("QM structure check")
+        qm_layout = QtWidgets.QVBoxLayout(qm_panel)
+        qm_layout.setSpacing(5)
+
+        qm_state = QtWidgets.QHBoxLayout()
+        self.qm_charge = QtWidgets.QLineEdit()
+        self.qm_charge.setPlaceholderText("required")
+        self.qm_charge.setMaximumWidth(75)
+        self.qm_multiplicity = QtWidgets.QLineEdit()
+        self.qm_multiplicity.setPlaceholderText("required")
+        self.qm_multiplicity.setMaximumWidth(75)
+        self.qm_method = QtWidgets.QLineEdit(qm_validator.DEFAULT_METHOD)
+        self.qm_method.setMaximumWidth(110)
+        self.qm_basis = QtWidgets.QLineEdit(qm_validator.DEFAULT_BASIS)
+        self.qm_basis.setMaximumWidth(130)
+        for label, widget in (
+            ("charge", self.qm_charge),
+            ("multiplicity", self.qm_multiplicity),
+            ("method", self.qm_method),
+            ("basis", self.qm_basis),
+        ):
+            qm_state.addWidget(QtWidgets.QLabel(label))
+            qm_state.addWidget(widget)
+        qm_state.addStretch(1)
+        qm_layout.addLayout(qm_state)
+
+        qm_actions = QtWidgets.QHBoxLayout()
+        self.qm_run_button = self.button(
+            "Run QM Structure Check", self.on_run_qm_structure_check
+        )
+        self.qm_run_button.setEnabled(False)
+        self.qm_geometry_choice = QtWidgets.QComboBox()
+        self.qm_geometry_choice.addItems([
+            "ChemistryModel geometry", "QM-optimised geometry"
+        ])
+        self.qm_geometry_choice.setEnabled(False)
+        self.qm_geometry_choice.currentIndexChanged.connect(
+            self.on_qm_geometry_choice_changed
+        )
+        qm_actions.addWidget(self.qm_run_button)
+        qm_actions.addWidget(self.qm_geometry_choice)
+        qm_actions.addStretch(1)
+        qm_layout.addLayout(qm_actions)
+
+        self.qm_status = QtWidgets.QLabel(
+            "UNTESTED — charge and multiplicity are not inferred."
+        )
+        self.qm_status.setWordWrap(True)
+        self.qm_status.setTextInteractionFlags(
+            QtCore.Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self.qm_status.setStyleSheet(
+            "font-family: Consolas, monospace; color: #9aa7b8;"
+        )
+        qm_layout.addWidget(self.qm_status)
+        library.addWidget(qm_panel)
+
         self.molecule_open_source = self.button(
             "Open formation source in Replay", self.on_molecule_open_source
         )
@@ -2240,6 +2298,8 @@ class Lab(QtWidgets.QWidget):
             )
 
         self.library_molecules = []
+        self.qm_process = None
+        self.qm_selected_record = None
         self.character_experiments_data = []
         self.character_run_entries = []
         self.reload_molecule_library()
@@ -3054,6 +3114,10 @@ class Lab(QtWidgets.QWidget):
         if row < 0 or row >= len(self.library_molecules):
             self.molecule_details.setPlainText("")
             self.molecule_open_source.setEnabled(False)
+            if hasattr(self, "qm_run_button"):
+                self.qm_run_button.setEnabled(False)
+                self.qm_geometry_choice.setEnabled(False)
+                self.qm_status.setText("UNTESTED — select a recorded molecule.")
             return
 
         item = self.library_molecules[row]
@@ -3160,6 +3224,7 @@ class Lab(QtWidgets.QWidget):
         self.molecule_open_source.setEnabled(
             bool(recording and os.path.exists(recording))
         )
+        self.refresh_qm_structure_check(item.get("id"))
 
         molecule_id = item.get("id")
         for index in range(self.character_molecule.count()):
@@ -3170,6 +3235,179 @@ class Lab(QtWidgets.QWidget):
                     self.character_molecule.blockSignals(False)
                     self.on_character_molecule_changed(index)
                 break
+
+    def _selected_library_molecule_id(self):
+        row = self.molecule_library_list.currentRow()
+        if 0 <= row < len(self.library_molecules):
+            return self.library_molecules[row].get("id")
+        return None
+
+    def refresh_qm_structure_check(self, molecule_id=None):
+        molecule_id = molecule_id or self._selected_library_molecule_id()
+        running = self.qm_process is not None
+        self.qm_run_button.setEnabled(bool(molecule_id) and not running)
+        self.qm_selected_record = None
+        self.qm_geometry_choice.setEnabled(False)
+        if not molecule_id:
+            self.qm_status.setText("UNTESTED — select a recorded molecule.")
+            return
+        records = qm_validator.list_validations(molecule_id)
+        if not records:
+            self.qm_status.setText(
+                "UNTESTED — enter charge and multiplicity; these are not guessed "
+                "from the current graph-only species identity."
+            )
+            return
+        record = records[0]
+        self.qm_selected_record = record
+        status = str(record.get("status", "untested")).upper()
+        if status == "RUNNING":
+            self.qm_status.setText(
+                f"QM RUNNING  {record.get('method')}/{record.get('basis')}  "
+                f"charge {record.get('charge')}  multiplicity {record.get('multiplicity')}"
+            )
+            return
+        if status == "FAILED":
+            self.qm_status.setText(
+                f"QM FAILED  {record.get('method')}/{record.get('basis')}\n"
+                f"{record.get('error', 'No error detail was recorded.')}"
+            )
+            return
+        single = record.get("single_point", {})
+        optimisation = record.get("optimisation", {})
+        comparison = record.get("comparison", {})
+        connectivity = (
+            "preserved" if comparison.get("connectivity_preserved")
+            else "CHANGED"
+        )
+        self.qm_status.setText(
+            f"QM COMPLETE  {record.get('method')}/{record.get('basis')}  "
+            f"q={record.get('charge')} mult={record.get('multiplicity')}\n"
+            f"exact-geometry force: max {single.get('max_force_eV_per_A', float('nan')):.4g}, "
+            f"RMS {single.get('rms_force_eV_per_A', float('nan')):.4g} eV/A  |  "
+            f"relaxation {optimisation.get('relaxation_energy_eV', float('nan')):.5g} eV\n"
+            f"RMSD: all {comparison.get('all_atom_rmsd_A', float('nan')):.4g} A, "
+            f"heavy {comparison.get('heavy_atom_rmsd_A') if comparison.get('heavy_atom_rmsd_A') is not None else 'n/a'} A  |  "
+            f"connectivity {connectivity}"
+        )
+        self.qm_geometry_choice.setEnabled(True)
+        self.on_qm_geometry_choice_changed(self.qm_geometry_choice.currentIndex())
+
+    def on_run_qm_structure_check(self):
+        molecule_id = self._selected_library_molecule_id()
+        if not molecule_id or self.qm_process is not None:
+            return
+        try:
+            charge = int(self.qm_charge.text().strip())
+            multiplicity = int(self.qm_multiplicity.text().strip())
+            if multiplicity < 1:
+                raise ValueError
+        except ValueError:
+            QtWidgets.QMessageBox.warning(
+                self, "Electronic state required",
+                "Enter an integer charge and a positive integer multiplicity. "
+                "Molecule Lab will not guess an electronic state from the current graph-only identity."
+            )
+            return
+        method = self.qm_method.text().strip()
+        basis = self.qm_basis.text().strip()
+        if not method or not basis:
+            QtWidgets.QMessageBox.warning(
+                self, "QM method required", "Enter both a method and basis set."
+            )
+            return
+        process = QtCore.QProcess(self)
+        process.setWorkingDirectory(os.path.abspath("."))
+        process.setProcessChannelMode(
+            QtCore.QProcess.ProcessChannelMode.MergedChannels
+        )
+        process.finished.connect(self.on_qm_structure_check_finished)
+        process.errorOccurred.connect(self.on_qm_structure_check_process_error)
+        self.qm_process = process
+        self.qm_run_button.setEnabled(False)
+        self.qm_geometry_choice.setEnabled(False)
+        self.qm_status.setText(
+            f"QM RUNNING  {method}/{basis}  q={charge} mult={multiplicity}\n"
+            "Evaluating the exact ChemistryModel geometry, then optimising from it…"
+        )
+        script = os.path.abspath(qm_validator.__file__)
+        try:
+            worker_python = qm_validator.psi4_worker_python()
+        except ValueError as problem:
+            self.qm_process = None
+            process.deleteLater()
+            self.qm_run_button.setEnabled(True)
+            self.qm_status.setText(f"QM FAILED — {problem}")
+            return
+        process.start(worker_python, [
+            script, molecule_id,
+            "--charge", str(charge),
+            "--multiplicity", str(multiplicity),
+            "--method", method,
+            "--basis", basis,
+        ])
+
+    def on_qm_structure_check_finished(self, exit_code, exit_status):
+        process = self.qm_process
+        output = ""
+        if process is not None:
+            output = bytes(process.readAllStandardOutput()).decode(
+                "utf-8", errors="replace"
+            ).strip()
+            process.deleteLater()
+        self.qm_process = None
+        self.refresh_qm_structure_check()
+        if int(exit_code) != 0 and not qm_validator.list_validations(
+            self._selected_library_molecule_id() or ""
+        ):
+            self.qm_status.setText(
+                "QM FAILED before a validation record could be created.\n" +
+                (output[-1000:] or "No process output was available.")
+            )
+
+    def on_qm_structure_check_process_error(self, error):
+        if self.qm_process is None:
+            return
+        if error == QtCore.QProcess.ProcessError.FailedToStart:
+            self.qm_status.setText(
+                "QM FAILED — the Python/Psi4 worker could not be started."
+            )
+            self.qm_process.deleteLater()
+            self.qm_process = None
+            self.qm_run_button.setEnabled(
+                bool(self._selected_library_molecule_id())
+            )
+
+    def on_qm_geometry_choice_changed(self, index):
+        record = self.qm_selected_record
+        if not record or record.get("status") != "complete":
+            return
+        try:
+            payload = qm_validator.load_geometries(record)
+            positions = np.asarray(
+                payload[
+                    "optimised_coordinates_A" if index == 1
+                    else "original_coordinates_A"
+                ], dtype=float,
+            )
+            symbols = [str(value) for value in payload["symbols"]]
+            if index == 1:
+                bonds = qm_validator.inferred_bonds(symbols, positions)
+            else:
+                bonds = np.asarray(payload["original_bonds"], dtype=int).reshape(-1, 2)
+            extent = np.ptp(positions, axis=0) if len(positions) else np.ones(3)
+            box_size = max(float(np.max(extent)) + 6.0, 8.0)
+            shifted = positions - np.min(positions, axis=0) + (box_size - extent) / 2.0
+            first = bonds[:, 0] if len(bonds) else np.asarray([], dtype=int)
+            second = bonds[:, 1] if len(bonds) else np.asarray([], dtype=int)
+            self.molecule_preview.set_state(
+                shifted, symbols, box_size, (first, second)
+            )
+            self.molecule_preview.recentre()
+        except Exception as problem:
+            self.qm_status.setText(
+                self.qm_status.text() + f"\nCannot load stored QM geometry: {problem}"
+            )
 
     def on_molecule_open_source(self):
         row = self.molecule_library_list.currentRow()
