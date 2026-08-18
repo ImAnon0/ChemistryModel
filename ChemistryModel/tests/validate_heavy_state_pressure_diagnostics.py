@@ -5,6 +5,9 @@ import _bootstrap  # noqa: F401 - direct-execution project path
 
 from pathlib import Path
 
+import numpy as np
+import torch
+
 from valence_state_batched_membership_torch import (
     BatchedHeavyValenceStateBatchedSimulation,
 )
@@ -34,6 +37,84 @@ def dummy_solver():
         fresh_run_diagnostics()
     )
     return solver
+
+
+def live_solver_diagnostics():
+    """Prove the production membership path updates run diagnostics live.
+
+    One carbon is surrounded by five carbon contacts in a trigonal-bipyramidal
+    arrangement. Carbon has valence four, so the centre must enter the
+    competitive N=5, V=4 heavy-state path (five local states).
+
+    The constructor evaluates forces once. We then evaluate once more and
+    require the cumulative evaluation counter to increase. This checks actual
+    execution rather than searching source code for variable names.
+    """
+    centre = np.array([10.0, 10.0, 10.0], dtype=float)
+    radius = 1.70
+
+    directions = np.array([
+        [0.0, 0.0, 1.0],
+        [0.0, 0.0, -1.0],
+        [1.0, 0.0, 0.0],
+        [-0.5, 0.8660254037844386, 0.0],
+        [-0.5, -0.8660254037844386, 0.0],
+    ], dtype=float)
+
+    positions = np.vstack((
+        centre,
+        centre + radius * directions,
+    ))
+
+    simulation = BatchedHeavyValenceStateBatchedSimulation(
+        boxes=[(["C"] * len(positions), positions)],
+        box_size=30.0,
+        target_temperature=0.0,
+        friction=0.0,
+        device="cpu",
+        dtype=torch.float64,
+        random_seed=0,
+        relax_on_start=False,
+    )
+
+    first_run = dict(
+        getattr(
+            simulation,
+            "_heavy_valence_run_diagnostics",
+            {},
+        )
+    )
+    first_current = dict(
+        getattr(
+            simulation,
+            "_heavy_valence_diagnostics",
+            {},
+        )
+    )
+
+    simulation.compute_forces()
+
+    second_run = dict(
+        getattr(
+            simulation,
+            "_heavy_valence_run_diagnostics",
+            {},
+        )
+    )
+
+    passed = (
+        int(first_run.get("evaluation_count", 0)) >= 1
+        and int(second_run.get("evaluation_count", 0))
+        > int(first_run.get("evaluation_count", 0))
+        and int(first_current.get("largest_candidate_count", 0)) >= 5
+        and int(first_current.get("largest_state_count", 0)) >= 5
+        and int(first_current.get("competitive_atom_count", 0)) >= 1
+        and int(second_run.get("max_candidate_count", 0)) >= 5
+        and int(second_run.get("max_state_count", 0)) >= 5
+        and int(second_run.get("max_competitive_atom_count", 0)) >= 1
+    )
+
+    return passed, first_current, first_run, second_run
 
 
 def main():
@@ -93,24 +174,18 @@ def main():
         + ("PASS" if accumulator_pass else "FAIL")
     )
 
-    valence_source = Path(
-        "valence_state_batched_membership_torch.py"
-    ).read_text(encoding="utf-8")
+    live_counter_pass, live_current, live_before, live_after = (
+        live_solver_diagnostics()
+    )
+
+    print(f"live current         : {live_current}")
+    print(f"live cumulative pre  : {live_before}")
+    print(f"live cumulative post : {live_after}")
+    print()
 
     runner_source = Path(
         "batch_runner.py"
     ).read_text(encoding="utf-8")
-
-    live_counter_pass = all(
-        token in valence_source
-        for token in (
-            "largest_candidate_count = 0",
-            "largest_state_count = 0",
-            "if state_count > 128:",
-            "if state_count > 200:",
-            "_record_heavy_valence_run_diagnostics(",
-        )
-    )
 
     runner_pass = all(
         token in runner_source

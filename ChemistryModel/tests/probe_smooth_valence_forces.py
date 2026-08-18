@@ -10,7 +10,8 @@ H-state simulation and, during the live autograd energy evaluation:
     2. evaluates the existing H-state correction,
     3. builds smooth heavy-centred valence-state memberships from the SAME
        live reactive intermediates,
-    4. replaces only heavy-atom overcoordination + heavy-centred angles,
+    4. replaces heavy-centred chemical topology / angles while preserving
+       the base radial over-coordination penalty,
     5. returns one fully differentiable energy.
 
 Then it checks:
@@ -373,7 +374,6 @@ class SmoothValenceForceSimulation(HStateReferenceBatchedSimulation):
         mask = values["mask"]
         neighbours = values["neighbours"]
         distances = values["distances"]
-        unsoftened_depth = values["unsoftened_depth"]
 
         membership = self._smooth_membership(values)
 
@@ -386,37 +386,29 @@ class SmoothValenceForceSimulation(HStateReferenceBatchedSimulation):
         ).to(self.dtype)
 
         # ------------------------------------------------------------
-        # New heavy-atom overcoordination
+        # Heavy-centred chemical topology / angles
         # ------------------------------------------------------------
+        #
+        # IMPORTANT PHYSICAL INVARIANT:
+        #
+        # Heavy-state membership decides which radial contacts participate in
+        # chemical topology. It must NOT erase the base model's radial
+        # over-coordination penalty for the remaining close contacts.
+        #
+        # Every competitive local state contains exactly V contacts, so
+        # sum(taper * membership) cannot exceed the elemental valence. If an
+        # over-coordination penalty were rebuilt from topology_coordination it
+        # would therefore become zero precisely when N > V, and subtracting
+        # the original base term would make extra neighbours artificially
+        # cheap. The production engine now deliberately leaves the base radial
+        # penalty untouched; this independent scratch reference mirrors that
+        # corrected invariant.
 
         topology_coordination = torch.sum(
             topology_taper,
             dim=1,
         )
 
-        valence = self.valence[self.types]
-
-        topology_excess = torch.clamp(
-            topology_coordination - valence,
-            min=0.0,
-        )
-
-        topology_over_scale = self.over_coordination_scale(
-            topology_taper,
-            unsoftened_depth,
-            mask,
-            cache_key=None,
-        )
-
-        topology_over = (
-            self.over_penalty
-            * topology_over_scale
-            * topology_excess ** 2
-        )
-
-        # ------------------------------------------------------------
-        # New heavy-centred angles
-        # ------------------------------------------------------------
 
         topology_bonded_order = torch.sum(
             topology_taper * order,
@@ -579,15 +571,13 @@ class SmoothValenceForceSimulation(HStateReferenceBatchedSimulation):
                 "reactive_torch did not expose live profile energy parts"
             )
 
-        original_over = original_parts["over"]
         original_angle = original_parts["angle"]
 
-        # Replace only heavy-centred old topology with heavy-centred new
-        # topology. H-state already handles ordinary H overcoordination.
+        # Replace only heavy-centred CHEMICAL TOPOLOGY (angles/electron
+        # domains). The base radial over-coordination energy remains present
+        # for heavy atoms so unselected close contacts are still repelled.
         return heavy * (
-            topology_over
-            - original_over
-            + topology_angle
+            topology_angle
             - original_angle
         )
 

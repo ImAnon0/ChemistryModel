@@ -12,7 +12,10 @@ import argparse
 import json
 import math
 import os
+import shutil
 import subprocess
+import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -26,7 +29,7 @@ import reactive as R
 from reactive_torch import ReactiveSimulation
 
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 STATUS = {
     "good": "GOOD",
     "acceptable": "ACCEPTABLE",
@@ -121,6 +124,506 @@ FOCUSED_BATCHES = {
     "NH2 + NH2 -> N2H4": "runs/nn_width_2000_focused_control/index.json",
     "OH + OH -> H2O2": "runs/oo_width_2735_focused_candidate/index.json",
 }
+
+
+# ---------------------------------------------------------------------------
+# Golden whole-model regression suite
+# ---------------------------------------------------------------------------
+#
+# validation_report.py historically reported scientific/calibration evidence,
+# but it did not run the standalone implementation regressions.  That allowed
+# a reference implementation and its optimised copy to agree perfectly while
+# both shared the same physical logic error.  The golden suite deliberately
+# combines:
+#
+#   1. implementation/reference equivalence,
+#   2. physical invariant regressions,
+#   3. a short real dense-system integration stress in --full mode.
+#
+# One command is therefore enough for a release/refactor checkpoint:
+#
+#     python validation_report.py --full
+#
+# A failing golden check makes the process exit non-zero.
+
+PROJECT_ROOT = Path(__file__).resolve().parent
+TESTS_ROOT = PROJECT_ROOT / "tests"
+
+GOLDEN_QUICK_CHECKS = (
+    ("main runtime imports", None),
+    ("heavy overcoordination guard", "validate_heavy_overcoordination_guard.py"),
+    ("runner physics selection", "validate_runner_physics_selection.py"),
+    ("heavy valence density matrix", "validate_heavy_valence_density_matrix.py"),
+)
+
+GOLDEN_STANDARD_EXTRA = (
+    ("optimised valence integration", "validate_optimised_valence_integration.py"),
+    ("batched heavy valence", "validate_batched_heavy_valence.py"),
+    ("large heavy valence states", "validate_large_heavy_valence_states.py"),
+    ("cached H topology", "validate_cached_h_topology.py"),
+    ("factorised H grouped execution", "validate_factorised_h_grouped_execution.py"),
+    ("H-state components", "validate_h_state_components.py"),
+    ("H-state factorised", "validate_h_state_factorised.py"),
+    ("H-state factorised NVE", "validate_h_state_factorised_nve_v2.py"),
+    ("index-select gather", "validate_index_select_gather.py"),
+    ("smooth valence NVE", "validate_smooth_valence_nve.py"),
+    ("valence-state factorised fixed", "validate_valence_state_factorised_fixed.py"),
+    ("valence-state promotion", "validate_valence_state_promotion.py"),
+    ("molecule library", "verify_molecule_library.py"),
+)
+
+GOLDEN_FULL_EXTRA = (
+    ("heavy state pressure diagnostics", "validate_heavy_state_pressure_diagnostics.py"),
+    ("smooth valence force probe", "probe_smooth_valence_forces.py"),
+)
+
+
+def _tail(text_value, lines=30):
+    items = str(text_value or "").splitlines()
+    return "\n".join(items[-int(lines):])
+
+
+def _progress_start(index, total, label):
+    print(
+        f"[{int(index):>2}/{int(total)}] {label:<42} ... ",
+        end="",
+        flush=True,
+    )
+
+
+def _progress_finish(result):
+    print(
+        f"{result['status']}  {float(result.get('wall_seconds', 0.0)):.1f}s",
+        flush=True,
+    )
+    if result["status"] != "PASS":
+        stdout_tail = str(result.get("stdout_tail", "")).strip()
+        stderr_tail = str(result.get("stderr_tail", "")).strip()
+        reason = result.get("reason")
+        if reason:
+            print(f"    reason: {reason}", flush=True)
+        if stdout_tail:
+            print("    stdout (tail):", flush=True)
+            for line in stdout_tail.splitlines():
+                print(f"      {line}", flush=True)
+        if stderr_tail:
+            print("    stderr (tail):", flush=True)
+            for line in stderr_tail.splitlines():
+                print(f"      {line}", flush=True)
+
+
+def _science_stage(label, function):
+    print(f"[science] {label:<38} ... ", end="", flush=True)
+    started = time.perf_counter()
+    result = function()
+    print(f"DONE  {time.perf_counter() - started:.1f}s", flush=True)
+    return result
+
+
+def _run_command_check(label, command, timeout_seconds=900):
+    started = time.perf_counter()
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=PROJECT_ROOT,
+            text=True,
+            capture_output=True,
+            timeout=float(timeout_seconds),
+            check=False,
+        )
+    except subprocess.TimeoutExpired as error:
+        return {
+            "name": label,
+            "status": "FAIL",
+            "returncode": None,
+            "wall_seconds": time.perf_counter() - started,
+            "stdout_tail": _tail(error.stdout),
+            "stderr_tail": _tail(error.stderr),
+            "reason": f"timed out after {timeout_seconds:g} s",
+        }
+    except OSError as error:
+        return {
+            "name": label,
+            "status": "FAIL",
+            "returncode": None,
+            "wall_seconds": time.perf_counter() - started,
+            "stdout_tail": "",
+            "stderr_tail": str(error),
+            "reason": "could not launch check",
+        }
+
+    return {
+        "name": label,
+        "status": "PASS" if completed.returncode == 0 else "FAIL",
+        "returncode": int(completed.returncode),
+        "wall_seconds": time.perf_counter() - started,
+        "stdout_tail": _tail(completed.stdout),
+        "stderr_tail": _tail(completed.stderr),
+    }
+
+
+def golden_regressions(mode):
+    """Run the critical standalone regression scripts from one command."""
+    checks = list(GOLDEN_QUICK_CHECKS)
+    if mode in {"standard", "full"}:
+        checks.extend(GOLDEN_STANDARD_EXTRA)
+    if mode == "full":
+        checks.extend(GOLDEN_FULL_EXTRA)
+
+    total = len(checks) + (1 if mode == "full" else 0)
+    rows = []
+
+    print()
+    print("Golden regression checks", flush=True)
+    print("-" * 72, flush=True)
+
+    for index, (label, filename) in enumerate(checks, start=1):
+        _progress_start(index, total, label)
+
+        if filename is None:
+            command = [
+                sys.executable,
+                "-c",
+                (
+                    "import lab; import batch_runner; "
+                    "import characterisation_runner; "
+                    "print('main imports PASS')"
+                ),
+            ]
+        else:
+            path = TESTS_ROOT / filename
+            if not path.exists():
+                result = {
+                    "name": label,
+                    "status": "FAIL",
+                    "returncode": None,
+                    "wall_seconds": 0.0,
+                    "stdout_tail": "",
+                    "stderr_tail": "",
+                    "reason": f"missing expected regression: {path}",
+                }
+                rows.append(result)
+                _progress_finish(result)
+                continue
+            command = [sys.executable, str(path)]
+
+        result = _run_command_check(label, command)
+        rows.append(result)
+        _progress_finish(result)
+
+    if mode == "full":
+        label = "pytest suite"
+        _progress_start(total, total, label)
+        result = _run_command_check(
+            label,
+            [sys.executable, "-m", "pytest", "-q"],
+            timeout_seconds=1800,
+        )
+        rows.append(result)
+        _progress_finish(result)
+
+    print("-" * 72, flush=True)
+    regression_status = (
+        "PASS"
+        if all(row["status"] == "PASS" for row in rows)
+        else "FAIL"
+    )
+    print(f"Regression layer: {regression_status}", flush=True)
+
+    return {
+        "status": regression_status,
+        "checks": rows,
+    }
+
+
+def _recording_coordination_metrics(path):
+    """Read one recorder NPZ and measure heavy-atom coordination over time.
+
+    Bond coordination deliberately uses the recorder/display convention
+    taper > 0.35.  Radial coordination is also reported separately so a
+    partial fifth contact is not silently promoted into a full chemical bond.
+    """
+    with np.load(path, allow_pickle=False) as data:
+        positions = np.asarray(data["positions"], dtype=float)
+        times = np.asarray(data["times"], dtype=float)
+
+        if "box_sizes" in data.files:
+            boxes = np.asarray(data["box_sizes"], dtype=float)
+        else:
+            boxes = np.full(len(positions), float(data["box_size"]), dtype=float)
+
+        if "frame_types" in data.files:
+            frame_types = np.asarray(data["frame_types"], dtype=np.int64)
+        else:
+            initial = np.asarray(
+                R.types_from_symbols([str(value) for value in data["symbols"]]),
+                dtype=np.int64,
+            )
+            frame_types = np.repeat(initial[None, :], len(positions), axis=0)
+
+    carbon = int(R.ELEMENT_INDEX["C"])
+    nitrogen = int(R.ELEMENT_INDEX["N"])
+    hydrogen = int(R.ELEMENT_INDEX["H"])
+
+    max_c_coord = 0
+    max_n_coord = 0
+    max_c_over = 0
+    max_n_over = 0
+    max_c_radial = 0.0
+    max_n_radial = 0.0
+    min_heavy_distance = float("inf")
+    final_c_over = 0
+    final_n_over = 0
+
+    for frame_index, frame in enumerate(positions):
+        types = frame_types[frame_index]
+        count = len(frame)
+        first, second = np.triu_indices(count, k=1)
+
+        offset = frame[second] - frame[first]
+        box = float(boxes[frame_index])
+        offset -= box * np.round(offset / box)
+        distance = np.linalg.norm(offset, axis=1)
+
+        inner = R.CUTOFF_INNER[types[first], types[second]]
+        outer = R.CUTOFF_OUTER[types[first], types[second]]
+        taper = R.smooth_cutoff(distance, inner, outer)
+
+        bonded = taper > 0.35
+        coordination = np.zeros(count, dtype=np.int64)
+        np.add.at(coordination, first[bonded], 1)
+        np.add.at(coordination, second[bonded], 1)
+
+        radial = np.zeros(count, dtype=float)
+        np.add.at(radial, first, taper)
+        np.add.at(radial, second, taper)
+
+        c_mask = types == carbon
+        n_mask = types == nitrogen
+        if np.any(c_mask):
+            c_coord = coordination[c_mask]
+            max_c_coord = max(max_c_coord, int(c_coord.max()))
+            c_over = int(np.count_nonzero(c_coord > 4))
+            max_c_over = max(max_c_over, c_over)
+            max_c_radial = max(max_c_radial, float(radial[c_mask].max()))
+        else:
+            c_over = 0
+
+        if np.any(n_mask):
+            n_coord = coordination[n_mask]
+            max_n_coord = max(max_n_coord, int(n_coord.max()))
+            n_over = int(np.count_nonzero(n_coord > 3))
+            max_n_over = max(max_n_over, n_over)
+            max_n_radial = max(max_n_radial, float(radial[n_mask].max()))
+        else:
+            n_over = 0
+
+        heavy_pair = (types[first] != hydrogen) & (types[second] != hydrogen)
+        if np.any(heavy_pair):
+            min_heavy_distance = min(
+                min_heavy_distance,
+                float(np.min(distance[heavy_pair])),
+            )
+
+        if frame_index == len(positions) - 1:
+            final_c_over = c_over
+            final_n_over = n_over
+
+    return {
+        "frames": int(len(positions)),
+        "end_time_fs": float(times[-1]) if len(times) else 0.0,
+        "final_carbon_overvalent": int(final_c_over),
+        "final_nitrogen_overvalent": int(final_n_over),
+        "maximum_simultaneous_carbon_overvalent": int(max_c_over),
+        "maximum_simultaneous_nitrogen_overvalent": int(max_n_over),
+        "maximum_carbon_bond_coordination": int(max_c_coord),
+        "maximum_nitrogen_bond_coordination": int(max_n_coord),
+        "maximum_carbon_radial_coordination": float(max_c_radial),
+        "maximum_nitrogen_radial_coordination": float(max_n_radial),
+        "minimum_heavy_heavy_distance_A": (
+            None if not np.isfinite(min_heavy_distance)
+            else float(min_heavy_distance)
+        ),
+    }
+
+
+def dense_soup_stress(mode):
+    """Run a short production Optimised-Valence soup in full mode.
+
+    This is intentionally a system-level invariant check rather than a product
+    benchmark.  It exists to catch failures such as the former heavy-valence
+    correction deleting the base radial over-coordination penalty: reference
+    and optimised implementations can agree perfectly while both are wrong.
+
+    Two deterministic 330-atom seeds for 1 ps are enough to expose that old
+    runaway while keeping the full validation practical.
+    """
+    if mode != "full":
+        return {
+            "status": "NOT RUN",
+            "reason": "dense production stress is reserved for --full",
+        }
+
+    with tempfile.TemporaryDirectory(prefix="chemistry_golden_") as temporary:
+        output = Path(temporary) / "dense_soup"
+        command = [
+            sys.executable,
+            str(PROJECT_ROOT / "batch_runner.py"),
+            "--mixture", "amino carbon growth",
+            "--seed-list", "0,1",
+            "--ps", "1",
+            "--box", "19",
+            "--physics", "optimised-valence",
+            "--group", "2",
+            "--hot-until-fs", "2000",
+            "--hot-temperature", "500",
+            "--cool-temperature", "250",
+            "--out", str(output),
+        ]
+
+        print()
+        print("Dense production stress", flush=True)
+        print("-" * 72, flush=True)
+        print(
+            "[stress] 2 seeds x 330 atoms x 1 ps "
+            "(optimised-valence, group 2) ... ",
+            end="",
+            flush=True,
+        )
+        execution = _run_command_check(
+            "dense optimised-valence soup",
+            command,
+            timeout_seconds=1800,
+        )
+        print(
+            f"{execution['status']}  "
+            f"{float(execution.get('wall_seconds', 0.0)):.1f}s",
+            flush=True,
+        )
+        if execution["status"] != "PASS":
+            return {
+                "status": "FAIL",
+                "execution": execution,
+                "runs": [],
+                "reason": "batch_runner did not complete successfully",
+            }
+
+        index_path = output / "index.json"
+        if not index_path.exists():
+            return {
+                "status": "FAIL",
+                "execution": execution,
+                "runs": [],
+                "reason": "batch_runner completed without index.json",
+            }
+
+        index_rows = json.loads(index_path.read_text())
+        run_metrics = []
+        for row in index_rows:
+            recording_path = output / row["file"]
+            if not recording_path.exists():
+                return {
+                    "status": "FAIL",
+                    "execution": execution,
+                    "runs": run_metrics,
+                    "reason": f"missing recording {recording_path.name}",
+                }
+
+            metrics = _recording_coordination_metrics(recording_path)
+            metrics.update({
+                "seed": int(row["seed"]),
+                "stable": bool(row.get("stable")),
+                "numerical_failures": int(row.get("numerical_failures", 0)),
+                "move_cap_events": int(row.get("move_cap_events", 0)),
+                "final_temperature_K": float(row.get("final_temperature", 0.0)),
+                "final_potential_eV": float(row.get("final_potential", 0.0)),
+            })
+            run_metrics.append(metrics)
+            print(
+                "    seed "
+                f"{metrics['seed']}: final C/N over-valent "
+                f"{metrics['final_carbon_overvalent']}/"
+                f"{metrics['final_nitrogen_overvalent']}, "
+                "max C/N coordination "
+                f"{metrics['maximum_carbon_bond_coordination']}/"
+                f"{metrics['maximum_nitrogen_bond_coordination']}",
+                flush=True,
+            )
+
+        # These are invariant/stress thresholds, not chemistry calibration
+        # targets. They allow a single transient fifth C / fourth N contact,
+        # but reject the former monotonic many-centre collapse.
+        failures = []
+        if len(run_metrics) != 2:
+            failures.append(f"expected 2 completed seeds, found {len(run_metrics)}")
+
+        for row in run_metrics:
+            prefix = f"seed {row['seed']}"
+            if not row["stable"] or row["numerical_failures"]:
+                failures.append(f"{prefix}: numerical/integration failure")
+            if row["final_carbon_overvalent"] != 0:
+                failures.append(
+                    f"{prefix}: {row['final_carbon_overvalent']} final over-valent carbons"
+                )
+            if row["final_nitrogen_overvalent"] != 0:
+                failures.append(
+                    f"{prefix}: {row['final_nitrogen_overvalent']} final over-valent nitrogens"
+                )
+            if row["maximum_simultaneous_carbon_overvalent"] > 2:
+                failures.append(
+                    f"{prefix}: carbon over-valence accumulated "
+                    f"({row['maximum_simultaneous_carbon_overvalent']} simultaneous)"
+                )
+            if row["maximum_simultaneous_nitrogen_overvalent"] > 2:
+                failures.append(
+                    f"{prefix}: nitrogen over-valence accumulated "
+                    f"({row['maximum_simultaneous_nitrogen_overvalent']} simultaneous)"
+                )
+            if row["maximum_carbon_bond_coordination"] > 5:
+                failures.append(
+                    f"{prefix}: carbon coordination reached "
+                    f"{row['maximum_carbon_bond_coordination']}"
+                )
+            if row["maximum_nitrogen_bond_coordination"] > 4:
+                failures.append(
+                    f"{prefix}: nitrogen coordination reached "
+                    f"{row['maximum_nitrogen_bond_coordination']}"
+                )
+
+        return {
+            "status": "PASS" if not failures else "FAIL",
+            "execution": execution,
+            "runs": run_metrics,
+            "failures": failures,
+            "thresholds": {
+                "final_carbon_overvalent": 0,
+                "final_nitrogen_overvalent": 0,
+                "maximum_simultaneous_carbon_overvalent": 2,
+                "maximum_simultaneous_nitrogen_overvalent": 2,
+                "maximum_carbon_bond_coordination": 5,
+                "maximum_nitrogen_bond_coordination": 4,
+                "bond_definition": "radial taper > 0.35",
+                "note": (
+                    "radial coordination is reported but not used as an integer "
+                    "bond-count failure criterion"
+                ),
+            },
+        }
+
+
+def golden_validation(mode):
+    regressions = golden_regressions(mode)
+    dense = dense_soup_stress(mode)
+    dense_ok = dense["status"] in {"PASS", "NOT RUN"}
+    return {
+        "status": (
+            "PASS"
+            if regressions["status"] == "PASS" and dense_ok
+            else "FAIL"
+        ),
+        "regressions": regressions,
+        "dense_soup_stress": dense,
+    }
 
 
 def git_revision():
@@ -643,26 +1146,72 @@ def large_mixture(mode):
 
 def build_report(mode):
     started = time.perf_counter()
-    barriers = barrier_validation(mode)
+
+    print()
+    print("=" * 72, flush=True)
+    print(f"CHEMISTRYMODEL VALIDATION - {str(mode).upper()}", flush=True)
+    print("=" * 72, flush=True)
+
+    golden = _science_stage(
+        "golden implementation/invariant suite",
+        lambda: golden_validation(mode),
+    )
+    barriers = _science_stage(
+        "reaction barrier scans",
+        lambda: barrier_validation(mode),
+    )
+    reaction_energies = _science_stage(
+        "whole-model reaction energies",
+        lambda: whole_model_reaction_energies(mode),
+    )
+    endurance = _science_stage(
+        "stable-molecule NVE endurance",
+        nve_endurance,
+    )
+    perf = _science_stage(
+        "runtime performance probe",
+        performance,
+    )
+    mixture_result = _science_stage(
+        "large-mixture evidence",
+        lambda: large_mixture(mode),
+    )
+
+    print("[science] static tables/geometry/curves          ... ", end="", flush=True)
+    static_started = time.perf_counter()
+    parameter_consistency = {
+        "audit": parameter_audit(),
+        "numpy_torch": torch_consistency(),
+    }
+    geometry = geometry_rows(FIT_GEOMETRY, True)
+    holdout_geometry = geometry_rows(HOLDOUT_GEOMETRY, False)
+    angles = angle_validation()
+    harmonic_curvature = curvature_validation()
+    potential_curve_rows = potential_curves()
+    dissociation_rows = dissociation_validation()
+    depth_rows = bond_depth_diagnostics()
+    dynamic_rows = dynamic_reactions()
+    collision_rows = collision_abstraction(barriers)
+    print(f"DONE  {time.perf_counter() - static_started:.1f}s", flush=True)
+
     report = {
         "schema_version": SCHEMA_VERSION,
+        "golden_validation": golden,
         "mode": mode, "git_revision": git_revision(),
         "rules": {"force_field_modified": False, "overall_accuracy_percentage": None,
                   "fit_targets_are_independent_validation": False},
-        "parameter_consistency": {
-            "audit": parameter_audit(), "numpy_torch": torch_consistency(),
-        },
-        "geometry": geometry_rows(FIT_GEOMETRY, True),
-        "holdout_geometry": geometry_rows(HOLDOUT_GEOMETRY, False),
-        "angles": angle_validation(),
-        "harmonic_curvature": curvature_validation(),
-        "potential_curves": potential_curves(),
-        "dissociation_energies": dissociation_validation(),
-        "bond_depth_diagnostics": bond_depth_diagnostics(),
-        "whole_model_reaction_energies": whole_model_reaction_energies(mode),
+        "parameter_consistency": parameter_consistency,
+        "geometry": geometry,
+        "holdout_geometry": holdout_geometry,
+        "angles": angles,
+        "harmonic_curvature": harmonic_curvature,
+        "potential_curves": potential_curve_rows,
+        "dissociation_energies": dissociation_rows,
+        "bond_depth_diagnostics": depth_rows,
+        "whole_model_reaction_energies": reaction_energies,
         "reaction_barriers": barriers,
-        "dynamic_reactions": dynamic_reactions(),
-        "collision_abstraction": collision_abstraction(barriers),
+        "dynamic_reactions": dynamic_rows,
+        "collision_abstraction": collision_rows,
         "validation_mixtures": {
             "stable": "[validation] stable small molecules",
             "nitrogen": "[validation] nitrogen radicals",
@@ -670,13 +1219,13 @@ def build_report(mode):
             "limitation": "current mixture schema cannot combine loose atoms and molecules in one preset",
             "compatibility": "additive presets only; existing mixture definitions and defaults are unchanged",
         },
-        "stable_molecule_endurance": nve_endurance(),
+        "stable_molecule_endurance": endurance,
         "numerical_stability": {
             "status": STATUS["good"],
             "source": "NVE endurance plus focused batch health",
         },
-        "performance": performance(),
-        "large_mixture": large_mixture(mode),
+        "performance": perf,
+        "large_mixture": mixture_result,
     }
     report["transferability"] = summarize_transferability(report)
     report["baseline_summary"] = {
@@ -759,8 +1308,28 @@ def markdown(report):
         f"Mode: `{report['mode']}`",
         "Force-field parameters changed by this report: **no**", "",
         "Fit targets are labelled and are not counted as independent validation.", "",
-        "## Baseline summary", "",
+        "## Golden whole-model validation", "",
+        f"**FINAL GOLDEN RESULT: {report['golden_validation']['status']}**", "",
     ]
+    for row in report["golden_validation"]["regressions"]["checks"]:
+        lines.append(
+            f"- **{row['name']}**: {row['status']} "
+            f"({row['wall_seconds']:.2f} s)"
+        )
+    dense = report["golden_validation"]["dense_soup_stress"]
+    lines.append(f"- **Dense optimised-valence soup stress**: {dense['status']}")
+    if dense.get("runs"):
+        for row in dense["runs"]:
+            lines.append(
+                f"  - seed {row['seed']}: final C/N over-valent "
+                f"{row['final_carbon_overvalent']}/"
+                f"{row['final_nitrogen_overvalent']}; max C/N coordination "
+                f"{row['maximum_carbon_bond_coordination']}/"
+                f"{row['maximum_nitrogen_bond_coordination']}"
+            )
+    if dense.get("failures"):
+        lines.extend(f"  - FAIL: {item}" for item in dense["failures"])
+    lines += ["", "## Baseline summary", ""]
     for category in ("strong", "weak", "uncertain"):
         lines.append(f"**{category.title()}**")
         lines.extend(f"- {item}" for item in report["baseline_summary"][category])
@@ -864,6 +1433,22 @@ def main():
         print(rendered)
     else:
         print(f"wrote {options.report} and {options.json_path}")
+
+    golden = report["golden_validation"]
+    print()
+    print("=" * 60)
+    print("CHEMISTRYMODEL GOLDEN VALIDATION")
+    print("=" * 60)
+    for row in golden["regressions"]["checks"]:
+        print(f"{row['status']:4s}  {row['name']}")
+    dense = golden["dense_soup_stress"]
+    print(f"{dense['status']:4s}  dense optimised-valence soup stress")
+    print("-" * 60)
+    print(f"FINAL RESULT: {golden['status']}")
+    print("=" * 60)
+
+    if golden["status"] != "PASS":
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

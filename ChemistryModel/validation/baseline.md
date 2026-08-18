@@ -1,10 +1,38 @@
 # ChemistryModel independent validation report
 
-Revision: `dd06d9c3c87dcac0e028199b90c769ad54daaa59`
+Revision: `2db384ca64b46493d6c7827282d0fde69b322d93`
 Mode: `full`
 Force-field parameters changed by this report: **no**
 
 Fit targets are labelled and are not counted as independent validation.
+
+## Golden whole-model validation
+
+**FINAL GOLDEN RESULT: PASS**
+
+- **main runtime imports**: PASS (2.03 s)
+- **heavy overcoordination guard**: PASS (1.91 s)
+- **runner physics selection**: PASS (1.90 s)
+- **heavy valence density matrix**: PASS (1.67 s)
+- **optimised valence integration**: PASS (30.95 s)
+- **batched heavy valence**: PASS (127.44 s)
+- **large heavy valence states**: PASS (2.11 s)
+- **cached H topology**: PASS (11.29 s)
+- **factorised H grouped execution**: PASS (20.49 s)
+- **H-state components**: PASS (3.01 s)
+- **H-state factorised**: PASS (4.04 s)
+- **H-state factorised NVE**: PASS (14.19 s)
+- **index-select gather**: PASS (41.22 s)
+- **smooth valence NVE**: PASS (22.30 s)
+- **valence-state factorised fixed**: PASS (12.74 s)
+- **valence-state promotion**: PASS (12.47 s)
+- **molecule library**: PASS (2.93 s)
+- **heavy state pressure diagnostics**: PASS (1.93 s)
+- **smooth valence force probe**: PASS (3.53 s)
+- **pytest suite**: PASS (103.37 s)
+- **Dense optimised-valence soup stress**: PASS
+  - seed 0: final C/N over-valent 0/0; max C/N coordination 4/4
+  - seed 1: final C/N over-valent 0/0; max C/N coordination 4/3
 
 ## Baseline summary
 
@@ -122,7 +150,7 @@ These use relaxed complete reactant and product species through the production T
 Frozen scans are screening diagnostics; relaxed full-mode scans are the stronger result.
 
 - **formaldehyde**: WEAK; model 0.126 eV (relaxed scan).
-- **water**: GOOD; model 0.344 eV (relaxed scan).
+- **water**: WEAK; model 0.000 eV (relaxed scan).
 - **methane**: WEAK; model 0.165 eV (relaxed scan).
 - **ammonia**: INSUFFICIENT REFERENCE DATA; model 0.168 eV (relaxed scan).
 
@@ -146,7 +174,7 @@ Frozen scans are screening diagnostics; relaxed full-mode scans are the stronger
 
 ## 13. Performance
 
-- CPU probe: 442.3 steps/s (0.226 s for 100 steps).
+- CPU probe: 444.8 steps/s (0.225 s for 100 steps).
 
 ## 14. Transferability
 

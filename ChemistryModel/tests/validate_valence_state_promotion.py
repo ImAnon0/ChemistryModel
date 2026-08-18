@@ -10,13 +10,23 @@ against the promoted experimental engine:
 Checks:
     1. energy equivalence on all 106 QM microscope geometries
     2. force equivalence at representative water geometries
-    3. short matched NVE trajectory equivalence for:
+    3. shared-geometry dynamic equivalence along independently generated
+       scratch and promoted-module NVE trajectories for:
          - intact water
          - water state-competition geometry
          - H2O2
 
+The dynamic check deliberately does NOT require two independently integrated
+trajectories to remain bit-for-bit identical. Tiny round-off-level force
+differences can grow into trajectory separation in a competitive/chaotic
+region even when the two implementations evaluate the same potential.
+
+Instead, both implementations are re-evaluated on the exact same sampled
+geometry. That tests the actual promotion invariant: same geometry -> same
+energy and force.
+
 If this passes, promotion from scratch prototype -> engine module did not
-change the validated physics.
+change the validated physics within numerical tolerance.
 
 Run:
     py validate_valence_state_promotion.py
@@ -47,12 +57,12 @@ SEED = 913
 FORCE_POINTS = (1.080, 1.160, 1.320, 1.535)
 
 NVE_STEPS = 250
+DYNAMIC_SAMPLE_INTERVAL = 25
 
 ENERGY_TOL = 1.0e-10
 FORCE_TOL = 1.0e-9
-NVE_ENERGY_TOL = 1.0e-9
-NVE_POSITION_TOL = 1.0e-10
-NVE_VELOCITY_TOL = 1.0e-10
+DYNAMIC_ENERGY_TOL = 1.0e-10
+DYNAMIC_FORCE_TOL = 1.0e-9
 
 
 def load_payload():
@@ -390,112 +400,217 @@ def nve_systems(payload):
     ]
 
 
-def promotion_nve_check(payload):
+def _evaluate_same_geometry(symbols, coordinates):
+    """Evaluate scratch and promoted module on one identical geometry.
+
+    Fresh evaluator instances are used deliberately. This prevents either
+    driver's neighbour/cache history from influencing the comparison.
+    """
+    scratch = build_simulation(
+        SmoothValenceForceSimulation,
+        symbols,
+        coordinates,
+    )
+
+    module = build_simulation(
+        ValenceStateBatchedSimulation,
+        symbols,
+        coordinates,
+    )
+
+    scratch_energy, scratch_force = live_energy_force(
+        scratch,
+        coordinates,
+    )
+
+    module_energy, module_force = live_energy_force(
+        module,
+        coordinates,
+    )
+
+    force_difference = (
+        module_force - scratch_force
+    )
+
+    return {
+        "energy_diff": (
+            module_energy - scratch_energy
+        ),
+        "max_force_diff": float(
+            np.max(
+                np.abs(
+                    force_difference
+                )
+            )
+        ),
+        "rms_force_diff": float(
+            np.sqrt(
+                np.mean(
+                    force_difference ** 2
+                )
+            )
+        ),
+    }
+
+
+def promotion_dynamic_check(payload):
+    """Compare both implementations on identical dynamically visited states.
+
+    Each implementation is allowed to integrate its own NVE trajectory. At
+    regular intervals we take that driver's current geometry and ask fresh
+    scratch/module evaluators to compute energy and force on the SAME
+    coordinates.
+
+    This separates two questions that the old validator mixed together:
+
+        implementation equivalence:
+            same geometry -> same E/F
+
+        trajectory identity:
+            two independently integrated chaotic trajectories remain exactly
+            coincident for hundreds of steps
+
+    Only the first is a valid promotion requirement.
+    """
     results = []
 
     for system in nve_systems(payload):
-        scratch = build_simulation(
+        scratch_driver = build_simulation(
             SmoothValenceForceSimulation,
             system["symbols"],
             system["positions"],
         )
 
-        module = build_simulation(
+        module_driver = build_simulation(
             ValenceStateBatchedSimulation,
             system["symbols"],
             system["positions"],
         )
 
-        # Force identical starting kinetic state.
-        module.velocities = (
-            scratch.velocities.detach().clone()
+        # Give both drivers the same initial kinetic state so the diagnostic
+        # still begins from a matched physical condition. Their subsequent
+        # coordinate separation is reported but is not a pass/fail criterion.
+        module_driver.velocities = (
+            scratch_driver.velocities.detach().clone()
         )
 
-        worst_total_energy_difference = 0.0
-        worst_position_difference = 0.0
-        worst_velocity_difference = 0.0
-        worst_force_difference = 0.0
+        worst_energy = {
+            "abs": 0.0,
+            "signed": 0.0,
+            "driver": None,
+            "step": 0,
+        }
+
+        worst_force = {
+            "max": 0.0,
+            "rms": 0.0,
+            "driver": None,
+            "step": 0,
+        }
+
+        samples = 0
+
+        drivers = (
+            ("scratch", scratch_driver),
+            ("module", module_driver),
+        )
 
         for step in range(NVE_STEPS + 1):
-            scratch_total = (
-                scratch.potential_energy
-                + scratch.kinetic_energy
-            )
-
-            module_total = (
-                module.potential_energy
-                + module.kinetic_energy
-            )
-
-            total_difference = abs(
-                module_total
-                - scratch_total
-            )
-
-            position_difference = float(
-                torch.max(
-                    torch.abs(
-                        module.positions
-                        - scratch.positions
+            if (
+                step % DYNAMIC_SAMPLE_INTERVAL == 0
+                or step == NVE_STEPS
+            ):
+                for driver_name, driver in drivers:
+                    coordinates = (
+                        driver.positions
+                        .detach()
+                        .cpu()
+                        .numpy()
+                        .copy()
                     )
-                ).detach().cpu()
-            )
 
-            velocity_difference = float(
-                torch.max(
-                    torch.abs(
-                        module.velocities
-                        - scratch.velocities
+                    comparison = _evaluate_same_geometry(
+                        system["symbols"],
+                        coordinates,
                     )
-                ).detach().cpu()
-            )
 
-            force_difference = float(
-                torch.max(
-                    torch.abs(
-                        module.forces
-                        - scratch.forces
+                    samples += 1
+
+                    absolute_energy = abs(
+                        comparison["energy_diff"]
                     )
-                ).detach().cpu()
-            )
 
-            worst_total_energy_difference = max(
-                worst_total_energy_difference,
-                total_difference,
-            )
+                    if absolute_energy > worst_energy["abs"]:
+                        worst_energy = {
+                            "abs": absolute_energy,
+                            "signed": comparison[
+                                "energy_diff"
+                            ],
+                            "driver": driver_name,
+                            "step": step,
+                        }
 
-            worst_position_difference = max(
-                worst_position_difference,
-                position_difference,
-            )
-
-            worst_velocity_difference = max(
-                worst_velocity_difference,
-                velocity_difference,
-            )
-
-            worst_force_difference = max(
-                worst_force_difference,
-                force_difference,
-            )
+                    if (
+                        comparison["max_force_diff"]
+                        > worst_force["max"]
+                    ):
+                        worst_force = {
+                            "max": comparison[
+                                "max_force_diff"
+                            ],
+                            "rms": comparison[
+                                "rms_force_diff"
+                            ],
+                            "driver": driver_name,
+                            "step": step,
+                        }
 
             if step == NVE_STEPS:
                 break
 
-            scratch.step(1)
-            module.step(1)
+            scratch_driver.step(1)
+            module_driver.step(1)
+
+        final_position_difference = float(
+            torch.max(
+                torch.abs(
+                    module_driver.positions
+                    - scratch_driver.positions
+                )
+            ).detach().cpu()
+        )
+
+        final_velocity_difference = float(
+            torch.max(
+                torch.abs(
+                    module_driver.velocities
+                    - scratch_driver.velocities
+                )
+            ).detach().cpu()
+        )
 
         results.append({
             "system": system["name"],
-            "max_total_energy_diff": worst_total_energy_difference,
-            "max_position_diff": worst_position_difference,
-            "max_velocity_diff": worst_velocity_difference,
-            "max_force_diff": worst_force_difference,
+            "samples": samples,
+            "max_same_geometry_energy_diff": worst_energy["abs"],
+            "signed_energy_diff_at_worst": worst_energy["signed"],
+            "energy_worst_driver": worst_energy["driver"],
+            "energy_worst_step": worst_energy["step"],
+            "max_same_geometry_force_diff": worst_force["max"],
+            "rms_force_diff_at_worst": worst_force["rms"],
+            "force_worst_driver": worst_force["driver"],
+            "force_worst_step": worst_force["step"],
+            "final_independent_position_diff": (
+                final_position_difference
+            ),
+            "final_independent_velocity_diff": (
+                final_velocity_difference
+            ),
             "scratch_caps": int(
-                scratch.capped_steps
+                scratch_driver.capped_steps
             ),
             "module_caps": int(
-                module.capped_steps
+                module_driver.capped_steps
             ),
         })
 
@@ -566,23 +681,42 @@ def main():
 
     print()
 
-    print("3. MATCHED NVE TRAJECTORY EQUIVALENCE")
+    print("3. SHARED-GEOMETRY DYNAMIC EQUIVALENCE")
     print(
-        f"  steps per system      : {NVE_STEPS}"
+        f"  trajectory steps      : {NVE_STEPS}"
+    )
+    print(
+        f"  sample interval       : {DYNAMIC_SAMPLE_INTERVAL} steps"
+    )
+    print(
+        "  criterion             : same geometry -> same energy/force"
+    )
+    print(
+        "  trajectory separation : reported only; not a failure criterion"
     )
 
-    nve_results = promotion_nve_check(
+    dynamic_results = promotion_dynamic_check(
         payload
     )
 
-    for row in nve_results:
+    for row in dynamic_results:
         print(
             f"  {row['system']:<28s} "
-            f"dEtot_max={row['max_total_energy_diff']:.6e} eV  "
-            f"dpos_max={row['max_position_diff']:.6e} A  "
-            f"dvel_max={row['max_velocity_diff']:.6e} A/fs  "
-            f"dF_max={row['max_force_diff']:.6e} eV/A  "
+            f"samples={row['samples']:>3d}  "
+            f"dE_same_max={row['max_same_geometry_energy_diff']:.6e} eV  "
+            f"dF_same_max={row['max_same_geometry_force_diff']:.6e} eV/A  "
+            f"final dpos={row['final_independent_position_diff']:.6e} A  "
             f"caps={row['scratch_caps']}/{row['module_caps']}"
+        )
+        print(
+            f"    worst dE: driver={row['energy_worst_driver']} "
+            f"step={row['energy_worst_step']}  "
+            f"signed={row['signed_energy_diff_at_worst']:+.6e} eV"
+        )
+        print(
+            f"    worst dF: driver={row['force_worst_driver']} "
+            f"step={row['force_worst_step']}  "
+            f"RMS={row['rms_force_diff_at_worst']:.6e} eV/A"
         )
 
     max_force_difference = max(
@@ -590,31 +724,25 @@ def main():
         for row in force_results
     )
 
-    max_nve_energy_difference = max(
-        row["max_total_energy_diff"]
-        for row in nve_results
+    max_dynamic_energy_difference = max(
+        row["max_same_geometry_energy_diff"]
+        for row in dynamic_results
     )
 
-    max_nve_position_difference = max(
-        row["max_position_diff"]
-        for row in nve_results
-    )
-
-    max_nve_velocity_difference = max(
-        row["max_velocity_diff"]
-        for row in nve_results
+    max_dynamic_force_difference = max(
+        row["max_same_geometry_force_diff"]
+        for row in dynamic_results
     )
 
     passed = (
         worst_energy[0] <= ENERGY_TOL
         and max_force_difference <= FORCE_TOL
-        and max_nve_energy_difference <= NVE_ENERGY_TOL
-        and max_nve_position_difference <= NVE_POSITION_TOL
-        and max_nve_velocity_difference <= NVE_VELOCITY_TOL
+        and max_dynamic_energy_difference <= DYNAMIC_ENERGY_TOL
+        and max_dynamic_force_difference <= DYNAMIC_FORCE_TOL
         and all(
             row["scratch_caps"]
             == row["module_caps"]
-            for row in nve_results
+            for row in dynamic_results
         )
     )
 
@@ -623,12 +751,14 @@ def main():
 
     if passed:
         print(
-            "  PASS — promoted module reproduces the validated scratch "
-            "physics within numerical tolerance."
+            "  PASS — promoted module reproduces the corrected scratch "
+            "physics on static and dynamically visited shared geometries "
+            "within numerical tolerance."
         )
     else:
         print(
-            "  FAIL — promotion changed the validated scratch behaviour."
+            "  FAIL — promoted module differs from the corrected scratch "
+            "implementation on at least one identical geometry."
         )
 
         raise SystemExit(1)
