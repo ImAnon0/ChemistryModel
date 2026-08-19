@@ -51,7 +51,7 @@ class ManagerStore:
                 raise ValueError(f"candidate {candidate_id!r} must be an object")
             if candidate.get("id") != candidate_id:
                 raise ValueError(f"candidate {candidate_id!r} has mismatched identity")
-            coerce_state(candidate.get("state"))
+            candidate["state"] = coerce_state(candidate.get("state")).value
 
         return document
 
@@ -100,7 +100,7 @@ class ManagerStore:
 
             document["candidates"][candidate_id] = {
                 "id": candidate_id,
-                "state": CandidateState.WAITING_FULL_CM.value,
+                "state": CandidateState.WAITING_CHARACTERISATION.value,
                 "source": {
                     "kind": "formation_event",
                     "event_id": event_id,

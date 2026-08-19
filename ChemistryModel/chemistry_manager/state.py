@@ -4,14 +4,14 @@ from enum import Enum
 
 
 class CandidateState(str, Enum):
-    WAITING_FULL_CM = "WAITING_FULL_CM"
+    WAITING_CHARACTERISATION = "WAITING_CHARACTERISATION"
     WAITING_QM = "WAITING_QM"
     QM_VALIDATED = "QM_VALIDATED"
     QM_REJECTED = "QM_REJECTED"
 
 
 TRANSITIONS = {
-    CandidateState.WAITING_FULL_CM: {CandidateState.WAITING_QM},
+    CandidateState.WAITING_CHARACTERISATION: {CandidateState.WAITING_QM},
     CandidateState.WAITING_QM: {
         CandidateState.QM_VALIDATED,
         CandidateState.QM_REJECTED,
@@ -26,6 +26,8 @@ def coerce_state(value):
 
     if isinstance(value, CandidateState):
         return value
+    if str(value) == "WAITING_FULL_CM":
+        return CandidateState.WAITING_CHARACTERISATION
     return CandidateState(str(value))
 
 
@@ -37,4 +39,3 @@ def require_transition(previous, following):
             f"invalid candidate transition: {previous.value} -> {following.value}"
         )
     return following
-

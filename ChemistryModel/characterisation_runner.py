@@ -76,6 +76,41 @@ def high_fidelity_parameters():
     }
 
 
+def simulation_class_for_physics(physics):
+    """Resolve a characterisation physics identifier to its existing engine."""
+    mode = str(physics)
+    if mode == "standard":
+        from batched_torch import BatchedReactiveSimulation
+        return BatchedReactiveSimulation
+    if mode == "high_fidelity":
+        from high_fidelity_torch import HighFidelityBatchedReactiveSimulation
+        return HighFidelityBatchedReactiveSimulation
+    if mode == "optimised-valence":
+        from valence_state_optimised_torch import (
+            OptimisedValenceStateBatchedSimulation,
+        )
+        return OptimisedValenceStateBatchedSimulation
+    raise ValueError(f"unknown characterisation physics: {physics!r}")
+
+
+def physics_metadata(physics, simulation=None):
+    """Return provenance from the class that will (or did) run the physics."""
+    mode = str(physics)
+    source = simulation if simulation is not None else simulation_class_for_physics(mode)
+    fallback_model = {
+        "standard": STANDARD_PHYSICS_MODEL,
+        "high_fidelity": HIGH_FIDELITY_PHYSICS_MODEL,
+    }.get(mode, mode)
+    return {
+        "physics_mode": mode,
+        "physics_model": getattr(source, "physics_model_name", fallback_model),
+        "physics_model_revision": getattr(source, "physics_model_revision", None),
+        "physics_parameters": (
+            high_fidelity_parameters() if mode == "high_fidelity" else {}
+        ),
+    }
+
+
 def heartbeat_path(folder):
     return os.path.join(folder, f".progress_{os.getpid()}.json")
 
@@ -247,17 +282,25 @@ def _cross_pair_arrays(positions, symbols, first_count, box_size):
     return distances, taper
 
 
-def _place_collision(first_positions, second_positions, centre, axis, centre_distance):
+def _place_collision(first_positions, second_positions, centre, axis,
+                     centre_distance, impact_offset=None):
     first_positions = np.asarray(first_positions, dtype=np.float64)
     second_positions = np.asarray(second_positions, dtype=np.float64)
+    impact_offset = np.zeros(3, dtype=np.float64) if impact_offset is None else np.asarray(
+        impact_offset, dtype=np.float64
+    )
 
     first = first_positions + centre - 0.5 * float(centre_distance) * axis
-    second = second_positions + centre + 0.5 * float(centre_distance) * axis
+    second = (
+        second_positions + centre + 0.5 * float(centre_distance) * axis
+        + impact_offset
+    )
     return first, second, np.vstack([first, second])
 
 
 def _safe_collision_layout(first_symbols, first_positions, second_symbols,
-                           second_positions, box_size, axis, requested_gap):
+                           second_positions, box_size, axis, requested_gap,
+                           impact_offset=None):
     """Place reactants outside the *actual* bond detector at t=0.
 
     The requested gap remains the starting point. If any cross-reactant pair
@@ -278,7 +321,8 @@ def _safe_collision_layout(first_symbols, first_positions, second_symbols,
 
     def evaluate(test_gap):
         first, second, combined = _place_collision(
-            first_positions, second_positions, centre, axis, base + test_gap
+            first_positions, second_positions, centre, axis, base + test_gap,
+            impact_offset=impact_offset,
         )
         distances, taper = _cross_pair_arrays(
             combined, symbols, first_count, box_size
@@ -353,7 +397,7 @@ def _centre_layout_in_box(first, second, box_size):
 def _safe_targeted_collision_layout(first_symbols, first_positions,
                                     second_symbols, second_positions,
                                     box_size, axis, requested_gap,
-                                    target_atom):
+                                    target_atom, impact_offset=None):
     """Aim the partner trajectory through one selected atom, safely.
 
     The molecule keeps its random orientation. A random attack axis is drawn,
@@ -370,6 +414,9 @@ def _safe_targeted_collision_layout(first_symbols, first_positions,
     axis = np.asarray(axis, dtype=np.float64)
     target_atom = int(target_atom)
     target_local = first_positions[target_atom]
+    impact_offset = np.zeros(3, dtype=np.float64) if impact_offset is None else np.asarray(
+        impact_offset, dtype=np.float64
+    )
     symbols = list(first_symbols) + list(second_symbols)
     first_count = len(first_symbols)
 
@@ -381,7 +428,10 @@ def _safe_targeted_collision_layout(first_symbols, first_positions,
     extra_distance = 0.0
 
     def evaluate(extra):
-        partner_centre = target_local + axis * (base_distance + float(extra))
+        partner_centre = (
+            target_local + axis * (base_distance + float(extra))
+            + impact_offset
+        )
         first = first_positions.copy()
         second = second_positions + partner_centre
         first, second, combined, shift = _centre_layout_in_box(
@@ -847,6 +897,28 @@ def _random_axis(generator):
     return axis / norm
 
 
+def _impact_offset(generator, axis, distance):
+    """Choose a reproducible lateral offset perpendicular to an approach ray."""
+
+    distance = float(distance)
+    if distance < 0:
+        raise ValueError("impact parameter cannot be negative")
+    if distance == 0:
+        return np.zeros(3, dtype=np.float64)
+
+    axis = np.asarray(axis, dtype=np.float64)
+    lateral = _random_axis(generator)
+    lateral -= axis * float(np.dot(lateral, axis))
+    norm = float(np.linalg.norm(lateral))
+    if norm <= 1e-12:
+        reference = np.array([1.0, 0.0, 0.0], dtype=np.float64)
+        if abs(float(np.dot(reference, axis))) > 0.9:
+            reference = np.array([0.0, 1.0, 0.0], dtype=np.float64)
+        lateral = np.cross(axis, reference)
+        norm = float(np.linalg.norm(lateral))
+    return lateral * (distance / norm)
+
+
 def _line_of_sight_axis(generator, positions, target_atom, partner_radius=0.0):
     """Choose a collision ray that actually exposes the selected atom.
 
@@ -980,7 +1052,7 @@ def minimum_pair_box_size(molecule, partner, start_gap, margin=4.0):
 
 def prepare_collision_box(molecule, partner, box_size, seed, start_gap,
                           impact_target="com", sampling_mode=None,
-                          target_atom=None):
+                          target_atom=None, impact_parameter=0.0):
     first_symbols, first_positions = _centred_positions(molecule)
     second_symbols, second_positions = _centred_positions(partner)
 
@@ -990,9 +1062,13 @@ def prepare_collision_box(molecule, partner, box_size, seed, start_gap,
     sampling_mode = str(sampling_mode)
     if sampling_mode not in ("targeted", "random_orientation", "targeted_random"):
         raise ValueError(f"unknown sampling mode: {sampling_mode}")
+    first_rotation = np.eye(3, dtype=np.float64)
+    second_rotation = np.eye(3, dtype=np.float64)
     if sampling_mode != "targeted":
-        first_positions = first_positions @ rotation_matrix(generator).T
-        second_positions = second_positions @ rotation_matrix(generator).T
+        first_rotation = rotation_matrix(generator)
+        second_rotation = rotation_matrix(generator)
+        first_positions = first_positions @ first_rotation.T
+        second_positions = second_positions @ second_rotation.T
 
     impact_target = str(impact_target or "com").lower()
     target_symbol = _aim_symbol(impact_target)
@@ -1021,6 +1097,7 @@ def prepare_collision_box(molecule, partner, box_size, seed, start_gap,
         if impact_target != "com" and not targeted:
             raise ValueError(f"unknown collision impact target: {impact_target}")
         axis = _random_axis(generator)
+        impact_offset = _impact_offset(generator, axis, impact_parameter)
         first_positions, second_positions, combined, safety = _safe_collision_layout(
             first_symbols,
             first_positions,
@@ -1029,6 +1106,7 @@ def prepare_collision_box(molecule, partner, box_size, seed, start_gap,
             box_size,
             axis,
             start_gap,
+            impact_offset=impact_offset,
         )
     else:
         axis, los_clearance, los_blockers = _line_of_sight_axis(
@@ -1037,6 +1115,7 @@ def prepare_collision_box(molecule, partner, box_size, seed, start_gap,
             target_atom,
             partner_radius=_radius(second_positions),
         )
+        impact_offset = _impact_offset(generator, axis, impact_parameter)
         first_positions, second_positions, combined, safety = (
             _safe_targeted_collision_layout(
                 first_symbols,
@@ -1047,6 +1126,7 @@ def prepare_collision_box(molecule, partner, box_size, seed, start_gap,
                 axis,
                 start_gap,
                 target_atom,
+                impact_offset=impact_offset,
             )
         )
         safety["line_of_sight_clearance_A"] = los_clearance
@@ -1061,6 +1141,10 @@ def prepare_collision_box(molecule, partner, box_size, seed, start_gap,
         "first_count": len(first_symbols),
         "second_count": len(second_symbols),
         "axis": axis.astype(np.float64),
+        "impact_parameter_A": float(impact_parameter),
+        "impact_offset_A": impact_offset.astype(np.float64),
+        "first_rotation": first_rotation,
+        "second_rotation": second_rotation,
         "centre_distance_A": centre_distance,
         "impact_target": impact_target,
         "sampling_mode": sampling_mode,
@@ -1119,6 +1203,12 @@ def apply_approach_velocities(simulation, infos, approach_factor):
         if first_mass <= 0 or second_mass <= 0 or total_mass <= 0:
             raise ValueError("collision partner has invalid mass")
 
+        original_v = local_v.copy()
+        box_com = np.average(original_v, axis=0, weights=local_m)
+        seeded_relative_rms = float(np.sqrt(np.mean(np.sum(
+            (original_v - box_com) ** 2, axis=1
+        ))))
+
         first_com = np.average(
             local_v[first_slice], axis=0, weights=local_m[first_slice]
         )
@@ -1131,7 +1221,16 @@ def apply_approach_velocities(simulation, infos, approach_factor):
         local_v[first_slice] -= first_com
         local_v[second_slice] -= second_com
 
-        thermal_rms = float(np.sqrt(np.mean(np.sum(local_v * local_v, axis=1))))
+        internal_thermal_rms = float(np.sqrt(np.mean(np.sum(local_v * local_v, axis=1))))
+        # A one-atom reactant has no internal degrees of freedom, so removing
+        # both object COM velocities makes an atom+atom scale exactly zero.
+        # Only in that degenerate case, use the seeded relative thermal motion
+        # from the normal initializer. Molecular collision behavior is
+        # unchanged because its internal RMS remains non-zero.
+        thermal_rms = (
+            internal_thermal_rms
+            if internal_thermal_rms > 1e-8 else seeded_relative_rms
+        )
         relative_speed = max(thermal_rms, 1e-8) * float(approach_factor)
         axis = np.asarray(info["axis"], dtype=np.float64)
 
@@ -1144,6 +1243,8 @@ def apply_approach_velocities(simulation, infos, approach_factor):
 
         measured.append({
             "thermal_rms_speed": thermal_rms,
+            "internal_thermal_rms_speed": internal_thermal_rms,
+            "seeded_relative_rms_speed": seeded_relative_rms,
             "relative_speed": relative_speed,
         })
 
@@ -1219,7 +1320,7 @@ def outcome_for(recorder, molecule, partner=None, library="molecules"):
 
 def summarise(recorder, molecule, partner, seed, options, wall_seconds,
               stopped_early, collision_measure=None, collision_info=None,
-              contact_diagnostic=None):
+              contact_diagnostic=None, simulation=None):
     import analysis
 
     result = analysis.analyse(
@@ -1244,23 +1345,14 @@ def summarise(recorder, molecule, partner, seed, options, wall_seconds,
     final_time_fs = float(recorder.times[-1]) if len(recorder) else 0.0
     atoms = len(molecule["symbols"]) + (len(partner["symbols"]) if partner else 0)
 
+    physics = physics_metadata(options.physics, simulation=simulation)
     entry = {
         "number": 0,
         "file": f"run_s{int(seed):04d}.npz",
         "seed": int(seed),
         "finished": True,
         "experiment_type": "characterisation",
-        "physics_mode": str(options.physics),
-        "physics_model": (
-            HIGH_FIDELITY_PHYSICS_MODEL
-            if str(options.physics) == "high_fidelity"
-            else STANDARD_PHYSICS_MODEL
-        ),
-        "physics_parameters": (
-            high_fidelity_parameters()
-            if str(options.physics) == "high_fidelity"
-            else {}
-        ),
+        **physics,
         "test": options.test,
         "molecule_id": molecule.get("id"),
         "formula": molecule.get("formula"),
@@ -1293,6 +1385,9 @@ def summarise(recorder, molecule, partner, seed, options, wall_seconds,
             "partner_formula": partner.get("formula"),
             "partner_graph_fingerprint": partner.get("graph_fingerprint"),
             "approach_factor": float(options.approach_factor),
+            "impact_parameter_A": float(
+                getattr(options, "impact_parameter", 0.0)
+            ),
             "start_gap_A": float(options.start_gap),
             "impact_target": str(options.impact_target),
         })
@@ -1317,15 +1412,38 @@ def summarise(recorder, molecule, partner, seed, options, wall_seconds,
     return entry
 
 
-def run_group(molecule, partner, seeds, options):
+def _emit_frame_observer(observer, simulation, seeds, symbol_lists, infos):
+    if observer is None:
+        return
+
+    positions = simulation.positions_per_box
+    forces = (
+        simulation.forces.detach()
+        .reshape(simulation.box_count, simulation.per_box, 3)
+        .cpu().numpy()
+    )
+    potentials = simulation.potential_per_box
+    kinetics, temperatures = simulation.thermodynamics_per_box
+    for box, seed in enumerate(seeds):
+        observer({
+            "box": int(box),
+            "seed": int(seed),
+            "symbols": list(symbol_lists[box]),
+            "positions_A": np.asarray(positions[box], dtype=np.float64).copy(),
+            "forces_eV_per_A": np.asarray(forces[box], dtype=np.float64).copy(),
+            "potential_energy_eV": float(potentials[box]),
+            "kinetic_energy_eV": float(kinetics[box]),
+            "temperature_K": float(temperatures[box]),
+            "time_fs": float(simulation.elapsed_femtoseconds),
+            "box_A": float(simulation.box_size),
+            "collision_info": infos[box],
+        })
+
+
+def run_group(molecule, partner, seeds, options, frame_observer=None):
     from recorder import Recorder
 
-    if str(options.physics) == "high_fidelity":
-        from high_fidelity_torch import HighFidelityBatchedReactiveSimulation
-        SimulationClass = HighFidelityBatchedReactiveSimulation
-    else:
-        from batched_torch import BatchedReactiveSimulation
-        SimulationClass = BatchedReactiveSimulation
+    SimulationClass = simulation_class_for_physics(options.physics)
 
     infos = []
     boxes = []
@@ -1344,6 +1462,7 @@ def run_group(molecule, partner, seeds, options):
                 options.impact_target,
                 options.sampling_mode,
                 options.target_atom_a,
+                getattr(options, "impact_parameter", 0.0),
             )
             boxes.append((symbols, positions))
             infos.append(info)
@@ -1381,6 +1500,10 @@ def run_group(molecule, partner, seeds, options):
         np.arange(len(symbols), dtype=np.uint32)
         for symbols in symbol_lists
     ]
+
+    _emit_frame_observer(
+        frame_observer, simulation, seeds, symbol_lists, infos
+    )
 
     total_steps = max(
         1,
@@ -1466,8 +1589,10 @@ def run_group(molecule, partner, seeds, options):
         )
 
         positions_per_box = None
-        if partner is not None or capture_now:
+        if partner is not None or capture_now or frame_observer is not None:
             positions_per_box = simulation.positions_per_box
+
+        potentials = simulation.potential_per_box
 
         if partner is not None:
             for box, diagnostic in enumerate(diagnostics):
@@ -1480,7 +1605,6 @@ def run_group(molecule, partner, seeds, options):
                 )
 
         if capture_now:
-            potentials = simulation.potential_per_box
             kinetics, temperatures = simulation.thermodynamics_per_box
             velocities_per_box = simulation.velocities_per_box
             for box, recorder in enumerate(recorders):
@@ -1495,6 +1619,10 @@ def run_group(molecule, partner, seeds, options):
                     symbols=symbol_lists[box],
                     atom_ids=atom_ids[box],
                 )
+
+        _emit_frame_observer(
+            frame_observer, simulation, seeds, symbol_lists, infos
+        )
 
         heartbeat_interval = capture_steps * 20
         if (
@@ -1546,20 +1674,11 @@ def parse_seed_list(text):
 
 
 def write_experiment(folder, molecule, partner, options, requested_seeds):
+    physics = physics_metadata(options.physics)
     payload = {
         "format": "ChemistryModel controlled characterisation",
         "version": 8,
-        "physics_mode": str(options.physics),
-        "physics_model": (
-            HIGH_FIDELITY_PHYSICS_MODEL
-            if str(options.physics) == "high_fidelity"
-            else STANDARD_PHYSICS_MODEL
-        ),
-        "physics_parameters": (
-            high_fidelity_parameters()
-            if str(options.physics) == "high_fidelity"
-            else {}
-        ),
+        **physics,
         "test": options.test,
         "sampling_mode": str(options.sampling_mode),
         "target_atom_a": options.target_atom_a,
@@ -1595,6 +1714,9 @@ def write_experiment(folder, molecule, partner, options, requested_seeds):
             "partner_graph_fingerprint": partner.get("graph_fingerprint"),
             "start_gap_A": float(options.start_gap),
             "approach_factor": float(options.approach_factor),
+            "impact_parameter_A": float(
+                getattr(options, "impact_parameter", 0.0)
+            ),
             "impact_target": str(options.impact_target),
             "target_atom_a": options.target_atom_a,
             "sampling_mode": str(options.sampling_mode),
@@ -1634,11 +1756,12 @@ def main():
     parser.add_argument(
         "--physics",
         default="standard",
-        choices=["standard", "high_fidelity"],
+        choices=["standard", "high_fidelity", "optimised-valence"],
         help=(
             "Atomistic physics used for this controlled test. high_fidelity "
-            "adds experimental competitive valence-state H-transfer mixing "
-            "without changing normal discovery runs."
+            "is the older competitive H-transfer model; optimised-valence "
+            "selects the current factorised/cached H-state and batched "
+            "heavy-valence production model."
         ),
     )
     parser.add_argument("--partner", default=None)
@@ -1663,6 +1786,13 @@ def main():
     parser.add_argument("--first-seed", type=int, default=0)
     parser.add_argument("--start-gap", type=float, default=2.5)
     parser.add_argument("--approach-factor", type=float, default=2.0)
+    parser.add_argument(
+        "--impact-parameter", type=float, default=0.0,
+        help=(
+            "lateral offset of the partner trajectory in angstrom; zero "
+            "preserves the historical direct-impact geometry"
+        ),
+    )
     parser.add_argument(
         "--impact-target",
         default="com",
@@ -1725,6 +1855,8 @@ def main():
             raise SystemExit("start-gap must be greater than zero")
         if float(options.approach_factor) <= 0:
             raise SystemExit("approach-factor must be greater than zero")
+        if float(options.impact_parameter) < 0:
+            raise SystemExit("impact-parameter cannot be negative")
         if float(options.diagnostic_sample_fs) <= 0:
             raise SystemExit("diagnostic-sample-fs must be greater than zero")
         if float(options.diagnostic_fine_window_fs) < 0:
@@ -1834,7 +1966,11 @@ def main():
             + (
                 f"high fidelity ({HIGH_FIDELITY_PHYSICS_MODEL})"
                 if str(options.physics) == "high_fidelity"
-                else f"standard ({STANDARD_PHYSICS_MODEL})"
+                else (
+                    f"optimised valence ({physics_metadata(options.physics)['physics_model']})"
+                    if str(options.physics) == "optimised-valence"
+                    else f"standard ({STANDARD_PHYSICS_MODEL})"
+                )
             )
         )
         if partner is not None:
@@ -1904,6 +2040,7 @@ def main():
                     collision_measure=measures[box],
                     collision_info=collision_infos[box],
                     contact_diagnostic=diagnostics[box],
+                    simulation=simulation,
                 )
                 write_entry(options.out, entry)
 

@@ -32,7 +32,7 @@ def test_store_persists_candidates_and_deduplicates_event_ids(tmp_path):
     assert not first.add_discovery_event(event(), tmp_path / "events.jsonl")
 
     second = ManagerStore(path)
-    waiting = second.candidates(CandidateState.WAITING_FULL_CM)
+    waiting = second.candidates(CandidateState.WAITING_CHARACTERISATION)
     assert len(waiting) == 1
     assert waiting[0]["id"] == "EVENT_abc123"
     assert waiting[0]["provenance"]["seed"] == 7
@@ -47,7 +47,7 @@ def test_store_transitions_follow_the_v1_state_machine(tmp_path):
     store.transition("EVENT_abc123", CandidateState.QM_VALIDATED)
 
     counts = store.counts()
-    assert counts[CandidateState.WAITING_FULL_CM] == 0
+    assert counts[CandidateState.WAITING_CHARACTERISATION] == 0
     assert counts[CandidateState.QM_VALIDATED] == 1
 
     try:
@@ -56,6 +56,23 @@ def test_store_transitions_follow_the_v1_state_machine(tmp_path):
         assert "invalid candidate transition" in str(problem)
     else:
         raise AssertionError("terminal candidates must not move backwards")
+
+
+def test_legacy_waiting_full_cm_state_migrates_in_memory(tmp_path):
+    path = tmp_path / "state.json"
+    path.write_text(json.dumps({
+        "format_version": 1,
+        "candidates": {
+            "EVENT_old": {"id": "EVENT_old", "state": "WAITING_FULL_CM"}
+        },
+    }), encoding="utf-8")
+
+    store = ManagerStore(path)
+    waiting = store.candidates(CandidateState.WAITING_CHARACTERISATION)
+
+    assert len(waiting) == 1
+    assert waiting[0]["state"] == "WAITING_CHARACTERISATION"
+    assert "WAITING_FULL_CM" in path.read_text(encoding="utf-8")
 
 
 def test_corrupt_store_is_reported_without_being_overwritten(tmp_path):
@@ -79,7 +96,7 @@ def test_status_is_clean_for_a_new_store(tmp_path, capsys):
 
     assert code == 0
     assert "Chemistry Manager" in output
-    assert "Waiting for full-CM validation:" in output
+    assert "Waiting for characterisation:" in output
     assert "QM validated:" in output
     assert output.count("0") >= 4
     assert not (tmp_path / "state.json").exists()
@@ -120,7 +137,13 @@ def test_empty_processing_commands_return_cleanly(tmp_path, capsys):
     assert main(["--state-file", state, "validate"]) == 0
     assert (
         capsys.readouterr().out.strip()
-        == "Nothing waiting for full-ChemistryModel validation."
+        == "Nothing waiting for controlled characterisation."
     )
     assert main(["--state-file", state, "qm"]) == 0
     assert capsys.readouterr().out.strip() == "Nothing waiting for QM validation."
+
+
+def test_discover_name_is_reserved_for_future_surrogate(tmp_path, capsys):
+    state = str(tmp_path / "state.json")
+    assert main(["--state-file", state, "discover"]) == 0
+    assert "reserved" in capsys.readouterr().out

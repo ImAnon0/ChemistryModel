@@ -3,3 +3,4 @@ timer.dat
 research_data/sapt/*_psi4.out
 research_data/sapt/*_psi4.log
 .chemistry_manager/
+teacher_data/
