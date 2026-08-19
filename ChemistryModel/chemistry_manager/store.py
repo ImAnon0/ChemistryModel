@@ -80,12 +80,65 @@ class ManagerStore:
             counts[coerce_state(row["state"])] += 1
         return counts
 
-    def add_discovery_event(self, event, event_log):
-        result = self.add_discovery_events([event], event_log)
+    def legacy_characterisation_candidates(self):
+        """Return old generic formation events still waiting for characterisation."""
+        rows = []
+        for candidate in self.load()["candidates"].values():
+            if (
+                coerce_state(candidate["state"])
+                == CandidateState.WAITING_CHARACTERISATION
+                and (candidate.get("source") or {}).get("kind") == "formation_event"
+            ):
+                rows.append(copy.deepcopy(candidate))
+        return sorted(rows, key=lambda row: row["id"])
+
+    def remove_legacy_characterisation_candidates(self):
+        """Delete only legacy generic formation events waiting for characterisation."""
+        document = self.load()
+        removed = []
+        for candidate_id, candidate in list(document["candidates"].items()):
+            if (
+                coerce_state(candidate["state"])
+                == CandidateState.WAITING_CHARACTERISATION
+                and (candidate.get("source") or {}).get("kind") == "formation_event"
+            ):
+                removed.append(candidate_id)
+                del document["candidates"][candidate_id]
+
+        if removed:
+            self.save(document)
+
+        return {
+            "removed": len(removed),
+            "candidate_ids": sorted(removed),
+        }
+
+    def add_discovery_event(
+        self, event, event_log, *,
+        initial_state=CandidateState.WAITING_CHARACTERISATION,
+        source_kind="formation_event",
+        source_extra=None,
+        promote_existing=False,
+    ):
+        result = self.add_discovery_events(
+            [event], event_log,
+            initial_state=initial_state,
+            source_kind=source_kind,
+            source_extra=source_extra,
+            promote_existing=promote_existing,
+        )
         return result["added"] == 1
 
-    def add_discovery_events(self, events, event_log):
+    def add_discovery_events(
+        self, events, event_log, *,
+        initial_state=CandidateState.WAITING_CHARACTERISATION,
+        source_kind="formation_event",
+        source_extra=None,
+        promote_existing=False,
+    ):
         document = self.load()
+        initial_state = coerce_state(initial_state)
+        source_extra = dict(source_extra or {})
         added = 0
         duplicates = 0
         for event in events:
@@ -96,16 +149,35 @@ class ManagerStore:
             candidate_id = f"EVENT_{event_id}"
             if candidate_id in document["candidates"]:
                 duplicates += 1
+                if promote_existing:
+                    candidate = document["candidates"][candidate_id]
+                    current = coerce_state(candidate["state"])
+                    if (
+                        current == CandidateState.WAITING_CHARACTERISATION
+                        and initial_state == CandidateState.WAITING_QM
+                    ):
+                        candidate["state"] = require_transition(
+                            current, CandidateState.WAITING_QM
+                        ).value
+                        source = candidate.setdefault("source", {})
+                        source["kind"] = str(source_kind)
+                        source["event_id"] = event_id
+                        source["event_log"] = os.path.normpath(str(event_log))
+                        source.update(copy.deepcopy(source_extra))
+                        added += 1
                 continue
+
+            source = {
+                "kind": str(source_kind),
+                "event_id": event_id,
+                "event_log": os.path.normpath(str(event_log)),
+            }
+            source.update(copy.deepcopy(source_extra))
 
             document["candidates"][candidate_id] = {
                 "id": candidate_id,
-                "state": CandidateState.WAITING_CHARACTERISATION.value,
-                "source": {
-                    "kind": "formation_event",
-                    "event_id": event_id,
-                    "event_log": os.path.normpath(str(event_log)),
-                },
+                "state": initial_state.value,
+                "source": source,
                 "provenance": {
                     key: event.get(key)
                     for key in (
@@ -123,6 +195,22 @@ class ManagerStore:
         if added:
             self.save(document)
         return {"added": added, "duplicates": duplicates}
+
+    def record_qm_result(self, candidate_id, payload, final_state=None):
+        """Persist QM provenance and optionally make one valid state transition."""
+        document = self.load()
+        try:
+            candidate = document["candidates"][str(candidate_id)]
+        except KeyError as problem:
+            raise KeyError(f"unknown candidate: {candidate_id}") from problem
+
+        candidate["qm"] = copy.deepcopy(payload)
+        if final_state is not None:
+            following = require_transition(candidate["state"], final_state)
+            candidate["state"] = following.value
+
+        self.save(document)
+        return copy.deepcopy(candidate)
 
     def transition(self, candidate_id, state):
         document = self.load()

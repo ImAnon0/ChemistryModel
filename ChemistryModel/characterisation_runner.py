@@ -1163,6 +1163,249 @@ def prepare_collision_box(molecule, partner, box_size, seed, start_gap,
     )
 
 
+
+def prepare_microcell_box(reactants, box_size, seed, cluster_radius_A=3.5, minimum_gap_A=1.8):
+    if len(reactants) < 3:
+        raise ValueError("microcell requires at least three reactant objects")
+    threshold, formation_time = bonding_settings()
+    generator = np.random.default_rng(int(seed) + 87019)
+    centre = np.full(3, float(box_size) / 2.0)
+    placed = []
+    ranges = []
+    symbols_all = []
+    positions_all = []
+    cursor = 0
+
+    for object_index, reactant in enumerate(reactants):
+        symbols, local = _centred_positions(reactant)
+        local = local @ rotation_matrix(generator).T
+        accepted = None
+        for _ in range(400):
+            direction = _random_axis(generator)
+            radial = float(generator.uniform(0.25 * cluster_radius_A, cluster_radius_A))
+            candidate = local + centre + direction * radial
+            if float(np.min(np.minimum(candidate, float(box_size) - candidate))) < 1.5:
+                continue
+            safe = True
+            for old_symbols, old_positions in placed:
+                offsets = candidate[:, None, :] - old_positions[None, :, :]
+                offsets -= float(box_size) * np.round(offsets / float(box_size))
+                distances = np.linalg.norm(offsets, axis=2)
+                if distances.size and float(np.min(distances)) < float(minimum_gap_A):
+                    safe = False
+                    break
+                types_new = _types_from_symbols(symbols)
+                types_old = _types_from_symbols(old_symbols)
+                import reactive as R
+                taper = R.smooth_cutoff(
+                    distances,
+                    R.CUTOFF_INNER[np.ix_(types_new, types_old)],
+                    R.CUTOFF_OUTER[np.ix_(types_new, types_old)],
+                )
+                if np.size(taper) and float(np.max(taper)) > float(threshold):
+                    safe = False
+                    break
+            if safe:
+                accepted = candidate
+                break
+        if accepted is None:
+            raise ValueError("could not place microcell reactants safely")
+
+        placed.append((list(symbols), accepted))
+        positions_all.append(accepted)
+        symbols_all.extend(symbols)
+        ranges.append({
+            "object_index": int(object_index),
+            "reactant_id": reactant.get("id"),
+            "formula": reactant.get("formula"),
+            "start": int(cursor),
+            "stop": int(cursor + len(symbols)),
+            "atoms": int(len(symbols)),
+        })
+        cursor += len(symbols)
+
+    return symbols_all, np.vstack(positions_all).astype(np.float32), {
+        "experiment_family": "microcell",
+        "object_count": len(reactants),
+        "object_ranges": ranges,
+        "cluster_radius_A": float(cluster_radius_A),
+        "minimum_gap_A": float(minimum_gap_A),
+        "bond_threshold": float(threshold),
+        "bond_formation_time_fs": float(formation_time),
+        "safe_initial_separation": True,
+    }
+
+
+def apply_microcell_inward_velocities(simulation, infos, inward_factor):
+    import torch
+    velocities = simulation.velocities.detach().cpu().numpy().copy()
+    masses = simulation.masses.detach().cpu().numpy().reshape(-1)
+    positions = simulation.positions_per_box
+    per_box = int(getattr(simulation, "per_box", len(velocities) // len(infos)))
+    measures = []
+
+    for box, info in enumerate(infos):
+        start = box * per_box
+        stop = start + per_box
+        local_v = velocities[start:stop]
+        local_m = masses[start:stop]
+        local_p = np.asarray(positions[box], dtype=np.float64)
+        seeded_com = np.average(local_v, axis=0, weights=local_m)
+        thermal_rms = float(np.sqrt(np.mean(np.sum((local_v - seeded_com) ** 2, axis=1))))
+        inward_speed = max(thermal_rms, 1e-8) * float(inward_factor)
+        centre = np.full(3, float(simulation.box_size) / 2.0)
+
+        for obj in info["object_ranges"]:
+            sl = slice(int(obj["start"]), int(obj["stop"]))
+            obj_m = local_m[sl]
+            obj_v = local_v[sl]
+            obj_p = local_p[sl]
+            obj_com_v = np.average(obj_v, axis=0, weights=obj_m)
+            local_v[sl] -= obj_com_v
+            obj_com = np.average(obj_p, axis=0, weights=obj_m)
+            direction = _minimum_image_vector(centre - obj_com, simulation.box_size)
+            norm = float(np.linalg.norm(direction))
+            if norm > 1e-12:
+                local_v[sl] += direction / norm * inward_speed
+
+        local_v -= np.average(local_v, axis=0, weights=local_m)
+        velocities[start:stop] = local_v
+        measures.append({
+            "thermal_rms_speed": thermal_rms,
+            "inward_speed": inward_speed,
+            "inward_factor": float(inward_factor),
+        })
+
+    simulation.velocities = torch.tensor(velocities, device=simulation.device, dtype=simulation.dtype)
+    return measures
+
+
+def run_microcell_group(reactants, seeds, options, frame_observer=None):
+    from recorder import Recorder
+    SimulationClass = simulation_class_for_physics(options.physics)
+    boxes, infos = [], []
+    for seed in seeds:
+        symbols, positions, info = prepare_microcell_box(
+            reactants, options.box, seed,
+            options.cluster_radius_A, options.minimum_gap_A,
+        )
+        boxes.append((symbols, positions))
+        infos.append(info)
+
+    simulation = SimulationClass(
+        boxes=boxes,
+        box_size=float(options.box),
+        time_step=float(options.time_step),
+        target_temperature=float(options.temperature),
+        friction=float(options.friction),
+        device=options.device,
+        random_seed=int(seeds[0]),
+    )
+    measures = apply_microcell_inward_velocities(simulation, infos, options.inward_factor)
+    recorders = [
+        Recorder(simulation.symbols_for(i), simulation.box_size, maximum_frames=int(options.max_frames))
+        for i in range(len(seeds))
+    ]
+    symbol_lists = [list(simulation.symbols_for(i)) for i in range(len(seeds))]
+    atom_ids = [np.arange(len(s), dtype=np.uint32) for s in symbol_lists]
+    _emit_frame_observer(frame_observer, simulation, seeds, symbol_lists, infos)
+
+    total_steps = max(1, int(float(options.picoseconds) * 1000.0 / float(options.time_step)))
+    capture_steps = max(1, int(options.capture_every))
+    sample_steps = max(1, int(round(float(options.diagnostic_sample_fs) / float(options.time_step))))
+    sample_steps = max(1, math.gcd(capture_steps, sample_steps))
+    steps_done = 0
+    started = time.time()
+    stopped = False
+
+    while steps_done < total_steps:
+        simulation.target_temperature = float(options.temperature)
+        chunk = min(sample_steps, total_steps - steps_done)
+        simulation.step(chunk)
+        steps_done += chunk
+        positions = simulation.positions_per_box
+        potentials = simulation.potential_per_box
+        if steps_done % capture_steps == 0 or steps_done >= total_steps:
+            kinetics, temperatures = simulation.thermodynamics_per_box
+            velocities_per_box = simulation.velocities_per_box
+            for box, recorder in enumerate(recorders):
+                recorder.capture(
+                    positions[box], simulation.elapsed_femtoseconds,
+                    float(potentials[box]), float(kinetics[box]), float(temperatures[box]),
+                    velocities=velocities_per_box[box], box_size=simulation.box_size,
+                    symbols=symbol_lists[box], atom_ids=atom_ids[box],
+                )
+        _emit_frame_observer(frame_observer, simulation, seeds, symbol_lists, infos)
+        if not np.all(np.isfinite(np.asarray(potentials, dtype=float))):
+            stopped = True
+            break
+
+    return recorders, simulation, time.time()-started, stopped, measures, [None]*len(seeds), infos
+
+
+def outcome_for_reactants(recorder, reactants, library="molecules"):
+    try:
+        components = molecule_store.molecules_at(recorder, -1)
+    except Exception:
+        return "unclassified", []
+    final = [_component_summary(component, library) for component in components]
+    initial = sorted(str(r.get("graph_fingerprint")) for r in reactants)
+    ending = sorted(str(c.get("graph_fingerprint")) for c in components)
+    if initial == ending:
+        return "no reaction", final
+    expected = sum(int(r.get("atoms", len(r["symbols"]))) for r in reactants)
+    found = sum(int(c.get("atoms", 0)) for c in components)
+    if found != expected:
+        return "unclassified", final
+    return ("joined" if len(components) == 1 else "reaction"), final
+
+
+def summarise_microcell(recorder, reactants, seed, options, wall_seconds, stopped_early,
+                        velocity_measure=None, cell_info=None, simulation=None):
+    import analysis
+    result = analysis.analyse(recorder, stride=max(1, int(options.stride)), structures=False)
+    outcome, final_components = outcome_for_reactants(recorder, reactants, library=options.library)
+    final_time_fs = float(recorder.times[-1]) if len(recorder) else 0.0
+    physics = physics_metadata(options.physics, simulation=simulation)
+    return {
+        "number": 0,
+        "file": f"run_s{int(seed):04d}.npz",
+        "seed": int(seed),
+        "finished": True,
+        "experiment_type": "reaction_microcell",
+        "experiment_family": "microcell",
+        **physics,
+        "temperature_K": float(options.temperature),
+        "box": float(options.box),
+        "atoms": sum(len(r["symbols"]) for r in reactants),
+        "picoseconds": round(final_time_fs / 1000.0, 4),
+        "requested_picoseconds": float(options.picoseconds),
+        "frames": len(recorder),
+        "group_size": int(options.group),
+        "group_stopped_early": bool(stopped_early),
+        "wall_seconds": round(float(wall_seconds), 2),
+        "characterisation_outcome": outcome,
+        "reacted": bool(outcome not in ("no reaction", "unclassified")),
+        "final_components": final_components,
+        "headline": f"{outcome}: {analysis.headline(result)}",
+        "stable": bool(result.get("stable", True)),
+        "energy_jumps": result.get("energy_jumps", 0),
+        "largest_energy_jump": result.get("largest_energy_jump", 0.0),
+        "final_temperature": result.get("temperature", {}).get("final"),
+        "final_potential": result.get("potential", {}).get("final"),
+        "species_seen": sorted(result.get("seen", [])),
+        "reactant_ids": [r.get("id") for r in reactants],
+        "reactant_formulas": [r.get("formula") for r in reactants],
+        "cluster_radius_A": float(options.cluster_radius_A),
+        "minimum_gap_A": float(options.minimum_gap_A),
+        "inward_factor": float(options.inward_factor),
+        "microcell_info": cell_info or {},
+        "thermal_rms_speed": float((velocity_measure or {}).get("thermal_rms_speed", 0.0)),
+        "inward_speed": float((velocity_measure or {}).get("inward_speed", 0.0)),
+    }
+
+
+
 def apply_approach_velocities(simulation, infos, approach_factor):
     """Give the two objects a head-on relative COM velocity.
 

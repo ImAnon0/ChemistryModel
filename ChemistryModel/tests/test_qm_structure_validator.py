@@ -154,3 +154,57 @@ def test_connectivity_change_and_fragmentation_are_reported():
     assert result["connectivity_preserved"] is False
     assert result["connectivity_changed"] is True
     assert result["fragmented"] is True
+
+
+class AutoStateRunner(FakeRunner):
+    def __init__(self, energies):
+        self.energies = dict(energies)
+        self.screened = []
+
+    def single_point_energy(
+        self, symbols, coordinates, charge, multiplicity, method, basis
+    ):
+        self.screened.append(int(multiplicity))
+        value = self.energies[int(multiplicity)]
+        if isinstance(value, Exception):
+            raise value
+        return float(value)
+
+
+def test_electronic_state_candidates_screen_even_and_odd_neutral_chno():
+    even = qsv.electronic_state_candidates({
+        "symbols": ["H", "H"],
+    })
+    odd = qsv.electronic_state_candidates({
+        "symbols": ["O", "H"],
+    })
+    assert even["charge"] == 0
+    assert even["electron_count"] == 2
+    assert even["multiplicities"] == [1, 3]
+    assert odd["electron_count"] == 9
+    assert odd["multiplicities"] == [2, 4]
+
+
+def test_auto_validation_selects_lowest_successful_spin_and_records_selection(tmp_path):
+    molecule_root = tmp_path / "molecules"
+    validation_root = tmp_path / "validations"
+    _stored_water(molecule_root)
+    runner = AutoStateRunner({1: -76.0, 3: -75.0})
+
+    record = qsv.run_auto_validation(
+        "SP_000001",
+        molecule_root=molecule_root,
+        root=validation_root,
+        runner=runner,
+    )
+
+    assert record["status"] == "complete"
+    assert runner.screened == [1, 3]
+    assert record["multiplicity"] == 1
+    selection = record["electronic_state_selection"]
+    assert selection["selected_multiplicity"] == 1
+    persisted = qsv.load_validation(
+        "SP_000001", record["id"], validation_root
+    )
+    assert persisted["electronic_state_selection"]["selected_multiplicity"] == 1
+

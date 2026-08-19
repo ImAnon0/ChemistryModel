@@ -6,7 +6,7 @@ from .config import (
     DEFAULT_MOLECULE_ROOT, DEFAULT_RUNS_ROOT, DEFAULT_STATE_PATH,
     DEFAULT_TEACHER_ROOT,
 )
-from .discovery import discover
+from .discovery import discover, ingest_teacher_data
 from .state import CandidateState
 from .store import ManagerStore
 
@@ -31,12 +31,42 @@ def build_parser():
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("status", help="show queue counts")
 
+    cleanup = commands.add_parser(
+        "cleanup",
+        help="preview or remove legacy manager queue entries",
+    )
+    cleanup.add_argument(
+        "--legacy-characterisation",
+        action="store_true",
+        help=(
+            "target only WAITING_CHARACTERISATION candidates whose "
+            "source.kind is formation_event"
+        ),
+    )
+    cleanup.add_argument(
+        "--confirm",
+        action="store_true",
+        help="actually apply the requested cleanup; without this flag only preview",
+    )
+
     ingest_parser = commands.add_parser(
         "ingest", help="scan existing runs and queue discovered reactions"
     )
     ingest_parser.add_argument("--runs-root", default=str(DEFAULT_RUNS_ROOT))
     ingest_parser.add_argument(
         "--molecule-root", default=str(DEFAULT_MOLECULE_ROOT)
+    )
+    ingest_parser.add_argument(
+        "--teacher-data", action="store_true",
+        help="register full-CM teacher datasets and queue new products directly for QM",
+    )
+    ingest_parser.add_argument(
+        "--teacher-root", default=str(DEFAULT_TEACHER_ROOT),
+        help="teacher-data root used with --teacher-data",
+    )
+    ingest_parser.add_argument(
+        "--qm-root", default=None,
+        help="optional QM-validation root used to determine trusted molecules",
     )
 
     commands.add_parser(
@@ -50,7 +80,10 @@ def build_parser():
     )
     produce.add_argument("--count", type=int, default=12)
     produce.add_argument("--duration", type=float, default=0.25)
-    produce.add_argument("--master-seed", type=int, default=20260819)
+    produce.add_argument(
+        "--master-seed", type=int, default=None,
+        help="explicit reproducible seed; omitted = fresh random seed",
+    )
     produce.add_argument(
         "--profile", choices=("balanced", "gentle", "reactive"),
         default="balanced",
@@ -77,10 +110,37 @@ def build_parser():
         help="only import the scanner's existing formation-event log",
     )
 
-    commands.add_parser(
-        "validate", help="process candidates waiting for full-CM validation"
+    production = commands.add_parser(
+        "production",
+        help="show reaction-production coverage for a calendar day",
     )
-    commands.add_parser("qm", help="process candidates waiting for QM validation")
+    production.add_argument("--output-root", default=str(DEFAULT_TEACHER_ROOT))
+    production.add_argument(
+        "--molecule-root", default=str(DEFAULT_MOLECULE_ROOT),
+        help="molecule library used to resolve reaction products",
+    )
+    production.add_argument(
+        "--qm-root", default=None,
+        help="optional QM-validation root used to determine trusted products",
+    )
+    production.add_argument(
+        "--date", default=None,
+        help="local date YYYY-MM-DD (default: today)",
+    )
+
+    commands.add_parser(
+        "validate", help="characterise future cheap-discovery candidates with full CM"
+    )
+    qm = commands.add_parser(
+        "qm", help="process candidates waiting for QM validation"
+    )
+    qm.add_argument("--molecule-root", default=str(DEFAULT_MOLECULE_ROOT))
+    qm.add_argument("--qm-root", default=None)
+    qm.add_argument("--method", default="wb97x-d")
+    qm.add_argument("--basis", default="jun-cc-pvdz")
+    qm.add_argument("--threads", type=int, default=8)
+    qm.add_argument("--memory", default="4 GB")
+    qm.add_argument("--limit", type=int, default=None)
     return parser
 
 
@@ -112,7 +172,80 @@ def main(argv=None):
             print_status(store)
             return 0
 
+        if options.command == "cleanup":
+            if not options.legacy_characterisation:
+                print("No cleanup target selected.")
+                print("Use --legacy-characterisation to preview the legacy queue cleanup.")
+                return 0
+
+            targeted = store.legacy_characterisation_candidates()
+            counts = store.counts()
+
+            print("Legacy Characterisation Cleanup")
+            print()
+            print(f"Candidates targeted:             {len(targeted)}")
+            print(
+                f"Waiting for QM (untouched):      "
+                f"{counts[CandidateState.WAITING_QM]}"
+            )
+            print(
+                f"QM validated (untouched):        "
+                f"{counts[CandidateState.QM_VALIDATED]}"
+            )
+            print(
+                f"QM rejected (untouched):         "
+                f"{counts[CandidateState.QM_REJECTED]}"
+            )
+            print()
+            print(
+                "Target rule: state=WAITING_CHARACTERISATION and "
+                "source.kind=formation_event"
+            )
+
+            if not options.confirm:
+                print()
+                print("No changes made.")
+                print(
+                    "Re-run with --confirm to remove only the candidates listed "
+                    "by this rule."
+                )
+                return 0
+
+            result = store.remove_legacy_characterisation_candidates()
+            print()
+            print(f"Removed legacy candidates:       {result['removed']}")
+            print("All other candidate states and source kinds were preserved.")
+            return 0
+
         if options.command == "ingest":
+            if options.teacher_data:
+                result = ingest_teacher_data(
+                    store,
+                    options.teacher_root,
+                    options.molecule_root,
+                    qm_root=options.qm_root,
+                    state_file=options.state_file,
+                    scan=not options.no_scan,
+                )
+                print("Teacher Data Ingest")
+                print()
+                print(f"Productions found:         {result['productions_found']}")
+                print(f"New productions:           {result['productions_added']}")
+                print(f"New experiments:           {result['experiments_added']}")
+                print(f"New teacher frames:        {result['teacher_frames_added']}")
+                print(f"Reaction events seen:      {result['events_seen']}")
+                print(f"Queued directly for QM:    {result['queued_for_qm']}")
+                print(f"Already-trusted events:    {result['already_trusted_events']}")
+                print(f"Duplicate candidates:      {result['duplicate_candidates']}")
+                print(f"Registry:                  {result['registry']}")
+                if result["invalid"]:
+                    print(f"Invalid teacher records:   {len(result['invalid'])}")
+                if result["event_log_errors"]:
+                    print(
+                        f"Malformed event-log lines:  {len(result['event_log_errors'])}"
+                    )
+                return 0
+
             result = discover(
                 store,
                 options.runs_root,
@@ -181,15 +314,104 @@ def main(argv=None):
             print()
             print("Reaction Teacher Production")
             print()
-            print(f"Production:              {result['production_id']}")
+            print(f"Invocation:              {result['invocation_id']}")
+            print(f"Date:                    {result['date']}")
             print(f"Experiments requested:   {result['requested']}")
-            print(f"Completed this run:       {result['completed_now']}")
-            print(f"Completed total:          {result['completed_total']}")
+            print(f"Completed:               {result['completed_now']}")
+            print(f"Failed:                  {result['failed_now']}")
+            print(f"Master seed:             {result['master_seed']} ({result['master_seed_source']})")
             print(f"Teacher frames written:  {result['teacher_frames_written_now']}")
             print(f"New reactions detected:  {result['new_events']}")
-            print(f"New candidates queued:   {result['new_candidates_queued']}")
             print(f"Trusted molecules used:  {result['trusted_molecules']}")
-            print(f"Dataset:                  {result['root']}")
+            print(f"Daily dataset:           {result['root']}")
+            print("View: python -m chemistry_manager production")
+            print("Next: python -m chemistry_manager ingest --teacher-data")
+            return 0
+
+        if options.command == "production":
+            from .reaction_producer import production_summary
+
+            result = production_summary(
+                output_root=options.output_root,
+                date=options.date,
+                molecule_root=options.molecule_root,
+                qm_root=options.qm_root,
+            )
+            print(f"Reaction Production — {result['date']}")
+            print()
+            print(f"Invocations:             {result['invocations']}")
+            print(f"Experiments attempted:   {result['attempted']}")
+            print(f"Completed:               {result['completed']}")
+            print(f"Failed:                  {result['failed']}")
+            print(f"Teacher frames:          {result['teacher_frames']}")
+            print(f"Unique reactants:        {result['unique_reactants']}")
+            print(f"Unique pairs:            {result['unique_pairs']}")
+            print(
+                f"Microcell compositions:  "
+                f"{result.get('unique_microcell_compositions', 0)}"
+            )
+
+            if result.get("experiment_families"):
+                print()
+                print("Experiment families")
+                for name, count in result["experiment_families"].items():
+                    print(f"  {name + ':':24} {count}")
+
+            if result.get("outcomes_by_family"):
+                print()
+                print("Chemistry outcomes")
+                for family, counts in result["outcomes_by_family"].items():
+                    total = sum(counts.values())
+                    reacted = sum(
+                        value for name, value in counts.items()
+                        if name not in ("no reaction", "unclassified", "unknown")
+                    )
+                    print(
+                        f"  {family}: {reacted}/{total} reacted"
+                    )
+                    for name, count in counts.items():
+                        print(f"    {name + ':':22} {count}")
+
+            print()
+            print(f"Reaction events:         {result.get('reaction_events', 0)}")
+            if result.get("reaction_events_by_family"):
+                for family, count in result["reaction_events_by_family"].items():
+                    print(f"  {family + ':':24} {count}")
+
+            products = result.get("unique_product_species", [])
+            untrusted = result.get("untrusted_product_species", [])
+            print(f"Unique product species:  {len(products)}")
+            print(f"Untrusted/new products:  {len(untrusted)}")
+            if untrusted:
+                print("  " + ", ".join(untrusted))
+
+            if result["categories"]:
+                print()
+                print("Categories")
+                for name, count in result["categories"].items():
+                    print(f"  {name + ':':24} {count}")
+
+            if result["collision_classes"]:
+                print()
+                print("Collision classes")
+                for name, count in result["collision_classes"].items():
+                    print(f"  {name + ':':24} {count}")
+
+            if result["speed_classes"]:
+                print()
+                print("Speed classes")
+                for name, count in result["speed_classes"].items():
+                    print(f"  {name + ':':24} {count}")
+
+            if result.get("event_log_errors"):
+                print()
+                print(
+                    f"Malformed event-log lines: "
+                    f"{len(result['event_log_errors'])}"
+                )
+
+            print()
+            print(f"Dataset:                 {result['root']}")
             return 0
 
         if options.command == "validate":
@@ -201,12 +423,46 @@ def main(argv=None):
             )
 
         if options.command == "qm":
-            return _deferred_queue(
+            from .qm import process_qm_queue
+
+            waiting = store.candidates(CandidateState.WAITING_QM)
+            if not waiting:
+                print("Nothing waiting for QM validation.")
+                return 0
+
+            def qm_progress(number, total, candidate, products):
+                product_text = ", ".join(products) if products else "no product IDs"
+                print(
+                    f"[{number}/{total}] {candidate['id']}  "
+                    f"products: {product_text}"
+                )
+
+            result = process_qm_queue(
                 store,
-                CandidateState.WAITING_QM,
-                "Nothing waiting for QM validation.",
-                "Automated QM execution is not connected in v1.",
+                molecule_root=options.molecule_root,
+                qm_root=options.qm_root,
+                method=options.method,
+                basis=options.basis,
+                threads=options.threads,
+                memory=options.memory,
+                limit=options.limit,
+                progress=qm_progress,
             )
+            print()
+            print("QM Queue")
+            print()
+            print(f"Candidates processed:      {result['candidates_seen']}")
+            print(f"QM validated:              {result['validated']}")
+            print(f"QM rejected:               {result['rejected']}")
+            print(f"Still waiting:             {result['still_waiting']}")
+            print(f"New molecules validated:   {result['molecules_validated']}")
+            print(f"New molecules rejected:    {result['molecules_rejected']}")
+            print(f"Existing results reused:   {result['molecules_reused']}")
+            if result["errors"]:
+                print(f"Errors/blocked:             {len(result['errors'])}")
+                for problem in result["errors"][:8]:
+                    print(f"  - {problem}")
+            return 0
     except (OSError, ValueError) as problem:
         raise SystemExit(f"Chemistry Manager: {problem}") from problem
 

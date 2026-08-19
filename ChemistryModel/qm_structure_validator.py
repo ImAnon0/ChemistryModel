@@ -17,6 +17,7 @@ import os
 import platform
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from pathlib import Path
@@ -35,6 +36,7 @@ BOHR_TO_ANGSTROM = 0.529177210903
 FORCE_HARTREE_PER_BOHR_TO_EV_PER_ANGSTROM = HARTREE_TO_EV / BOHR_TO_ANGSTROM
 
 COVALENT_RADIUS = {"H": 0.31, "C": 0.76, "N": 0.71, "O": 0.66}
+ATOMIC_NUMBER = {"H": 1, "C": 6, "N": 7, "O": 8}
 
 
 def psi4_worker_python():
@@ -268,10 +270,88 @@ def _component_count(count, edges):
     return len({find(index) for index in range(count)})
 
 
+def electronic_state_candidates(molecule, charge=None):
+    """Return a conservative neutral-CHNO spin search space.
+
+    Explicit molecule metadata wins. Otherwise ChemistryModel currently has
+    no ionic chemistry, so charge defaults to zero. Electron parity determines
+    the lowest allowed multiplicity parity, and QM screens the two lowest
+    states of that parity instead of silently assuming singlet/doublet.
+    """
+    stored = molecule.get("electronic_state") or {}
+    if charge is None and stored.get("charge") is not None:
+        charge = int(stored["charge"])
+    if charge is None:
+        charge = 0
+
+    if stored.get("multiplicity") is not None:
+        return {
+            "charge": int(charge),
+            "multiplicities": [int(stored["multiplicity"])],
+            "source": "stored_electronic_state",
+        }
+
+    symbols = [str(symbol) for symbol in molecule["symbols"]]
+    unknown = sorted({symbol for symbol in symbols if symbol not in ATOMIC_NUMBER})
+    if unknown:
+        raise ValueError(
+            "automatic electronic-state inference only supports H/C/N/O; "
+            f"unsupported elements: {', '.join(unknown)}"
+        )
+
+    electrons = sum(ATOMIC_NUMBER[symbol] for symbol in symbols) - int(charge)
+    if electrons <= 0:
+        raise ValueError("molecule has a non-positive electron count")
+
+    multiplicities = [2, 4] if electrons % 2 else [1, 3]
+    return {
+        "charge": int(charge),
+        "electron_count": int(electrons),
+        "multiplicities": multiplicities,
+        "source": "neutral_chno_electron_parity_qm_screen",
+    }
+
+
+def _validation_success(record):
+    if record.get("status") != "complete":
+        return False
+    comparison = record.get("comparison") or {}
+    return bool(
+        comparison.get("connectivity_preserved") is True
+        and comparison.get("fragmented") is not True
+        and comparison.get("rearranged") is not True
+    )
+
+
 class Psi4Runner:
     def __init__(self, threads=8, memory="4 GB"):
         self.threads = int(threads)
         self.memory = str(memory)
+
+    def single_point_energy(
+        self, symbols, coordinates, charge, multiplicity, method, basis
+    ):
+        try:
+            import psi4
+        except ImportError as exc:
+            raise RuntimeError(
+                "Psi4 is not installed in this Python environment."
+            ) from exc
+
+        reference = "rhf" if int(multiplicity) == 1 else DEFAULT_REFERENCE
+        psi4.set_num_threads(self.threads)
+        psi4.set_memory(self.memory)
+        psi4.core.set_output_file(os.devnull, False)
+        psi4.set_options({"reference": reference})
+        molecule = psi4.geometry(
+            build_psi4_geometry(
+                symbols, coordinates, int(charge), int(multiplicity)
+            )
+        )
+        try:
+            return float(psi4.energy(f"{method}/{basis}", molecule=molecule))
+        finally:
+            psi4.core.clean()
 
     def run(self, symbols, coordinates, charge, multiplicity, method, basis, reference):
         try:
@@ -455,6 +535,144 @@ def run_validation(molecule_id, charge, multiplicity, *, method=DEFAULT_METHOD,
     return record
 
 
+def run_auto_validation(
+    molecule_id, *, method=DEFAULT_METHOD, basis=DEFAULT_BASIS,
+    root=DEFAULT_ROOT, molecule_root=molecule_library.DEFAULT_ROOT,
+    runner=None,
+):
+    """Select a conservative electronic state, then run normal validation."""
+    molecule = molecule_library.load_molecule(molecule_id, root=molecule_root)
+    state = electronic_state_candidates(molecule)
+    charge = int(state["charge"])
+    candidates = [int(value) for value in state["multiplicities"]]
+    active_runner = runner or Psi4Runner()
+
+    screening = []
+    if len(candidates) == 1:
+        chosen = candidates[0]
+        screening.append({
+            "multiplicity": chosen,
+            "status": "stored",
+            "energy_hartree": None,
+        })
+    else:
+        for multiplicity in candidates:
+            try:
+                energy = active_runner.single_point_energy(
+                    molecule["symbols"],
+                    np.asarray(molecule["positions"], dtype=np.float64),
+                    charge,
+                    multiplicity,
+                    method,
+                    basis,
+                )
+                screening.append({
+                    "multiplicity": multiplicity,
+                    "status": "complete",
+                    "energy_hartree": float(energy),
+                })
+            except Exception as exc:
+                screening.append({
+                    "multiplicity": multiplicity,
+                    "status": "failed",
+                    "energy_hartree": None,
+                    "error": f"{type(exc).__name__}: {exc}",
+                })
+
+        successful = [
+            row for row in screening if row["status"] == "complete"
+        ]
+        if not successful:
+            raise RuntimeError(
+                "electronic-state screening failed for every allowed multiplicity"
+            )
+        chosen = min(
+            successful, key=lambda row: row["energy_hartree"]
+        )["multiplicity"]
+
+    record = run_validation(
+        molecule_id,
+        charge,
+        int(chosen),
+        method=method,
+        basis=basis,
+        root=root,
+        molecule_root=molecule_root,
+        runner=active_runner,
+    )
+    record["electronic_state_selection"] = {
+        **state,
+        "selected_multiplicity": int(chosen),
+        "screening": screening,
+    }
+    _atomic_json(
+        validation_directory(molecule_id, root) / f"{record['id']}.json",
+        record,
+    )
+    return record
+
+
+def run_validation_in_worker(
+    molecule_id, *, method=DEFAULT_METHOD, basis=DEFAULT_BASIS,
+    root=DEFAULT_ROOT, molecule_root=molecule_library.DEFAULT_ROOT,
+    threads=8, memory="4 GB",
+):
+    """Run auto-state QM in the configured Psi4 Python and return its JSON.
+
+    The child writes its machine-readable result to a dedicated temporary
+    file. Stdout/stderr are diagnostic only, because Psi4 and its dependencies
+    may emit banners or warnings that would corrupt stdout-based JSON IPC.
+    """
+    worker = psi4_worker_python()
+
+    with tempfile.TemporaryDirectory(prefix="chemistrymodel_qm_") as temporary:
+        result_path = Path(temporary) / "result.json"
+        command = [
+            worker,
+            os.path.abspath(__file__),
+            str(molecule_id),
+            "--auto-state",
+            "--method", str(method),
+            "--basis", str(basis),
+            "--root", str(root),
+            "--molecule-root", str(molecule_root),
+            "--threads", str(int(threads)),
+            "--memory", str(memory),
+            "--result-json", str(result_path),
+        ]
+        completed = subprocess.run(
+            command, text=True, capture_output=True, check=False
+        )
+
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip()
+            raise RuntimeError(
+                "QM worker failed"
+                + (f": {detail}" if detail else "")
+            )
+
+        if not result_path.is_file():
+            stdout = completed.stdout.strip()
+            stderr = completed.stderr.strip()
+            detail_parts = []
+            if stdout:
+                detail_parts.append(f"stdout: {stdout}")
+            if stderr:
+                detail_parts.append(f"stderr: {stderr}")
+            detail = "; ".join(detail_parts)
+            raise RuntimeError(
+                "QM worker completed without writing its result file"
+                + (f" ({detail})" if detail else "")
+            )
+
+        try:
+            return json.loads(result_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as problem:
+            raise RuntimeError(
+                f"QM worker wrote invalid JSON to {result_path}"
+            ) from problem
+
+
 def load_geometries(record, root=DEFAULT_ROOT):
     path = validation_directory(record["molecule_id"], root) / record["payload"]
     with np.load(path, allow_pickle=False) as data:
@@ -464,16 +682,45 @@ def load_geometries(record, root=DEFAULT_ROOT):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("molecule_id")
-    parser.add_argument("--charge", type=int, required=True)
-    parser.add_argument("--multiplicity", type=int, required=True)
+    parser.add_argument("--charge", type=int)
+    parser.add_argument("--multiplicity", type=int)
+    parser.add_argument("--auto-state", action="store_true")
     parser.add_argument("--method", default=DEFAULT_METHOD)
     parser.add_argument("--basis", default=DEFAULT_BASIS)
-    args = parser.parse_args()
-    result = run_validation(
-        args.molecule_id, args.charge, args.multiplicity,
-        method=args.method, basis=args.basis,
+    parser.add_argument("--root", default=str(DEFAULT_ROOT))
+    parser.add_argument("--molecule-root", default=str(molecule_library.DEFAULT_ROOT))
+    parser.add_argument("--threads", type=int, default=8)
+    parser.add_argument("--memory", default="4 GB")
+    parser.add_argument(
+        "--result-json",
+        default=None,
+        help="optional machine-readable result path for subprocess callers",
     )
-    print(json.dumps(result, indent=2))
+    args = parser.parse_args()
+
+    runner = Psi4Runner(threads=args.threads, memory=args.memory)
+    if args.auto_state:
+        result = run_auto_validation(
+            args.molecule_id,
+            method=args.method,
+            basis=args.basis,
+            root=args.root,
+            molecule_root=args.molecule_root,
+            runner=runner,
+        )
+    else:
+        if args.charge is None or args.multiplicity is None:
+            parser.error("--charge and --multiplicity are required without --auto-state")
+        result = run_validation(
+            args.molecule_id, args.charge, args.multiplicity,
+            method=args.method, basis=args.basis,
+            root=args.root, molecule_root=args.molecule_root,
+            runner=runner,
+        )
+    if args.result_json:
+        _atomic_json(args.result_json, result)
+    else:
+        print(json.dumps(result, indent=2))
     raise SystemExit(0 if result["status"] == "complete" else 1)
 
 

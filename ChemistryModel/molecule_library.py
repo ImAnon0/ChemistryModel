@@ -568,6 +568,22 @@ def load_molecule(molecule_id, root=DEFAULT_ROOT):
     return result
 
 
+def update_validation_metadata(
+    molecule_id, *, trust_status=None, electronic_state=None, root=DEFAULT_ROOT
+):
+    """Persist validation/electronic-state metadata without touching geometry."""
+    path = os.path.join(root, f"{molecule_id}.json")
+    with open(path, encoding="utf-8") as handle:
+        metadata = _normalise_metadata(json.load(handle))
+
+    if trust_status is not None:
+        metadata["trust_status"] = str(trust_status)
+    if electronic_state is not None:
+        metadata["electronic_state"] = dict(electronic_state)
+
+    return save_metadata(metadata, root=root)
+
+
 def formation_events_for_species(molecule_id, root=DEFAULT_ROOT, limit=8):
     path = os.path.join(root, EVENT_LOG)
 

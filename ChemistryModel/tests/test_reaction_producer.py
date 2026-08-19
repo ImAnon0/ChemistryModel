@@ -76,19 +76,15 @@ def test_generation_is_reproducible_and_uses_atom_fallback(tmp_path):
 
     assert one == two
     assert pool["molecules"] == []
-    assert {row["category"] for row in one} == {"atom_atom"}
-    assert {row["collision_class"] for row in one} == {
-        "direct", "glancing", "near_miss"
-    }
-    assert {row["speed_class"] for row in one} == {
-        "low", "moderate", "high"
-    }
-    assert any(row["impact_parameter_A"] == 0 for row in one)
-    assert any(row["impact_fraction"] > 1 for row in one)
+    families = {row["experiment_family"] for row in one}
+    assert families <= {"pair", "microcell"}
+    assert all(row["category"] == "atom_atom" for row in one if row["experiment_family"] == "pair")
+    assert all(3 <= row["object_count"] <= 5 for row in one if row["experiment_family"] == "microcell")
 
 
 def test_producer_cli_defaults_to_optimised_valence_and_allows_overrides():
     parser = build_parser()
+    assert parser.parse_args(["produce_reactions"]).master_seed is None
     assert parser.parse_args(["produce_reactions"]).physics == "optimised-valence"
     assert parser.parse_args([
         "produce_reactions", "--physics", "standard",
@@ -105,9 +101,10 @@ def test_generation_covers_all_reactant_orderings_with_trusted_molecule(tmp_path
     write_qm(qm, "SP_000001")
 
     specs, _ = producer.generate_experiment_specs(
-        8, 55, molecule_root=molecules, qm_root=qm
+        40, 55, molecule_root=molecules, qm_root=qm
     )
-    assert {row["category"] for row in specs} == {
+    pair_specs = [row for row in specs if row["experiment_family"] == "pair"]
+    assert {row["category"] for row in pair_specs} == {
         "atom_atom", "atom_molecule", "molecule_atom", "molecule_molecule"
     }
 
@@ -136,15 +133,80 @@ def test_teacher_frame_selection_keeps_sparse_close_and_event_frames():
     assert "final" in reasons
 
 
-def test_production_persists_shard_resumes_and_queues_new_event(
+def test_novelty_weight_never_zero_and_penalises_repeated_region():
+    candidate = {
+        "reactant_a": "atom:H", "reactant_b": "SP_1",
+        "impact_target": "oxygen", "target_atom_a": 0,
+        "collision_class": "glancing", "speed_class": "moderate",
+        "approach_factor": 1.5, "impact_fraction": .5,
+        "temperature_K": 500.0,
+    }
+    unused = producer.novelty_weight(candidate, [])
+    repeated = producer.novelty_weight(candidate, [dict(candidate) for _ in range(8)])
+    assert unused > repeated > 0.0
+
+
+def test_generation_updates_novelty_within_same_invocation(tmp_path, monkeypatch):
+    molecules = tmp_path / "empty_molecules"
+
+    # Force a tiny controlled candidate universe so the test checks that the
+    # selected first spec becomes history for the second slot.
+    original_weight = producer.novelty_weight
+    seen_history_lengths = []
+
+    def recording_weight(candidate, history):
+        seen_history_lengths.append(len(history))
+        return original_weight(candidate, history)
+
+    monkeypatch.setattr(producer, "novelty_weight", recording_weight)
+    specs, _ = producer.generate_experiment_specs(
+        2, 123, molecule_root=molecules, qm_root=tmp_path / "qm"
+    )
+    assert len(specs) == 2
+    assert min(seen_history_lengths) == 0
+    assert max(seen_history_lengths) >= 1
+
+
+
+def test_microcell_novelty_penalises_repeated_composition():
+    candidate = {
+        "experiment_family": "microcell",
+        "reactants": ["atom:H", "atom:H", "atom:O"],
+        "cluster_radius_A": 3.5, "minimum_gap_A": 2.0,
+        "inward_factor": .8, "temperature_K": 500.0,
+    }
+    unused = producer.microcell_novelty_weight(candidate, [])
+    repeated = producer.microcell_novelty_weight(candidate, [dict(candidate) for _ in range(8)])
+    assert unused > repeated > 0.0
+
+
+def test_prepare_microcell_box_is_safe(tmp_path):
+    reactants = [
+        producer._load_reactant("atom:H", tmp_path),
+        producer._load_reactant("atom:O", tmp_path),
+        producer._load_reactant("atom:H", tmp_path),
+    ]
+    symbols, positions, info = producer.characterisation.prepare_microcell_box(
+        reactants, 14.0, 7, cluster_radius_A=3.5, minimum_gap_A=1.7
+    )
+    assert symbols == ["H", "O", "H"]
+    assert positions.shape == (3, 3)
+    assert info["experiment_family"] == "microcell"
+    assert info["object_count"] == 3
+    assert info["safe_initial_separation"] is True
+
+
+
+def test_production_is_fresh_daily_attempt_and_failures_do_not_abort(
     tmp_path, monkeypatch
 ):
     molecules = tmp_path / "molecules"
     molecules.mkdir()
     output = tmp_path / "teacher"
     store = ManagerStore(tmp_path / "state.json")
-    spec = {
-        "id": "EXP_fixed", "number": 0, "category": "atom_atom",
+
+    base_spec = {
+        "number": 0, "category": "atom_atom",
         "reactant_a": "atom:H", "reactant_b": "atom:H",
         "simulation_seed": 7, "master_seed": 1, "profile": "balanced",
         "collision_class": "direct", "speed_class": "low",
@@ -154,15 +216,32 @@ def test_production_persists_shard_resumes_and_queues_new_event(
         "sampling_mode": "targeted_random", "impact_target": "hydrogen",
         "target_atom_a": 0,
     }
-    monkeypatch.setattr(
-        producer, "generate_experiment_specs",
-        lambda *args, **kwargs: ([spec], {
+
+    generation_calls = []
+
+    def fake_generate(count, master_seed, **kwargs):
+        generation_calls.append(master_seed)
+        invocation_id = kwargs.get("invocation_id")
+        specs = []
+        for number in range(count):
+            spec = dict(base_spec)
+            spec["number"] = number
+            spec["id"] = f"EXP_{invocation_id}_{number}"
+            spec["master_seed"] = master_seed
+            spec["experiment_family"] = "pair"
+            specs.append(spec)
+        return specs, {
             "atoms": list(producer.ELEMENTAL_REACTANTS), "molecules": [],
             "trusted_molecule_records": [],
-        }),
-    )
+        }
 
-    calls = []
+    monkeypatch.setattr(producer, "generate_experiment_specs", fake_generate)
+    monkeypatch.setattr(producer, "_local_day_string", lambda now=None: "2026-08-19")
+
+    random_seeds = iter([101, 202])
+    monkeypatch.setattr(producer, "_fresh_master_seed", lambda: next(random_seeds))
+    nonces = iter(["aaaa", "bbbb"])
+    monkeypatch.setattr(producer.secrets, "token_hex", lambda n: next(nonces))
 
     class FakeRecorder:
         def save(self, path):
@@ -178,8 +257,12 @@ def test_production_persists_shard_resumes_and_queues_new_event(
         "impact_parameter_A": 0.0,
     }
 
+    attempt = {"count": 0}
+
     def fake_run(first, second, seeds, options, frame_observer=None):
-        calls.append((spec["id"], options.physics))
+        attempt["count"] += 1
+        if attempt["count"] == 2:
+            raise RuntimeError("intentional test failure")
         for time_fs, distance in [(0.0, 3.0), (1.0, .7)]:
             frame_observer({
                 "seed": seeds[0], "symbols": ["H", "H"],
@@ -198,65 +281,75 @@ def test_production_persists_shard_resumes_and_queues_new_event(
         "characterisation_outcome": "joined", "physics_model": "fake_full_cm",
         "seed": 7, "finished": True,
     })
-
-    event = {
-        "event_id": "teacher_event", "recording": None,
-        "seed": 7, "reactants": [{"formula": "H", "count": 2}],
-        "products": [{"formula": "H2", "count": 1}],
-        "formed_bonds": [{"atom_ids": [0, 1]}], "broken_bonds": [],
-    }
-
-    def fake_scan(runs_root, library_root):
-        log = Path(library_root) / "formation_events.jsonl"
-        if not log.exists():
-            payload = dict(event)
-            payload["recording"] = str(
-                Path(runs_root) / "recordings" / "EXP_fixed.npz"
-            )
-            log.write_text(json.dumps(payload) + "\n", encoding="utf-8")
-        return {"scanned": 1, "formation_events": 1}
-
-    monkeypatch.setattr(molecule_scanner, "scan_recordings", fake_scan)
+    monkeypatch.setattr(
+        molecule_scanner, "scan_recordings",
+        lambda runs_root, library_root: {"scanned": 1, "formation_events": 0},
+    )
+    monkeypatch.setattr(producer, "read_events", lambda path: ([], []))
 
     first = producer.run_production(
-        store, count=1, duration_ps=.001, master_seed=1,
+        store, count=3, duration_ps=.001,
         output_root=output, molecule_root=molecules, device="cpu",
     )
     second = producer.run_production(
-        store, count=1, duration_ps=.001, master_seed=1,
+        store, count=1, duration_ps=.001,
         output_root=output, molecule_root=molecules, device="cpu",
-    )
-    standard = producer.run_production(
-        store, count=1, duration_ps=.001, master_seed=1,
-        output_root=output, molecule_root=molecules, device="cpu",
-        physics="standard",
     )
 
-    assert calls == [
-        ("EXP_fixed", "optimised-valence"),
-        ("EXP_fixed", "standard"),
-    ]
-    assert first["completed_now"] == 1
-    assert second["completed_now"] == 0
-    assert standard["production_id"] != first["production_id"]
-    assert first["new_candidates_queued"] == 1
-    assert len(store.candidates(CandidateState.WAITING_CHARACTERISATION)) == 1
-    shard = Path(first["root"]) / "shards" / "EXP_fixed.npz"
-    with np.load(shard, allow_pickle=False) as data:
-        assert data["positions_A"].shape == (2, 2, 3)
-        assert data["forces_eV_per_A"].shape == (2, 2, 3)
-    manifest = json.loads(
-        (Path(first["root"]) / "production.json").read_text(encoding="utf-8")
+    assert generation_calls == [101, 202]
+    assert first["requested"] == 3
+    assert first["completed_now"] == 2
+    assert first["failed_now"] == 1
+    assert second["completed_now"] == 1
+    assert second["invocation_id"] != first["invocation_id"]
+    assert Path(first["root"]) == output / "2026-08-19"
+    assert Path(second["root"]) == output / "2026-08-19"
+
+    summary = producer.production_summary(output, "2026-08-19")
+    assert summary["invocations"] == 2
+    assert summary["attempted"] == 4
+    assert summary["completed"] == 3
+    assert summary["failed"] == 1
+
+
+def test_explicit_seed_is_preserved_but_invocations_are_still_independent(
+    tmp_path, monkeypatch
+):
+    molecules = tmp_path / "molecules"
+    molecules.mkdir()
+    output = tmp_path / "teacher"
+    store = ManagerStore(tmp_path / "state.json")
+
+    monkeypatch.setattr(producer, "_local_day_string", lambda now=None: "2026-08-19")
+    nonces = iter(["cccc", "dddd"])
+    monkeypatch.setattr(producer.secrets, "token_hex", lambda n: next(nonces))
+
+    generated = []
+    def fake_generate(count, master_seed, **kwargs):
+        generated.append((master_seed, kwargs["invocation_id"]))
+        return [], {
+            "atoms": list(producer.ELEMENTAL_REACTANTS), "molecules": [],
+            "trusted_molecule_records": [],
+        }
+    monkeypatch.setattr(producer, "generate_experiment_specs", fake_generate)
+    monkeypatch.setattr(
+        molecule_scanner, "scan_recordings",
+        lambda runs_root, library_root: {"scanned": 0, "formation_events": 0},
     )
-    assert manifest["physics"] == "optimised-valence"
-    assert manifest["physics_model"] == (
-        "reactive_v7_factorisable_valence_optimised_experimental"
+    monkeypatch.setattr(producer, "read_events", lambda path: ([], []))
+
+    # count must remain >= 1; fake generation intentionally returns no specs.
+    first = producer.run_production(
+        store, count=1, master_seed=77, duration_ps=.001,
+        output_root=output, molecule_root=molecules, device="cpu",
     )
-    assert manifest["physics_model_revision"] == 1
-    experiment = json.loads(
-        (Path(first["root"]) / "experiments" / "EXP_fixed.json").read_text(
-            encoding="utf-8"
-        )
+    second = producer.run_production(
+        store, count=1, master_seed=77, duration_ps=.001,
+        output_root=output, molecule_root=molecules, device="cpu",
     )
-    assert experiment["physics_model"] == "fake_full_cm"
-    assert experiment["physics_model_revision"] == 9
+
+    assert [row[0] for row in generated] == [77, 77]
+    assert generated[0][1] != generated[1][1]
+    assert first["master_seed_source"] == "explicit"
+    assert second["master_seed_source"] == "explicit"
+
