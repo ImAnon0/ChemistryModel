@@ -49,6 +49,20 @@ from h_state_torch import (
     _contact_overlap,
     _crowding_normalisation,
 )
+from h_state_factorised_batched_torch import (
+    DEFAULT_H_S2_EIGVALSH_CHUNK_SIZE,
+    DEFAULT_H_TRANSITION_ASSEMBLY,
+    _begin_h_state_evaluation,
+    _assemble_factorised_hamiltonian,
+    _bounded_factorised_eigvalsh,
+    _finish_h_state_evaluation,
+    _profile_stage_begin,
+    _profile_stage_end,
+    _record_h_state_cuda_memory,
+    _record_h_state_group_pressure,
+    _record_h_eigvalsh_execution,
+    _resolved_h_s2_eigvalsh_chunk_size,
+)
 
 from valence_state_batched_membership_torch import (
     BatchedHeavyValenceStateBatchedSimulation,
@@ -72,7 +86,17 @@ class CachedHFastValenceStateBatchedSimulation(
     physics_model_name = CACHED_H_TOPOLOGY_MODEL_NAME
     physics_model_revision = CACHED_H_TOPOLOGY_MODEL_REVISION
 
-    def __init__(self, *args, **kwargs):
+    def __init__(
+        self,
+        *args,
+        h_s2_eigvalsh_chunk_size=(
+            DEFAULT_H_S2_EIGVALSH_CHUNK_SIZE
+        ),
+        h_transition_assembly=(
+            DEFAULT_H_TRANSITION_ASSEMBLY
+        ),
+        **kwargs,
+    ):
         # These must exist before parent construction: ReactiveSimulation's
         # __init__ evaluates initial forces and can dispatch here.
         self._h_candidate_rebuild_count = None
@@ -81,6 +105,18 @@ class CachedHFastValenceStateBatchedSimulation(
         self._h_last_topology_metadata = None
         self._h_topology_cache_hits = 0
         self._h_topology_cache_misses = 0
+        self.h_s2_eigvalsh_chunk_size = int(
+            h_s2_eigvalsh_chunk_size
+        )
+        if self.h_s2_eigvalsh_chunk_size < 0:
+            raise ValueError(
+                "h_s2_eigvalsh_chunk_size must be non-negative"
+            )
+        self.h_transition_assembly = str(h_transition_assembly)
+        if self.h_transition_assembly not in {"compact", "dense"}:
+            raise ValueError(
+                "h_transition_assembly must be 'compact' or 'dense'"
+            )
 
         super().__init__(*args, **kwargs)
 
@@ -717,6 +753,12 @@ class CachedHFastValenceStateBatchedSimulation(
             ]
         )
 
+        group_pressure = _record_h_state_group_pressure(
+            self,
+            structure,
+            component_count,
+        )
+
         edge_count = int(
             structure[
                 "edge_count"
@@ -724,6 +766,10 @@ class CachedHFastValenceStateBatchedSimulation(
         )
 
         if edge_count == 0:
+            _record_h_state_cuda_memory(
+                self,
+                group_pressure,
+            )
             return (
                 values[
                     "taper"
@@ -735,6 +781,11 @@ class CachedHFastValenceStateBatchedSimulation(
                     dtype=self.dtype,
                 )
             )
+
+        physics_token = _profile_stage_begin(
+            self,
+            "H coupling/physics construction",
+        )
 
         taper = values[
             "taper"
@@ -827,6 +878,15 @@ class CachedHFastValenceStateBatchedSimulation(
             )
             == 1
         ):
+            _profile_stage_end(
+                self,
+                "H coupling/physics construction",
+                physics_token,
+            )
+            _record_h_state_cuda_memory(
+                self,
+                group_pressure,
+            )
             return diagonal[
                 :,
                 0,
@@ -953,31 +1013,76 @@ class CachedHFastValenceStateBatchedSimulation(
                 / denominator
             )
 
-            off_diagonal = torch.einsum(
-                "bt,tij->bij",
-                -coupling,
-                structure[
-                    "transition_basis"
-                ],
+            _profile_stage_end(
+                self,
+                "H coupling/physics construction",
+                physics_token,
+            )
+            assembly_token = _profile_stage_begin(
+                self,
+                "Hamiltonian assembly",
             )
 
-            hamiltonian = (
-                torch.diag_embed(
-                    diagonal
+            if self.h_transition_assembly == "dense":
+                hamiltonian = torch.diag_embed(diagonal) + torch.einsum(
+                    "bt,tij->bij",
+                    -coupling,
+                    structure["transition_basis"],
                 )
-                + off_diagonal
+            else:
+                hamiltonian = _assemble_factorised_hamiltonian(
+                    diagonal,
+                    coupling,
+                    structure["transition_flat_index"],
+                )
+            _profile_stage_end(
+                self,
+                "Hamiltonian assembly",
+                assembly_token,
             )
         else:
+            _profile_stage_end(
+                self,
+                "H coupling/physics construction",
+                physics_token,
+            )
+            assembly_token = _profile_stage_begin(
+                self,
+                "Hamiltonian assembly",
+            )
             hamiltonian = (
                 torch.diag_embed(
                     diagonal
                 )
             )
-
-        eigenvalues = (
-            torch.linalg.eigvalsh(
-                hamiltonian
+            _profile_stage_end(
+                self,
+                "Hamiltonian assembly",
+                assembly_token,
             )
+
+        eig_token = _profile_stage_begin(
+            self,
+            "torch.linalg.eigvalsh",
+        )
+        _record_h_eigvalsh_execution(
+            self,
+            hamiltonian,
+        )
+        eigenvalues = (
+            _bounded_factorised_eigvalsh(
+                hamiltonian,
+                _resolved_h_s2_eigvalsh_chunk_size(self),
+            )
+        )
+        _profile_stage_end(
+            self,
+            "torch.linalg.eigvalsh",
+            eig_token,
+        )
+        _record_h_state_cuda_memory(
+            self,
+            group_pressure,
         )
 
         return eigenvalues[
@@ -1092,10 +1197,35 @@ class CachedHFastValenceStateBatchedSimulation(
             * excess
         )
 
+        if getattr(self, "_h_state_profile_sink", None) is not None:
+            self._h_state_profile_context = {
+                "candidate_h_pairs": int(
+                    self._prepare_h_candidate_cache()["candidate_count"]
+                )
+            }
+
+        preparation_token = _profile_stage_begin(
+            self,
+            "H group preparation",
+        )
         topology = (
             self._cached_h_topology(
                 values
             )
+        )
+        if getattr(self, "_h_state_profile_sink", None) is not None:
+            self._h_state_profile_context = dict(
+                topology["diagnostics"]
+            )
+        _profile_stage_end(
+            self,
+            "H group preparation",
+            preparation_token,
+        )
+
+        _begin_h_state_evaluation(
+            self,
+            len(topology["groups"]),
         )
 
         correction = (
@@ -1180,6 +1310,10 @@ class CachedHFastValenceStateBatchedSimulation(
 
         self._h_component_diagnostics = (
             diagnostics
+        )
+
+        _finish_h_state_evaluation(
+            self
         )
 
         return correction

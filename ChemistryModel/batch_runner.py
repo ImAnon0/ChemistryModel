@@ -542,6 +542,26 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
 
     SimulationClass = grouped_simulation_class(options)
 
+    simulation_kwargs = {}
+    if (
+        getattr(options, "physics", "reactive")
+        == "optimised-valence"
+        and getattr(options, "h_s2_eigvalsh_chunk_size", None)
+        is not None
+    ):
+        simulation_kwargs["h_s2_eigvalsh_chunk_size"] = int(
+            options.h_s2_eigvalsh_chunk_size
+        )
+    if (
+        getattr(options, "physics", "reactive")
+        == "optimised-valence"
+        and getattr(options, "h_transition_assembly", None)
+        is not None
+    ):
+        simulation_kwargs["h_transition_assembly"] = (
+            options.h_transition_assembly
+        )
+
     simulation = SimulationClass(
         boxes=boxes,
         box_size=options.box,
@@ -550,6 +570,7 @@ def run_group(mixture, seeds, options, progress=None, folder=None):
         friction=options.friction,
         device=options.device,
         random_seed=seeds[0],
+        **simulation_kwargs,
     )
     if getattr(options, "compiled_forces", False):
         simulation.enable_compiled_forces()
@@ -879,6 +900,13 @@ def summarise_run(recorder, simulation, seed, seconds, strikes,
                 {},
             )
         ),
+        "h_state_group_diagnostics": dict(
+            getattr(
+                simulation,
+                "_h_state_run_diagnostics",
+                {},
+            )
+        ),
         "number": 0,
         "file": f"run_s{seed:04d}.npz",
         "mixture": options.mixture,
@@ -1119,6 +1147,151 @@ def run_grouped(planned, mixture, options, progress):
                 "    max topology group      : "
                 f"{heavy_diagnostics.get('max_topology_group', 0)}"
             )
+
+        h_diagnostics = getattr(
+            simulation,
+            "_h_state_run_diagnostics",
+            None,
+        )
+
+        if h_diagnostics:
+            import torch
+
+            if (
+                simulation.device.type == "cuda"
+                and torch.cuda.is_available()
+            ):
+                cuda_stats = torch.cuda.memory_stats(
+                    simulation.device
+                )
+                free_bytes, total_bytes = torch.cuda.mem_get_info(
+                    simulation.device
+                )
+                h_diagnostics["cuda_allocator_retries"] = int(
+                    cuda_stats.get("num_alloc_retries", 0)
+                )
+                h_diagnostics["cuda_allocator_ooms"] = int(
+                    cuda_stats.get("num_ooms", 0)
+                )
+                h_diagnostics["cuda_allocator_oom_rejections"] = int(
+                    cuda_stats.get("num_oom_rejections", 0)
+                )
+                h_diagnostics["cuda_final_free_bytes"] = int(
+                    free_bytes
+                )
+                h_diagnostics["cuda_total_bytes"] = int(total_bytes)
+
+            hamiltonian_mb = (
+                float(h_diagnostics.get("max_hamiltonian_bytes", 0))
+                / (1024.0 * 1024.0)
+            )
+            cache_mb = (
+                float(h_diagnostics.get("structure_cache_cuda_bytes", 0))
+                / (1024.0 * 1024.0)
+            )
+
+            print()
+            print("  H state pressure (group):")
+            print(
+                "    max component edges    : "
+                f"{h_diagnostics.get('max_component_edge_count', 0)}"
+            )
+            print(
+                "    max states             : "
+                f"{h_diagnostics.get('max_state_count', 0)}"
+            )
+            print(
+                "    max transitions        : "
+                f"{h_diagnostics.get('max_transition_count', 0)}"
+            )
+            print(
+                "    max topology group     : "
+                f"{h_diagnostics.get('max_topology_group', 0)}"
+            )
+            print(
+                "    largest Hamiltonian    : "
+                f"{h_diagnostics.get('max_hamiltonian_shape', ())}"
+            )
+            print(
+                "    largest Hamiltonian MB : "
+                f"{hamiltonian_mb:.3f}"
+            )
+            print(
+                "    max H states/call      : "
+                f"{h_diagnostics.get('max_total_h_states_solved', 0)}"
+            )
+            print(
+                "    max topology groups    : "
+                f"{h_diagnostics.get('max_topology_groups_per_evaluation', 0)}"
+            )
+            print(
+                "    structure cache entries: "
+                f"{h_diagnostics.get('structure_cache_entries', 0)}"
+            )
+            print(
+                "    structure cache CUDA MB: "
+                f"{cache_mb:.3f}"
+            )
+            print(
+                "    S=2 eigvalsh chunk size : "
+                f"{h_diagnostics.get('s2_eigvalsh_chunk_size', 0)}"
+            )
+            print(
+                "    largest original S=2 B : "
+                f"{h_diagnostics.get('max_original_s2_batch', 0)}"
+            )
+            print(
+                "    chunked S=2 groups     : "
+                f"{h_diagnostics.get('chunked_s2_group_count', 0)}"
+            )
+            print(
+                "    chunked eigvalsh calls : "
+                f"{h_diagnostics.get('chunked_s2_eigvalsh_calls', 0)}"
+            )
+            print(
+                "    largest submitted eig B: "
+                f"{h_diagnostics.get('largest_actual_eigvalsh_batch', 0)}"
+            )
+
+            if h_diagnostics.get("cuda_max_memory_reserved", 0):
+                print()
+                print("  CUDA memory:")
+                print(
+                    "    observed allocated     : "
+                    f"{h_diagnostics.get('cuda_memory_allocated', 0) / (1024.0 ** 2):.1f} MB"
+                )
+                print(
+                    "    observed reserved      : "
+                    f"{h_diagnostics.get('cuda_memory_reserved', 0) / (1024.0 ** 2):.1f} MB"
+                )
+                print(
+                    "    peak allocated         : "
+                    f"{h_diagnostics.get('cuda_max_memory_allocated', 0) / (1024.0 ** 2):.1f} MB"
+                )
+                print(
+                    "    peak reserved          : "
+                    f"{h_diagnostics.get('cuda_max_memory_reserved', 0) / (1024.0 ** 2):.1f} MB"
+                )
+                print(
+                    "    allocator retries      : "
+                    f"{h_diagnostics.get('cuda_allocator_retries', 0)}"
+                )
+                print(
+                    "    allocator OOMs/rejects : "
+                    f"{h_diagnostics.get('cuda_allocator_ooms', 0)} / "
+                    f"{h_diagnostics.get('cuda_allocator_oom_rejections', 0)}"
+                )
+                print(
+                    "    final device free      : "
+                    f"{h_diagnostics.get('cuda_final_free_bytes', 0) / (1024.0 ** 2):.1f} MB"
+                )
+                print(
+                    "    pressure H solve       : "
+                    f"{h_diagnostics.get('memory_pressure_hamiltonian_shape', ())}  "
+                    f"edges {h_diagnostics.get('memory_pressure_component_edges', 0)}, "
+                    f"states {h_diagnostics.get('memory_pressure_state_count', 0)}, "
+                    f"transitions {h_diagnostics.get('memory_pressure_transition_count', 0)}"
+                )
 
         rebuild_index(options.out)
 
@@ -2207,6 +2380,24 @@ def main():
             "A single box leaves the card mostly idle; use 1 for "
             "legacy single-box scheduling"
         )
+    )
+    parser.add_argument(
+        "--h-s2-eigvalsh-chunk-size",
+        type=int,
+        default=None,
+        help=(
+            "benchmark/override the fixed CUDA eigvalsh batch bound for "
+            "S=2 Optimised-Valence H topology groups"
+        ),
+    )
+    parser.add_argument(
+        "--h-transition-assembly",
+        choices=("compact", "dense"),
+        default=None,
+        help=(
+            "diagnostic comparison of compact transition indices with "
+            "the prior dense/einsum transition basis"
+        ),
     )
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument(

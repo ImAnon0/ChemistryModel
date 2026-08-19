@@ -13,7 +13,7 @@ This execution layer:
     3. converts each component to an H-incidence topology signature
     4. groups topology-identical components across ALL simulation boxes
     5. builds their Hamiltonians as a batch
-    6. calls torch.linalg.eigvalsh once per topology group
+    6. calls torch.linalg.eigvalsh in bounded S=2 chunks per topology group
 
 Only discrete topology-derived tensors are cached.  Tapers, depths, Morse
 terms, overlaps, normalisations and couplings remain live tensors on every
@@ -46,6 +46,369 @@ BATCHED_FACTORISABLE_H_STATE_MODEL_NAME = (
 )
 
 BATCHED_FACTORISABLE_H_STATE_MODEL_REVISION = 0
+
+DEFAULT_H_S2_EIGVALSH_CHUNK_SIZE = 512
+DEFAULT_H_TRANSITION_ASSEMBLY = "dense"
+
+
+def _resolved_h_s2_eigvalsh_chunk_size(simulation):
+    """Resolve the shared execution bound for every legal H-state caller."""
+
+    chunk_size = int(
+        getattr(
+            simulation,
+            "h_s2_eigvalsh_chunk_size",
+            DEFAULT_H_S2_EIGVALSH_CHUNK_SIZE,
+        )
+    )
+    if chunk_size < 0:
+        raise ValueError(
+            "h_s2_eigvalsh_chunk_size must be non-negative"
+        )
+    return chunk_size
+
+
+def _bounded_factorised_eigvalsh(
+    hamiltonian,
+    s2_chunk_size,
+):
+    """Run S=2 eigvalsh in fixed full chunks, preserving batch order."""
+
+    batch_size = int(hamiltonian.shape[0])
+    state_count = int(hamiltonian.shape[-1])
+    chunk_size = int(s2_chunk_size)
+
+    if (
+        state_count != 2
+        or chunk_size <= 0
+        or batch_size <= chunk_size
+    ):
+        return torch.linalg.eigvalsh(
+            hamiltonian
+        )
+
+    chunks = []
+    full_stop = (
+        batch_size
+        // chunk_size
+        * chunk_size
+    )
+
+    for start in range(
+        0,
+        full_stop,
+        chunk_size,
+    ):
+        chunks.append(
+            torch.linalg.eigvalsh(
+                hamiltonian[
+                    start:
+                    start + chunk_size
+                ]
+            )
+        )
+
+    if full_stop < batch_size:
+        chunks.append(
+            torch.linalg.eigvalsh(
+                hamiltonian[
+                    full_stop:
+                ]
+            )
+        )
+
+    return torch.cat(
+        chunks,
+        dim=0,
+    )
+
+
+def _record_h_eigvalsh_execution(
+    simulation,
+    hamiltonian,
+):
+    run = _h_state_run_diagnostics(
+        simulation
+    )
+    batch_size = int(hamiltonian.shape[0])
+    state_count = int(hamiltonian.shape[-1])
+    chunk_size = _resolved_h_s2_eigvalsh_chunk_size(
+        simulation
+    )
+
+    run["s2_eigvalsh_chunk_size"] = chunk_size
+
+    if state_count != 2:
+        run["largest_actual_eigvalsh_batch"] = max(
+            int(run["largest_actual_eigvalsh_batch"]),
+            batch_size,
+        )
+        return
+
+    run["max_original_s2_batch"] = max(
+        int(run["max_original_s2_batch"]),
+        batch_size,
+    )
+
+    if chunk_size > 0 and batch_size > chunk_size:
+        call_count = (
+            batch_size
+            + chunk_size
+            - 1
+        ) // chunk_size
+        largest_submitted = chunk_size
+        run["chunked_s2_group_count"] += 1
+        run["chunked_s2_eigvalsh_calls"] += call_count
+    else:
+        call_count = 1
+        largest_submitted = batch_size
+
+    run["total_s2_eigvalsh_calls"] += call_count
+    run["largest_actual_eigvalsh_batch"] = max(
+        int(run["largest_actual_eigvalsh_batch"]),
+        largest_submitted,
+    )
+
+
+def _fresh_h_state_run_diagnostics():
+    """Whole-run, observational H-state pressure counters."""
+
+    return {
+        "evaluation_count": 0,
+        "max_component_edge_count": 0,
+        "max_state_count": 0,
+        "max_transition_count": 0,
+        "max_topology_group": 0,
+        "max_hamiltonian_shape": (),
+        "max_hamiltonian_elements": 0,
+        "max_hamiltonian_bytes": 0,
+        "max_total_h_states_solved": 0,
+        "max_topology_groups_per_evaluation": 0,
+        "structure_cache_entries": 0,
+        "structure_cache_cuda_bytes": 0,
+        "cuda_memory_allocated": 0,
+        "cuda_memory_reserved": 0,
+        "cuda_max_memory_allocated": 0,
+        "cuda_max_memory_reserved": 0,
+        "memory_pressure_hamiltonian_shape": (),
+        "memory_pressure_component_edges": 0,
+        "memory_pressure_state_count": 0,
+        "memory_pressure_transition_count": 0,
+        "memory_pressure_topology_group": 0,
+        "s2_eigvalsh_chunk_size": 0,
+        "max_original_s2_batch": 0,
+        "chunked_s2_group_count": 0,
+        "chunked_s2_eigvalsh_calls": 0,
+        "total_s2_eigvalsh_calls": 0,
+        "largest_actual_eigvalsh_batch": 0,
+    }
+
+
+def _h_state_run_diagnostics(simulation):
+    run = getattr(simulation, "_h_state_run_diagnostics", None)
+    if run is None:
+        run = _fresh_h_state_run_diagnostics()
+        simulation._h_state_run_diagnostics = run
+    return run
+
+
+def _profile_stage_begin(simulation, name):
+    sink = getattr(simulation, "_h_state_profile_sink", None)
+    if sink is None:
+        return None
+    return sink.stage_begin(
+        name,
+        context=getattr(simulation, "_h_state_profile_context", None),
+    )
+
+
+def _profile_stage_end(simulation, name, token):
+    if token is not None:
+        simulation._h_state_profile_sink.stage_end(
+            name,
+            token,
+            context=getattr(simulation, "_h_state_profile_context", None),
+        )
+
+
+def _begin_h_state_evaluation(simulation, topology_group_count):
+    run = _h_state_run_diagnostics(simulation)
+    run["evaluation_count"] += 1
+    run["max_topology_groups_per_evaluation"] = max(
+        int(run["max_topology_groups_per_evaluation"]),
+        int(topology_group_count),
+    )
+    simulation._h_state_current_states_solved = 0
+
+
+def _record_h_state_group_pressure(simulation, structure, component_count):
+    run = _h_state_run_diagnostics(simulation)
+    edge_count = int(structure["edge_count"])
+    state_count = int(structure["state_count"])
+    transition_count = int(structure["state_first"].numel())
+    component_count = int(component_count)
+    shape = (component_count, state_count, state_count)
+    element_count = component_count * state_count * state_count
+    raw_bytes = element_count * int(structure["state_mask"].element_size())
+
+    run["max_component_edge_count"] = max(
+        int(run["max_component_edge_count"]), edge_count
+    )
+    run["max_state_count"] = max(
+        int(run["max_state_count"]), state_count
+    )
+    run["max_transition_count"] = max(
+        int(run["max_transition_count"]), transition_count
+    )
+    run["max_topology_group"] = max(
+        int(run["max_topology_group"]), component_count
+    )
+    if element_count > int(run["max_hamiltonian_elements"]):
+        run["max_hamiltonian_elements"] = element_count
+        run["max_hamiltonian_shape"] = shape
+        run["max_hamiltonian_bytes"] = raw_bytes
+
+    simulation._h_state_current_states_solved += component_count * state_count
+    pressure = {
+        "shape": shape,
+        "edge_count": edge_count,
+        "state_count": state_count,
+        "transition_count": transition_count,
+        "component_count": component_count,
+    }
+
+    if getattr(simulation, "_h_state_profile_sink", None) is not None:
+        simulation._h_state_profile_context = dict(pressure)
+
+    return pressure
+
+
+def _record_h_state_cuda_memory(simulation, group_pressure):
+    device = torch.device(simulation.device)
+    if device.type != "cuda":
+        return
+
+    run = _h_state_run_diagnostics(simulation)
+    allocated = int(torch.cuda.memory_allocated(device))
+    reserved = int(torch.cuda.memory_reserved(device))
+    previous_allocated = int(run["cuda_memory_allocated"])
+    previous_pressure = int(run["cuda_memory_reserved"])
+
+    run["cuda_memory_allocated"] = max(
+        int(run["cuda_memory_allocated"]), allocated
+    )
+    run["cuda_memory_reserved"] = max(previous_pressure, reserved)
+    run["cuda_max_memory_allocated"] = max(
+        int(run["cuda_max_memory_allocated"]),
+        int(torch.cuda.max_memory_allocated(device)),
+    )
+    run["cuda_max_memory_reserved"] = max(
+        int(run["cuda_max_memory_reserved"]),
+        int(torch.cuda.max_memory_reserved(device)),
+    )
+
+    if (
+        reserved > previous_pressure
+        or allocated > previous_allocated
+    ):
+        run["memory_pressure_hamiltonian_shape"] = tuple(
+            group_pressure["shape"]
+        )
+        run["memory_pressure_component_edges"] = int(
+            group_pressure["edge_count"]
+        )
+        run["memory_pressure_state_count"] = int(
+            group_pressure["state_count"]
+        )
+        run["memory_pressure_transition_count"] = int(
+            group_pressure["transition_count"]
+        )
+        run["memory_pressure_topology_group"] = int(
+            group_pressure["component_count"]
+        )
+
+
+def _finish_h_state_evaluation(simulation):
+    run = _h_state_run_diagnostics(simulation)
+    run["max_total_h_states_solved"] = max(
+        int(run["max_total_h_states_solved"]),
+        int(getattr(simulation, "_h_state_current_states_solved", 0)),
+    )
+
+    structure_cache = getattr(simulation, "_factorised_h_structure_cache", {})
+    run["structure_cache_entries"] = max(
+        int(run["structure_cache_entries"]), len(structure_cache)
+    )
+
+    cuda_bytes = 0
+    for structure in structure_cache.values():
+        for value in structure.values():
+            if torch.is_tensor(value) and value.device.type == "cuda":
+                cuda_bytes += int(value.numel()) * int(value.element_size())
+    run["structure_cache_cuda_bytes"] = max(
+        int(run["structure_cache_cuda_bytes"]), cuda_bytes
+    )
+
+
+def _assemble_factorised_hamiltonian(
+    diagonal,
+    coupling,
+    transition_flat_index,
+):
+    """Assemble the exact symmetric H-state Hamiltonian compactly."""
+
+    hamiltonian = torch.diag_embed(
+        diagonal
+    )
+
+    if transition_flat_index.numel() == 0:
+        return hamiltonian
+
+    component_count = int(
+        diagonal.shape[0]
+    )
+
+    state_count = int(
+        diagonal.shape[1]
+    )
+
+    flat_values = torch.cat(
+        (
+            -coupling,
+            -coupling,
+        ),
+        dim=1,
+    )
+
+    off_diagonal = torch.zeros(
+        (
+            component_count,
+            state_count * state_count,
+        ),
+        device=diagonal.device,
+        dtype=diagonal.dtype,
+    )
+
+    off_diagonal = off_diagonal.scatter_add(
+        1,
+        transition_flat_index[
+            None,
+            :,
+        ].expand(
+            component_count,
+            -1,
+        ),
+        flat_values,
+    )
+
+    return (
+        hamiltonian
+        + off_diagonal.reshape(
+            component_count,
+            state_count,
+            state_count,
+        )
+    )
 
 
 def _states_for_incidence(edge_hydrogens):
@@ -118,11 +481,31 @@ class GroupedFactorisedHStateBatchedSimulation(
     def __init__(
         self,
         *args,
+        h_s2_eigvalsh_chunk_size=(
+            DEFAULT_H_S2_EIGVALSH_CHUNK_SIZE
+        ),
+        h_transition_assembly=(
+            DEFAULT_H_TRANSITION_ASSEMBLY
+        ),
         **kwargs,
     ):
         # Purely discrete cache:
         # signature -> state masks / transition tensors.
         self._factorised_h_structure_cache = {}
+        self.h_s2_eigvalsh_chunk_size = int(
+            h_s2_eigvalsh_chunk_size
+        )
+        if self.h_s2_eigvalsh_chunk_size < 0:
+            raise ValueError(
+                "h_s2_eigvalsh_chunk_size must be non-negative"
+            )
+        self.h_transition_assembly = str(
+            h_transition_assembly
+        )
+        if self.h_transition_assembly not in {"compact", "dense"}:
+            raise ValueError(
+                "h_transition_assembly must be 'compact' or 'dense'"
+            )
 
         super().__init__(
             *args,
@@ -447,43 +830,45 @@ class GroupedFactorisedHStateBatchedSimulation(
         )
 
         if transition_count:
-            transition_basis = torch.zeros(
+            transition_flat_index = torch.cat(
                 (
-                    transition_count,
-                    state_count,
-                    state_count,
-                ),
-                device=self.device,
-                dtype=self.dtype,
+                    state_first * state_count
+                    + state_second,
+                    state_second * state_count
+                    + state_first,
+                )
             )
-
-            transition_index = torch.arange(
-                transition_count,
+        else:
+            transition_flat_index = torch.zeros(
+                (0,),
                 device=self.device,
                 dtype=torch.long,
             )
 
-            transition_basis[
-                transition_index,
-                state_first,
-                state_second,
-            ] = 1.0
-
-            transition_basis[
-                transition_index,
-                state_second,
-                state_first,
-            ] = 1.0
-        else:
+        if getattr(
+            self,
+            "h_transition_assembly",
+            DEFAULT_H_TRANSITION_ASSEMBLY,
+        ) == "dense":
             transition_basis = torch.zeros(
-                (
-                    0,
-                    state_count,
-                    state_count,
-                ),
+                (transition_count, state_count, state_count),
                 device=self.device,
                 dtype=self.dtype,
             )
+            if transition_count:
+                transition_index = torch.arange(
+                    transition_count,
+                    device=self.device,
+                    dtype=torch.long,
+                )
+                transition_basis[
+                    transition_index, state_first, state_second
+                ] = 1.0
+                transition_basis[
+                    transition_index, state_second, state_first
+                ] = 1.0
+        else:
+            transition_basis = None
 
         cached = {
             "states": states,
@@ -503,10 +888,12 @@ class GroupedFactorisedHStateBatchedSimulation(
             "degree_key_count": len(
                 degree_keys
             ),
-            "transition_basis": (
-                transition_basis
+            "transition_flat_index": (
+                transition_flat_index
             ),
         }
+        if transition_basis is not None:
+            cached["transition_basis"] = transition_basis
 
         self._factorised_h_structure_cache[
             signature
@@ -534,11 +921,21 @@ class GroupedFactorisedHStateBatchedSimulation(
             group
         )
 
+        group_pressure = _record_h_state_group_pressure(
+            self,
+            structure,
+            component_count,
+        )
+
         edge_count = structure[
             "edge_count"
         ]
 
         if edge_count == 0:
+            _record_h_state_cuda_memory(
+                self,
+                group_pressure,
+            )
             return (
                 values["taper"].sum()
                 * 0.0
@@ -569,6 +966,11 @@ class GroupedFactorisedHStateBatchedSimulation(
             ],
             device=self.device,
             dtype=torch.long,
+        )
+
+        physics_token = _profile_stage_begin(
+            self,
+            "H coupling/physics construction",
         )
 
         taper = values[
@@ -651,6 +1053,15 @@ class GroupedFactorisedHStateBatchedSimulation(
             ]
             == 1
         ):
+            _profile_stage_end(
+                self,
+                "H coupling/physics construction",
+                physics_token,
+            )
+            _record_h_state_cuda_memory(
+                self,
+                group_pressure,
+            )
             return diagonal[
                 :,
                 0,
@@ -771,29 +1182,78 @@ class GroupedFactorisedHStateBatchedSimulation(
                 / denominator
             )
 
-            off_diagonal = torch.einsum(
-                "bt,tij->bij",
-                -coupling,
-                structure[
-                    "transition_basis"
-                ],
+            _profile_stage_end(
+                self,
+                "H coupling/physics construction",
+                physics_token,
+            )
+            assembly_token = _profile_stage_begin(
+                self,
+                "Hamiltonian assembly",
             )
 
-            hamiltonian = (
-                torch.diag_embed(
-                    diagonal
+            if getattr(
+                self,
+                "h_transition_assembly",
+                DEFAULT_H_TRANSITION_ASSEMBLY,
+            ) == "dense":
+                hamiltonian = torch.diag_embed(diagonal) + torch.einsum(
+                    "bt,tij->bij",
+                    -coupling,
+                    structure["transition_basis"],
                 )
-                + off_diagonal
+            else:
+                hamiltonian = _assemble_factorised_hamiltonian(
+                    diagonal,
+                    coupling,
+                    structure["transition_flat_index"],
+                )
+            _profile_stage_end(
+                self,
+                "Hamiltonian assembly",
+                assembly_token,
             )
         else:
+            _profile_stage_end(
+                self,
+                "H coupling/physics construction",
+                physics_token,
+            )
+            assembly_token = _profile_stage_begin(
+                self,
+                "Hamiltonian assembly",
+            )
             hamiltonian = (
                 torch.diag_embed(
                     diagonal
                 )
             )
+            _profile_stage_end(
+                self,
+                "Hamiltonian assembly",
+                assembly_token,
+            )
 
-        eigenvalues = torch.linalg.eigvalsh(
-            hamiltonian
+        eig_token = _profile_stage_begin(
+            self,
+            "torch.linalg.eigvalsh",
+        )
+        _record_h_eigvalsh_execution(
+            self,
+            hamiltonian,
+        )
+        eigenvalues = _bounded_factorised_eigvalsh(
+            hamiltonian,
+            _resolved_h_s2_eigvalsh_chunk_size(self),
+        )
+        _profile_stage_end(
+            self,
+            "torch.linalg.eigvalsh",
+            eig_token,
+        )
+        _record_h_state_cuda_memory(
+            self,
+            group_pressure,
         )
 
         return eigenvalues[
@@ -1071,6 +1531,11 @@ class GroupedFactorisedHStateBatchedSimulation(
 
         largest_group = 0
 
+        _begin_h_state_evaluation(
+            self,
+            len(grouped),
+        )
+
         for signature, group in (
             grouped.items()
         ):
@@ -1206,6 +1671,10 @@ class GroupedFactorisedHStateBatchedSimulation(
                 largest_group
             ),
         }
+
+        _finish_h_state_evaluation(
+            self
+        )
 
         return correction
 

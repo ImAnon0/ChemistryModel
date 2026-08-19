@@ -1,15 +1,19 @@
-"""Low-overhead profiler for the real optimised-valence batch path.
+"""Profiler for the real optimised-valence batch path.
 
 This script monkey-patches timing wrappers only for its own process. It does
 not change production source, equations, parameters, recorder data, or output.
-CUDA timings use sampled events and are resolved after the run.
+CUDA timings normally use sampled events. Requested H-state regions and force
+backward use explicit synchronization in this profiler process only.
 """
 
 from __future__ import annotations
 
-from collections import defaultdict
+import _bootstrap  # noqa: F401 - direct-execution project path
+
+from collections import defaultdict, deque
 import json
 import os
+from pathlib import Path
 import sys
 import time
 
@@ -19,6 +23,41 @@ import torch
 
 SAMPLE_EVERY = max(1, int(os.environ.get("CHEM_PROFILE_SAMPLE_EVERY", "20")))
 
+SYNCHRONIZED_LABELS = {
+    "H group preparation",
+    "H coupling/physics construction",
+    "Hamiltonian assembly",
+    "torch.linalg.eigvalsh",
+    "force.autograd_backward",
+}
+
+MEMORY_CORRELATION_LABELS = {
+    "energy.h_state",
+    "energy.heavy_topology",
+    "force.total",
+}
+
+MEMORY_STAT_PREFIXES = (
+    "allocated_bytes.",
+    "active_bytes.",
+    "reserved_bytes.",
+    "inactive_split_bytes.",
+    "requested_bytes.",
+    "segment.",
+    "allocation.",
+    "active.",
+    "inactive_split.",
+)
+
+MEMORY_STAT_SCALARS = {
+    "num_alloc_retries",
+    "num_oom_rejections",
+    "num_ooms",
+    "num_device_alloc",
+    "num_device_free",
+    "num_sync_all_streams",
+}
+
 
 class Profile:
     def __init__(self):
@@ -27,21 +66,266 @@ class Profile:
         self.events = defaultdict(list)
         self.wall = defaultdict(list)
         self.last_shape = None
+        self.started = time.perf_counter()
+        self.memory_trace_limit = max(
+            100,
+            int(os.environ.get("CHEM_PROFILE_MEMORY_TRACE_LIMIT", "50000")),
+        )
+        self.memory_trace = deque(maxlen=self.memory_trace_limit)
+        self.memory_sample_count = 0
+        self.memory_trace_dropped = 0
+        self.memory_jump_bytes = max(
+            1,
+            int(os.environ.get("CHEM_PROFILE_MEMORY_JUMP_MB", "32"))
+            * 1024
+            * 1024,
+        )
+        self.memory_trace_path = None
+        self.memory_snapshot_path = None
+        self.memory_history_error = None
+        self.snapshot_error = None
+        self.device_memory_used_error = None
+        self.last_alloc_retry_count = 0
+        self.retry_snapshot_paths = []
+        self.retry_snapshot_errors = []
+
+    def configure_artifacts(self, output_directory):
+        output_directory = Path(output_directory)
+        self.memory_trace_path = output_directory / "cuda_memory_trace.json"
+        self.memory_snapshot_path = output_directory / "cuda_memory_snapshot.pickle"
+
+    @staticmethod
+    def _memory_stats_subset():
+        stats = torch.cuda.memory_stats()
+        selected = {}
+        for key, value in stats.items():
+            if key in MEMORY_STAT_SCALARS:
+                selected[key] = int(value)
+                continue
+            if (
+                not key.startswith(MEMORY_STAT_PREFIXES)
+                or ".all." not in key
+            ):
+                continue
+            if key.endswith((".current", ".peak", ".allocated", ".freed")):
+                selected[key] = int(value)
+        return selected
+
+    def memory_sample(self, label, phase, context=None):
+        if not torch.cuda.is_available():
+            return None
+
+        allocated = int(torch.cuda.memory_allocated())
+        reserved = int(torch.cuda.memory_reserved())
+        max_allocated = int(torch.cuda.max_memory_allocated())
+        max_reserved = int(torch.cuda.max_memory_reserved())
+        free_bytes, total_bytes = (
+            int(value) for value in torch.cuda.mem_get_info()
+        )
+        physical_used = total_bytes - free_bytes
+
+        device_memory_used = None
+        if (
+            hasattr(torch.cuda, "device_memory_used")
+            and self.device_memory_used_error is None
+        ):
+            try:
+                device_memory_used = int(torch.cuda.device_memory_used())
+            except Exception as exc:  # optional NVML dependency on this build
+                if self.device_memory_used_error is None:
+                    self.device_memory_used_error = (
+                        f"{type(exc).__name__}: {exc}"
+                    )
+
+        previous = self.memory_trace[-1] if self.memory_trace else None
+        allocator_stats = self._memory_stats_subset()
+        retry_count = int(allocator_stats.get("num_alloc_retries", 0))
+        if (
+            retry_count > self.last_alloc_retry_count
+            and self.memory_snapshot_path is not None
+            and self.memory_history_error is None
+        ):
+            retry_path = self.memory_snapshot_path.with_name(
+                "cuda_memory_retry_"
+                f"{retry_count:03d}_snapshot.pickle"
+            )
+            try:
+                retry_path.parent.mkdir(parents=True, exist_ok=True)
+                torch.cuda.memory._dump_snapshot(str(retry_path))
+                self.retry_snapshot_paths.append(str(retry_path))
+            except Exception as exc:
+                self.retry_snapshot_errors.append(
+                    f"retry {retry_count}: {type(exc).__name__}: {exc}"
+                )
+        self.last_alloc_retry_count = max(
+            self.last_alloc_retry_count,
+            retry_count,
+        )
+
+        sample = {
+            "sample": self.memory_sample_count,
+            "timestamp_s": time.perf_counter() - self.started,
+            "label": str(label),
+            "phase": str(phase),
+            "context": dict(context or {}),
+            "pytorch_allocated_bytes": allocated,
+            "pytorch_reserved_bytes": reserved,
+            "pytorch_max_allocated_bytes": max_allocated,
+            "pytorch_max_reserved_bytes": max_reserved,
+            "device_free_bytes": free_bytes,
+            "device_total_bytes": total_bytes,
+            "device_physical_used_bytes": physical_used,
+            "device_memory_used_bytes": device_memory_used,
+            "physical_minus_pytorch_reserved_bytes": physical_used - reserved,
+            "allocator_stats": allocator_stats,
+        }
+
+        if previous is None:
+            sample["delta"] = {}
+            sample["major_jump"] = False
+        else:
+            delta = {
+                "allocated_bytes": (
+                    allocated - int(previous["pytorch_allocated_bytes"])
+                ),
+                "reserved_bytes": (
+                    reserved - int(previous["pytorch_reserved_bytes"])
+                ),
+                "physical_used_bytes": (
+                    physical_used - int(previous["device_physical_used_bytes"])
+                ),
+            }
+            sample["delta"] = delta
+            sample["major_jump"] = any(
+                abs(int(value)) >= self.memory_jump_bytes
+                for value in delta.values()
+            )
+
+        self.memory_sample_count += 1
+        if len(self.memory_trace) == self.memory_trace_limit:
+            self.memory_trace_dropped += 1
+        self.memory_trace.append(sample)
+
+        return sample
+
+    def print_raw_memory_checkpoint(self, label):
+        if not torch.cuda.is_available():
+            print(f"CUDA RAW MEMORY [{label}]: unavailable")
+            return
+
+        allocated = torch.cuda.memory_allocated()
+        reserved = torch.cuda.memory_reserved()
+        max_allocated = torch.cuda.max_memory_allocated()
+        max_reserved = torch.cuda.max_memory_reserved()
+        free_bytes, total_bytes = torch.cuda.mem_get_info()
+        print(f"CUDA RAW MEMORY [{label}]")
+        print(f"  torch.cuda.memory_allocated()     = {allocated}")
+        print(f"  torch.cuda.memory_reserved()      = {reserved}")
+        print(f"  torch.cuda.max_memory_allocated() = {max_allocated}")
+        print(f"  torch.cuda.max_memory_reserved()  = {max_reserved}")
+        print(f"  torch.cuda.mem_get_info()         = ({free_bytes}, {total_bytes})")
+
+    def start_memory_history(self):
+        if not torch.cuda.is_available():
+            return
+        try:
+            torch.cuda.memory._record_memory_history(
+                enabled="all",
+                context="alloc",
+                stacks="python",
+                max_entries=max(
+                    1000,
+                    int(os.environ.get(
+                        "CHEM_PROFILE_MEMORY_HISTORY_ENTRIES",
+                        "20000",
+                    )),
+                ),
+                clear_history=True,
+            )
+        except Exception as exc:
+            self.memory_history_error = f"{type(exc).__name__}: {exc}"
+
+    def write_memory_artifacts(self):
+        if self.memory_trace_path is None:
+            return
+
+        self.memory_trace_path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "torch_version": torch.__version__,
+            "cuda_version": torch.version.cuda,
+            "device": (
+                torch.cuda.get_device_name()
+                if torch.cuda.is_available()
+                else None
+            ),
+            "pid": os.getpid(),
+            "pytorch_no_cuda_memory_caching": os.environ.get(
+                "PYTORCH_NO_CUDA_MEMORY_CACHING"
+            ),
+            "trace_limit": self.memory_trace_limit,
+            "trace_dropped": self.memory_trace_dropped,
+            "device_memory_used_error": self.device_memory_used_error,
+            "memory_history_error": self.memory_history_error,
+            "snapshot_error": self.snapshot_error,
+            "retry_snapshots": self.retry_snapshot_paths,
+            "retry_snapshot_errors": self.retry_snapshot_errors,
+            "samples": list(self.memory_trace),
+        }
+        self.memory_trace_path.write_text(
+            json.dumps(payload, indent=2),
+            encoding="utf-8",
+        )
+
+        if torch.cuda.is_available() and self.memory_history_error is None:
+            try:
+                torch.cuda.memory._dump_snapshot(
+                    str(self.memory_snapshot_path)
+                )
+            except Exception as exc:
+                self.snapshot_error = f"{type(exc).__name__}: {exc}"
+                payload["snapshot_error"] = self.snapshot_error
+                self.memory_trace_path.write_text(
+                    json.dumps(payload, indent=2),
+                    encoding="utf-8",
+                )
 
     def cuda_call(self, label, function, *args, centres=0, **kwargs):
         call = self.calls[label]
         self.calls[label] += 1
         self.centres[label] += int(centres)
+        correlate_memory = (
+            label in MEMORY_CORRELATION_LABELS
+            or label.startswith("heavy.assemble.")
+            or label.startswith("heavy.density.")
+        )
+        context = None
+        if label.startswith("heavy.") and self.last_shape is not None:
+            n, v, s, batch = self.last_shape
+            context = {
+                "candidate_count": n,
+                "capacity": v,
+                "state_count": s,
+                "batch": batch,
+            }
+        if correlate_memory and torch.cuda.is_available():
+            torch.cuda.synchronize()
+            self.memory_sample(label, "before", context)
+
         sampled = torch.cuda.is_available() and call % SAMPLE_EVERY == 0
-        if not sampled:
-            return function(*args, **kwargs)
-        start = torch.cuda.Event(enable_timing=True)
-        end = torch.cuda.Event(enable_timing=True)
-        start.record()
-        result = function(*args, **kwargs)
-        end.record()
-        self.events[label].append((start, end))
-        return result
+        try:
+            if not sampled:
+                return function(*args, **kwargs)
+            start = torch.cuda.Event(enable_timing=True)
+            end = torch.cuda.Event(enable_timing=True)
+            start.record()
+            result = function(*args, **kwargs)
+            end.record()
+            self.events[label].append((start, end))
+            return result
+        finally:
+            if correlate_memory and torch.cuda.is_available():
+                torch.cuda.synchronize()
+                self.memory_sample(label, "after", context)
 
     def wall_call(self, label, function, *args, **kwargs):
         started = time.perf_counter()
@@ -51,11 +335,15 @@ class Profile:
             self.calls[label] += 1
             self.wall[label].append(time.perf_counter() - started)
 
-    def stage_begin(self, label, centres=0):
+    def stage_begin(self, label, centres=0, context=None):
         """Begin a profiling-only stage with wall time plus sampled CUDA events."""
         call = self.calls[label]
         self.calls[label] += 1
         self.centres[label] += int(centres)
+
+        if label in SYNCHRONIZED_LABELS and torch.cuda.is_available():
+            torch.cuda.synchronize()
+            self.memory_sample(label, "before", context)
 
         started_wall = time.perf_counter()
         start_event = None
@@ -65,10 +353,19 @@ class Profile:
             start_event = torch.cuda.Event(enable_timing=True)
             start_event.record()
 
-        return started_wall, start_event
+        return started_wall, start_event, context
 
-    def stage_end(self, label, token):
-        started_wall, start_event = token
+    def stage_end(self, label, token, context=None):
+        started_wall, start_event, begin_context = token
+
+        if label in SYNCHRONIZED_LABELS and torch.cuda.is_available():
+            torch.cuda.synchronize()
+            self.memory_sample(
+                label,
+                "after",
+                context if context is not None else begin_context,
+            )
+
         self.wall[label].append(time.perf_counter() - started_wall)
 
         if start_event is not None:
@@ -79,7 +376,27 @@ class Profile:
     def report(self):
         if torch.cuda.is_available():
             torch.cuda.synchronize()
-        result = {"sample_every": SAMPLE_EVERY, "timings": {}}
+        result = {
+            "sample_every": SAMPLE_EVERY,
+            "memory_trace": (
+                str(self.memory_trace_path)
+                if self.memory_trace_path is not None
+                else None
+            ),
+            "memory_snapshot": (
+                str(self.memory_snapshot_path)
+                if self.memory_snapshot_path is not None
+                else None
+            ),
+            "memory_samples": len(self.memory_trace),
+            "memory_trace_dropped": self.memory_trace_dropped,
+            "memory_history_error": self.memory_history_error,
+            "snapshot_error": self.snapshot_error,
+            "retry_snapshots": self.retry_snapshot_paths,
+            "retry_snapshot_errors": self.retry_snapshot_errors,
+            "device_memory_used_error": self.device_memory_used_error,
+            "timings": {},
+        }
         labels = sorted(set(self.calls) | set(self.events) | set(self.wall))
         for label in labels:
             cuda_ms = np.asarray([
@@ -114,6 +431,16 @@ class Profile:
 PROFILE = Profile()
 
 
+def output_directory_from_argv():
+    for index, argument in enumerate(sys.argv[:-1]):
+        if argument == "--out":
+            return sys.argv[index + 1]
+    for argument in sys.argv[1:]:
+        if argument.startswith("--out="):
+            return argument.split("=", 1)[1]
+    return os.path.join("runs", "optimised_valence_profile")
+
+
 def wrap_method(cls, name, label):
     original = getattr(cls, name)
 
@@ -130,10 +457,13 @@ def install():
     import reactive_torch
     import valence_state_batched_membership_torch as heavy
     import valence_state_cached_h_topology_torch as cached_h
+    import h_state_factorised_batched_torch as grouped_h
 
     # Profiling-only sinks. Normal simulations never set these class attributes.
     reactive_torch.ReactiveSimulation._reactive_profile_sink = PROFILE
     heavy.BatchedHeavyValenceStateBatchedSimulation._heavy_profile_sink = PROFILE
+    cached_h.CachedHFastValenceStateBatchedSimulation._h_state_profile_sink = PROFILE
+    grouped_h.GroupedFactorisedHStateBatchedSimulation._h_state_profile_sink = PROFILE
 
     wrap_method(reactive_torch.ReactiveSimulation, "compute_forces", "force.total")
     wrap_method(reactive_torch.ReactiveSimulation, "build_neighbours", "neighbours.rebuild")
@@ -228,10 +558,27 @@ def install():
 
 
 def main():
+    PROFILE.configure_artifacts(
+        output_directory_from_argv()
+    )
+    PROFILE.start_memory_history()
+    PROFILE.print_raw_memory_checkpoint("profiler start")
+    PROFILE.memory_sample(
+        "profiler",
+        "start",
+    )
     batch_runner = install()
     try:
         batch_runner.main()
     finally:
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+        PROFILE.memory_sample(
+            "profiler",
+            "quiet final",
+        )
+        PROFILE.print_raw_memory_checkpoint("quiet final")
+        PROFILE.write_memory_artifacts()
         print("\nCHEMISTRYMODEL_PROFILE_JSON")
         print(json.dumps(PROFILE.report(), indent=2, sort_keys=True))
 
