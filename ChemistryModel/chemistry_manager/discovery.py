@@ -377,6 +377,7 @@ def route_full_cm_events_to_qm(
         "already_trusted_events": len(events) - len(eligible),
         "queued": imported["added"],
         "duplicates": imported["duplicates"],
+        "refreshed": imported.get("refreshed", 0),
         "trusted_ids": trusted_ids,
     }
 
@@ -407,6 +408,7 @@ def ingest_teacher_data(
     invalid = []
     queued = 0
     duplicates = 0
+    refreshed = 0
     events_seen = 0
     already_trusted_events = 0
 
@@ -493,6 +495,7 @@ def ingest_teacher_data(
         already_trusted_events += routed["already_trusted_events"]
         queued += routed["queued"]
         duplicates += routed["duplicates"]
+        refreshed += routed.get("refreshed", 0)
 
     if productions_added or experiments_added:
         _save_teacher_registry(registry_path, registry)
@@ -507,6 +510,7 @@ def ingest_teacher_data(
         "events_seen": events_seen,
         "queued_for_qm": queued,
         "duplicate_candidates": duplicates,
+        "refreshed_candidates": refreshed,
         "already_trusted_events": already_trusted_events,
         "invalid": invalid,
         "event_log_errors": event_errors,

@@ -79,7 +79,7 @@ def test_generation_is_reproducible_and_uses_atom_fallback(tmp_path):
     families = {row["experiment_family"] for row in one}
     assert families <= {"pair", "microcell"}
     assert all(row["category"] == "atom_atom" for row in one if row["experiment_family"] == "pair")
-    assert all(3 <= row["object_count"] <= 5 for row in one if row["experiment_family"] == "microcell")
+    assert all(3 <= row["object_count"] <= 8 for row in one if row["experiment_family"] == "microcell")
 
 
 def test_producer_cli_defaults_to_optimised_valence_and_allows_overrides():
@@ -159,6 +159,9 @@ def test_generation_updates_novelty_within_same_invocation(tmp_path, monkeypatch
         return original_weight(candidate, history)
 
     monkeypatch.setattr(producer, "novelty_weight", recording_weight)
+    monkeypatch.setattr(
+        producer, "_choose_experiment_family", lambda generator: "pair"
+    )
     specs, _ = producer.generate_experiment_specs(
         2, 123, molecule_root=molecules, qm_root=tmp_path / "qm"
     )
@@ -399,8 +402,10 @@ def test_full_cm_router_goes_straight_to_qm(tmp_path, monkeypatch):
     )
 
     assert result["queued"] == 1
-    assert len(store.candidates(CandidateState.WAITING_QM)) == 1
-    assert len(store.candidates(CandidateState.WAITING_CHARACTERISATION)) == 0
+    waiting = store.candidates(CandidateState.WAITING_QM)
+    assert len(waiting) == 1
+    assert len(store.candidates()) == 1
+    assert waiting[0]["state"] == CandidateState.WAITING_QM.value
 
 
 def test_controlled_final_event_routing_bypasses_characterisation_queue(
@@ -434,8 +439,10 @@ def test_controlled_final_event_routing_bypasses_characterisation_queue(
     )
 
     assert result["queued"] == 1
-    assert len(store.candidates(CandidateState.WAITING_QM)) == 1
-    assert len(store.candidates(CandidateState.WAITING_CHARACTERISATION)) == 0
+    waiting = store.candidates(CandidateState.WAITING_QM)
+    assert len(waiting) == 1
+    assert len(store.candidates()) == 1
+    assert waiting[0]["state"] == CandidateState.WAITING_QM.value
 
 
 def test_producer_source_isolates_postprocessing_from_md_failure():

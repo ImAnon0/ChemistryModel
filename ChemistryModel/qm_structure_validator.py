@@ -323,6 +323,45 @@ def _validation_success(record):
     )
 
 
+def _should_retry_cartesian_optimisation(problem):
+    """Return True when a fresh Cartesian optimisation is warranted.
+
+    Two cases are eligible:
+    1. OptKing internal-coordinate singularities such as near-linear bends
+       making torsions undefined.
+    2. The internal-coordinate optimisation exhausts its iteration limit
+       without converging.
+
+    Neither case is treated as chemical success. They only trigger a second
+    optimisation from the exact same starting geometry using Cartesian
+    coordinates.
+    """
+    message = f"{type(problem).__name__}: {problem}".lower()
+    problem_type = type(problem).__name__.lower()
+
+    coordinate_markers = (
+        "linear bends detected",
+        "unable to compute torsion",
+        "can't work in good torsion",
+        "cannot work in good torsion",
+        "problem computing interior bend",
+        "could not compute t(",
+        "tors.q",
+    )
+    if any(marker in message for marker in coordinate_markers):
+        return True
+
+    if (
+        "optimizationconvergenceerror" in problem_type
+        or "optimisationconvergenceerror" in problem_type
+        or "could not converge geometry optimization" in message
+        or "could not converge geometry optimisation" in message
+    ):
+        return True
+
+    return False
+
+
 class Psi4Runner:
     def __init__(self, threads=8, memory="4 GB"):
         self.threads = int(threads)
@@ -361,16 +400,31 @@ class Psi4Runner:
                 "Psi4 is not installed in this Python environment. Run Lab from "
                 "the project's Psi4/chem-sapt environment."
             ) from exc
-        psi4.set_num_threads(self.threads)
-        psi4.set_memory(self.memory)
-        psi4.core.set_output_file(os.devnull, False)
-        psi4.set_options({"reference": reference})
-        molecule = psi4.geometry(
-            build_psi4_geometry(symbols, coordinates, charge, multiplicity)
-        )
+
+        coordinates = np.asarray(coordinates, dtype=np.float64).copy()
+        model = f"{method}/{basis}"
+
+        def configure(*, coordinate_mode=None):
+            psi4.set_num_threads(self.threads)
+            psi4.set_memory(self.memory)
+            psi4.core.set_output_file(os.devnull, False)
+            options = {"reference": reference}
+            if coordinate_mode is not None:
+                options["opt_coordinates"] = str(coordinate_mode)
+            psi4.set_options(options)
+
+        def fresh_molecule():
+            return psi4.geometry(
+                build_psi4_geometry(
+                    symbols, coordinates, charge, multiplicity
+                )
+            )
+
+        configure()
+        molecule = fresh_molecule()
         try:
             gradient, wavefunction = psi4.gradient(
-                f"{method}/{basis}", molecule=molecule, return_wfn=True
+                model, molecule=molecule, return_wfn=True
             )
             energy = float(wavefunction.energy())
             gradient_array = np.asarray(gradient, dtype=np.float64)
@@ -379,18 +433,75 @@ class Psi4Runner:
                 "gradient_hartree_per_bohr": gradient_array,
                 "psi4_version": getattr(psi4, "__version__", None),
             }
+
+            attempts = []
             try:
                 optimised_energy, optimised_wfn = psi4.optimize(
-                    f"{method}/{basis}", molecule=molecule, return_wfn=True
+                    model, molecule=molecule, return_wfn=True
                 )
-            except Exception as exc:
-                result.update({
-                    "optimisation_converged": False,
-                    "optimisation_error": f"{type(exc).__name__}: {exc}",
+                attempts.append({
+                    "coordinate_mode": "internal",
+                    "converged": True,
                 })
-                return result
+                coordinate_mode = "internal"
+                initial_error = None
+            except Exception as exc:
+                initial_error = f"{type(exc).__name__}: {exc}"
+                attempts.append({
+                    "coordinate_mode": "internal",
+                    "converged": False,
+                    "error": initial_error,
+                })
+
+                if not _should_retry_cartesian_optimisation(exc):
+                    result.update({
+                        "optimisation_converged": False,
+                        "optimisation_error": initial_error,
+                        "optimisation_coordinate_mode": "internal",
+                        "optimisation_attempts": attempts,
+                    })
+                    return result
+
+                # The exact same CM geometry, method, basis, charge,
+                # multiplicity and convergence criteria are retained.
+                # Only OptKing's coordinate representation changes.
+                try:
+                    psi4.core.clean()
+                    configure(coordinate_mode="cartesian")
+                    cartesian_molecule = fresh_molecule()
+                    optimised_energy, optimised_wfn = psi4.optimize(
+                        model,
+                        molecule=cartesian_molecule,
+                        return_wfn=True,
+                    )
+                    attempts.append({
+                        "coordinate_mode": "cartesian",
+                        "converged": True,
+                    })
+                    coordinate_mode = "cartesian_fallback"
+                except Exception as fallback_exc:
+                    fallback_error = (
+                        f"{type(fallback_exc).__name__}: {fallback_exc}"
+                    )
+                    attempts.append({
+                        "coordinate_mode": "cartesian",
+                        "converged": False,
+                        "error": fallback_error,
+                    })
+                    result.update({
+                        "optimisation_converged": False,
+                        "optimisation_error": fallback_error,
+                        "optimisation_initial_error": initial_error,
+                        "optimisation_coordinate_mode": "cartesian_fallback",
+                        "optimisation_attempts": attempts,
+                    })
+                    return result
+
             optimised = (
-                np.asarray(optimised_wfn.molecule().geometry(), dtype=np.float64)
+                np.asarray(
+                    optimised_wfn.molecule().geometry(),
+                    dtype=np.float64,
+                )
                 * BOHR_TO_ANGSTROM
             )
             variables = {
@@ -403,7 +514,11 @@ class Psi4Runner:
                 "optimised_energy_hartree": float(optimised_energy),
                 "optimised_coordinates_A": optimised,
                 "optimisation_metadata": variables,
+                "optimisation_coordinate_mode": coordinate_mode,
+                "optimisation_attempts": attempts,
             })
+            if initial_error is not None:
+                result["optimisation_initial_error"] = initial_error
             return result
         finally:
             psi4.core.clean()
@@ -493,6 +608,13 @@ def run_validation(molecule_id, charge, multiplicity, *, method=DEFAULT_METHOD,
                 "optimisation": {
                     "converged": False,
                     "error": raw.get("optimisation_error", "QM optimisation failed"),
+                    "coordinate_mode": raw.get(
+                        "optimisation_coordinate_mode", "internal"
+                    ),
+                    "initial_internal_coordinate_error": raw.get(
+                        "optimisation_initial_error"
+                    ),
+                    "attempts": raw.get("optimisation_attempts", []),
                 },
                 "error": raw.get("optimisation_error", "QM optimisation failed"),
                 "psi4_version": raw.get("psi4_version"),
@@ -519,6 +641,17 @@ def run_validation(molecule_id, charge, multiplicity, *, method=DEFAULT_METHOD,
                     "energy_eV": optimised_energy * HARTREE_TO_EV,
                     "relaxation_energy_hartree": optimised_energy - original_energy,
                     "relaxation_energy_eV": (optimised_energy - original_energy) * HARTREE_TO_EV,
+                    "coordinate_mode": raw.get(
+                        "optimisation_coordinate_mode", "internal"
+                    ),
+                    "fallback_used": (
+                        raw.get("optimisation_coordinate_mode")
+                        == "cartesian_fallback"
+                    ),
+                    "initial_internal_coordinate_error": raw.get(
+                        "optimisation_initial_error"
+                    ),
+                    "attempts": raw.get("optimisation_attempts", []),
                     "metadata": raw.get("optimisation_metadata", {}),
                 },
                 "comparison": comparison,

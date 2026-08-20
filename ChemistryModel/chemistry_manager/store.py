@@ -3,12 +3,43 @@
 import copy
 import json
 import os
+import time
 from pathlib import Path
 
 from .state import CandidateState, coerce_state, require_transition
 
 
 FORMAT_VERSION = 1
+
+# Windows can briefly deny an atomic rename while Defender, an indexer, an
+# editor, or another reader has the freshly-written file open. Keep atomic
+# replacement semantics, but tolerate those transient sharing/access locks.
+_ATOMIC_REPLACE_RETRY_DELAYS_S = (
+    0.01, 0.02, 0.05, 0.10, 0.20, 0.40, 0.80, 1.00,
+)
+
+
+def _replace_with_retry(source, destination):
+    """Atomically replace destination, retrying transient Windows file locks."""
+    source = Path(source)
+    destination = Path(destination)
+
+    for attempt in range(len(_ATOMIC_REPLACE_RETRY_DELAYS_S) + 1):
+        try:
+            os.replace(source, destination)
+            return
+        except OSError as problem:
+            winerror = getattr(problem, "winerror", None)
+            retryable = (
+                isinstance(problem, PermissionError)
+                or winerror in (5, 32, 33)
+            )
+            if (
+                not retryable
+                or attempt >= len(_ATOMIC_REPLACE_RETRY_DELAYS_S)
+            ):
+                raise
+            time.sleep(_ATOMIC_REPLACE_RETRY_DELAYS_S[attempt])
 
 
 def _empty_document():
@@ -65,7 +96,7 @@ class ManagerStore:
             json.dumps(document, indent=2, sort_keys=True) + "\n",
             encoding="utf-8",
         )
-        os.replace(temporary, self.path)
+        _replace_with_retry(temporary, self.path)
 
     def migrate_legacy_wait_states(self):
         """Persist removed legacy wait states as WAITING_QM.
@@ -142,6 +173,7 @@ class ManagerStore:
         source_extra = dict(source_extra or {})
         added = 0
         duplicates = 0
+        refreshed = 0
         for event in events:
             event_id = str(event.get("event_id", "")).strip()
             if not event_id:
@@ -158,7 +190,7 @@ class ManagerStore:
                     source["event_id"] = event_id
                     source["event_log"] = os.path.normpath(str(event_log))
                     source.update(copy.deepcopy(source_extra))
-                    added += 1
+                    refreshed += 1
                 continue
 
             source = {
@@ -186,9 +218,13 @@ class ManagerStore:
             }
             added += 1
 
-        if added:
+        if added or refreshed:
             self.save(document)
-        return {"added": added, "duplicates": duplicates}
+        return {
+            "added": added,
+            "duplicates": duplicates,
+            "refreshed": refreshed,
+        }
 
     def product_ids(self, state=None):
         """Unique molecule IDs referenced by candidates, optionally in one state."""

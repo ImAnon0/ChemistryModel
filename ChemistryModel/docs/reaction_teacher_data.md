@@ -68,6 +68,36 @@ sparse ordinary coverage plus close contacts and windows around instantaneous
 bond-graph changes.
 
 After a production, the existing molecule scanner analyses its recordings.
-Events belonging to that production are added to the manager's
-`WAITING_CHARACTERISATION` queue. The scanner's structural fingerprinting
+Events belonging to full Optimised-Valence teacher production are routed to
+the manager's `WAITING_QM` queue. The scanner's structural fingerprinting
 continues to own molecule identity and deduplication.
+
+## Autonomous manager loop
+
+The sequential manager command plans exactly one experiment from current
+history, runs and persists it through the same production pipeline, then reads
+the updated history before planning the next experiment:
+
+```powershell
+py -m chemistry_manager run --count 100 --duration 2.0 --qm-every 5 --device cuda
+```
+
+After each configured number of completed simulations it pauses MD and checks
+the existing `WAITING_QM` queue. An empty queue is skipped; otherwise the
+existing QM validator runs synchronously and its accepted/rejected trust state
+is visible to the very next planner decision. A final queue check occurs after
+the experiment budget.
+
+Each run has an atomic receipt under
+`teacher_data/<date>/manager_runs/RUN_....json`. It records deterministic
+per-step planning seeds, child invocation and experiment IDs, completion and
+failure counts, QM checkpoints, settings, and an active-step marker. Resume by
+ID without changing the original settings:
+
+```powershell
+py -m chemistry_manager run --resume RUN_...
+```
+
+Completed experiment JSON files remain authoritative during crash recovery;
+an incomplete active step may be retried, but a completed one is reconciled
+without repeating its MD trajectory.

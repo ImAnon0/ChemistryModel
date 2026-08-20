@@ -37,6 +37,14 @@ SAFE_GAP_STEP_A = 0.05
 SAFE_GAP_BUFFER_A = 0.20
 FIRST_ENCOUNTER_RELEASE_A = 0.05
 
+# Microreactor early completion is tied to the real BondTracker confirmation
+# time instead of a reaction-specific hardcoded lifetime. With the current
+# 100 fs formation window these become 500 fs minimum runtime and 300 fs of
+# continuous quiescence.
+MICROREACTOR_QUIESCENCE_MIN_FORMATION_WINDOWS = 5.0
+MICROREACTOR_QUIESCENCE_QUIET_FORMATION_WINDOWS = 3.0
+MICROREACTOR_QUIESCENCE_VERSION = 1
+
 from high_fidelity_torch import (
     HF_MODEL_NAME, HF_MODEL_REVISION,
     H_TRANSFER_STATE_MIXING_FRACTION,
@@ -1164,9 +1172,20 @@ def prepare_collision_box(molecule, partner, box_size, seed, start_gap,
 
 
 
-def prepare_microcell_box(reactants, box_size, seed, cluster_radius_A=3.5, minimum_gap_A=1.8):
+def prepare_microcell_box(
+    reactants, box_size, seed, cluster_radius_A=3.5, minimum_gap_A=1.8
+):
+    """Prepare a small filled reactive environment with no prescribed collision.
+
+    Object centres are sampled uniformly through the volume of a sphere rather
+    than on a loose radial shell.  Every placement still has to satisfy the
+    same geometric minimum gap and the real BondTracker taper threshold.
+    """
     if len(reactants) < 3:
-        raise ValueError("microcell requires at least three reactant objects")
+        raise ValueError("microreactor requires at least three reactant objects")
+    if len(reactants) > 8:
+        raise ValueError("microreactor currently supports at most eight objects")
+
     threshold, formation_time = bonding_settings()
     generator = np.random.default_rng(int(seed) + 87019)
     centre = np.full(3, float(box_size) / 2.0)
@@ -1176,40 +1195,68 @@ def prepare_microcell_box(reactants, box_size, seed, cluster_radius_A=3.5, minim
     positions_all = []
     cursor = 0
 
+    import reactive as R
+
     for object_index, reactant in enumerate(reactants):
         symbols, local = _centred_positions(reactant)
         local = local @ rotation_matrix(generator).T
         accepted = None
-        for _ in range(400):
+
+        # Larger environments need more rejection-sampling attempts, but the
+        # deterministic seed means a retry of the same experiment is identical.
+        placement_attempts = 400 + 100 * max(0, len(reactants) - 5)
+        for _ in range(placement_attempts):
             direction = _random_axis(generator)
-            radial = float(generator.uniform(0.25 * cluster_radius_A, cluster_radius_A))
+
+            # r = R * U^(1/3) gives a uniform distribution through sphere
+            # volume. This avoids concentrating objects on the outer shell.
+            radial = float(
+                cluster_radius_A * generator.random() ** (1.0 / 3.0)
+            )
             candidate = local + centre + direction * radial
-            if float(np.min(np.minimum(candidate, float(box_size) - candidate))) < 1.5:
+
+            if float(
+                np.min(np.minimum(candidate, float(box_size) - candidate))
+            ) < 1.5:
                 continue
+
             safe = True
+            types_new = _types_from_symbols(symbols)
             for old_symbols, old_positions in placed:
                 offsets = candidate[:, None, :] - old_positions[None, :, :]
-                offsets -= float(box_size) * np.round(offsets / float(box_size))
+                offsets -= float(box_size) * np.round(
+                    offsets / float(box_size)
+                )
                 distances = np.linalg.norm(offsets, axis=2)
-                if distances.size and float(np.min(distances)) < float(minimum_gap_A):
+                if (
+                    distances.size
+                    and float(np.min(distances)) < float(minimum_gap_A)
+                ):
                     safe = False
                     break
-                types_new = _types_from_symbols(symbols)
+
                 types_old = _types_from_symbols(old_symbols)
-                import reactive as R
                 taper = R.smooth_cutoff(
                     distances,
                     R.CUTOFF_INNER[np.ix_(types_new, types_old)],
                     R.CUTOFF_OUTER[np.ix_(types_new, types_old)],
                 )
-                if np.size(taper) and float(np.max(taper)) > float(threshold):
+                if (
+                    np.size(taper)
+                    and float(np.max(taper)) > float(threshold)
+                ):
                     safe = False
                     break
+
             if safe:
                 accepted = candidate
                 break
+
         if accepted is None:
-            raise ValueError("could not place microcell reactants safely")
+            raise ValueError(
+                "could not place microreactor objects safely; "
+                "increase cluster radius or box size"
+            )
 
         placed.append((list(symbols), accepted))
         positions_all.append(accepted)
@@ -1221,18 +1268,31 @@ def prepare_microcell_box(reactants, box_size, seed, cluster_radius_A=3.5, minim
             "start": int(cursor),
             "stop": int(cursor + len(symbols)),
             "atoms": int(len(symbols)),
+            "initial_com_A": [
+                float(value) for value in np.mean(accepted, axis=0)
+            ],
         })
         cursor += len(symbols)
 
+    total_atoms = int(sum(len(item[0]) for item in placed))
+    cluster_volume = (4.0 / 3.0) * math.pi * float(cluster_radius_A) ** 3
+
     return symbols_all, np.vstack(positions_all).astype(np.float32), {
         "experiment_family": "microcell",
+        "environment_mode": "microreactor",
+        "environment_version": 1,
         "object_count": len(reactants),
+        "total_atoms": total_atoms,
         "object_ranges": ranges,
         "cluster_radius_A": float(cluster_radius_A),
+        "cluster_volume_A3": float(cluster_volume),
+        "object_density_per_A3": float(len(reactants) / cluster_volume),
+        "atom_density_per_A3": float(total_atoms / cluster_volume),
         "minimum_gap_A": float(minimum_gap_A),
         "bond_threshold": float(threshold),
         "bond_formation_time_fs": float(formation_time),
         "safe_initial_separation": True,
+        "placement_distribution": "uniform_sphere_volume",
     }
 
 
@@ -1280,8 +1340,256 @@ def apply_microcell_inward_velocities(simulation, infos, inward_factor):
     return measures
 
 
+def _microreactor_bond_edges(symbols, positions, box_size, threshold):
+    """Instantaneous graph using the same taper family as BondTracker."""
+    import reactive as R
+
+    positions = np.asarray(positions, dtype=np.float64)
+    count = len(symbols)
+    first, second = np.triu_indices(count, 1)
+    if len(first) == 0:
+        return tuple()
+
+    offsets = positions[second] - positions[first]
+    offsets -= float(box_size) * np.round(offsets / float(box_size))
+    distances = np.linalg.norm(offsets, axis=1)
+    types = _types_from_symbols(symbols)
+    taper = np.asarray(
+        R.smooth_cutoff(
+            distances,
+            R.CUTOFF_INNER[types[first], types[second]],
+            R.CUTOFF_OUTER[types[first], types[second]],
+        ),
+        dtype=np.float64,
+    )
+    return tuple(
+        (int(a), int(b))
+        for a, b, value in zip(first, second, taper)
+        if float(value) > float(threshold)
+    )
+
+
+def _components_from_edges(count, edges):
+    parents = list(range(int(count)))
+
+    def find(value):
+        while parents[value] != value:
+            parents[value] = parents[parents[value]]
+            value = parents[value]
+        return value
+
+    for first, second in edges:
+        first_root = find(int(first))
+        second_root = find(int(second))
+        if first_root != second_root:
+            parents[second_root] = first_root
+
+    grouped = {}
+    for index in range(int(count)):
+        grouped.setdefault(find(index), []).append(index)
+    return [
+        np.asarray(indices, dtype=np.int64)
+        for _, indices in sorted(grouped.items())
+    ]
+
+
+def _unwrap_component_positions(positions, indices, box_size):
+    """Unwrap one connected component around its first atom for COM geometry."""
+    positions = np.asarray(positions, dtype=np.float64)
+    indices = np.asarray(indices, dtype=np.int64)
+    reference = positions[int(indices[0])]
+    relative = positions[indices] - reference
+    relative -= float(box_size) * np.round(relative / float(box_size))
+    return reference + relative
+
+
+def _component_state(indices, positions, velocities, masses, box_size):
+    indices = np.asarray(indices, dtype=np.int64)
+    local_positions = _unwrap_component_positions(
+        positions, indices, box_size
+    )
+    local_velocities = np.asarray(velocities, dtype=np.float64)[indices]
+    local_masses = np.asarray(masses, dtype=np.float64)[indices]
+    total_mass = float(np.sum(local_masses))
+    if total_mass <= 0.0:
+        weights = np.full(len(indices), 1.0 / max(len(indices), 1))
+    else:
+        weights = local_masses / total_mass
+
+    centre = np.sum(local_positions * weights[:, None], axis=0)
+    velocity = np.sum(local_velocities * weights[:, None], axis=0)
+    radius = float(
+        np.max(np.linalg.norm(local_positions - centre, axis=1))
+    ) if len(indices) else 0.0
+    return {
+        "indices": indices,
+        "centre_A": centre,
+        "velocity_A_per_fs": velocity,
+        "radius_A": radius,
+    }
+
+
+def _future_component_encounter_possible(
+    first, second, symbols, box_size, remaining_fs,
+):
+    """Conservative ballistic encounter test across periodic images.
+
+    When components are already outside interaction range, early completion is
+    allowed only if their current COM trajectories cannot bring their bounding
+    envelopes into the largest relevant reactive cutoff anywhere in the
+    remaining requested simulation time. Twenty-seven neighbouring periodic
+    images are considered.
+    """
+    import reactive as R
+
+    remaining_fs = max(0.0, float(remaining_fs))
+    first_indices = first["indices"]
+    second_indices = second["indices"]
+    types = _types_from_symbols(symbols)
+    outer = R.CUTOFF_OUTER[
+        np.ix_(types[first_indices], types[second_indices])
+    ]
+    largest_outer = float(np.max(outer)) if np.size(outer) else 0.0
+    encounter_radius = (
+        float(first["radius_A"])
+        + float(second["radius_A"])
+        + largest_outer
+    )
+
+    base_relative = (
+        np.asarray(second["centre_A"], dtype=np.float64)
+        - np.asarray(first["centre_A"], dtype=np.float64)
+    )
+    relative_velocity = (
+        np.asarray(second["velocity_A_per_fs"], dtype=np.float64)
+        - np.asarray(first["velocity_A_per_fs"], dtype=np.float64)
+    )
+    speed_squared = float(np.dot(relative_velocity, relative_velocity))
+    box = float(box_size)
+
+    for ix in (-1, 0, 1):
+        for iy in (-1, 0, 1):
+            for iz in (-1, 0, 1):
+                relative = base_relative + box * np.asarray(
+                    [ix, iy, iz], dtype=np.float64
+                )
+
+                if speed_squared <= 1e-24:
+                    closest = float(np.linalg.norm(relative))
+                else:
+                    closest_time = -float(
+                        np.dot(relative, relative_velocity)
+                    ) / speed_squared
+                    closest_time = float(np.clip(
+                        closest_time, 0.0, remaining_fs
+                    ))
+                    closest = float(np.linalg.norm(
+                        relative + relative_velocity * closest_time
+                    ))
+
+                if closest <= encounter_radius:
+                    return True
+
+    return False
+
+
+def _microreactor_quiescence_snapshot(
+    symbols, positions, velocities, masses, box_size, remaining_fs,
+    bond_threshold,
+):
+    """Return current topology/contact/future-encounter activity."""
+    import reactive as R
+
+    positions = np.asarray(positions, dtype=np.float64)
+    velocities = np.asarray(velocities, dtype=np.float64)
+    edges = _microreactor_bond_edges(
+        symbols, positions, box_size, bond_threshold
+    )
+    components = _components_from_edges(len(symbols), edges)
+
+    # Any non-zero taper across separate components means they are already in
+    # the reactive approach/contact region even if BondTracker has not yet
+    # confirmed a bond.
+    types = _types_from_symbols(symbols)
+    close_contact = False
+    states = [
+        _component_state(
+            indices, positions, velocities, masses, box_size
+        )
+        for indices in components
+    ]
+
+    future_encounter = False
+    for first_index, first_state in enumerate(states):
+        for second_state in states[first_index + 1:]:
+            left = first_state["indices"]
+            right = second_state["indices"]
+            offsets = (
+                positions[right, None, :]
+                - positions[None, left, :]
+            )
+            offsets -= float(box_size) * np.round(
+                offsets / float(box_size)
+            )
+            distances = np.linalg.norm(offsets, axis=2)
+            taper = R.smooth_cutoff(
+                distances,
+                R.CUTOFF_INNER[np.ix_(types[right], types[left])],
+                R.CUTOFF_OUTER[np.ix_(types[right], types[left])],
+            )
+            if np.size(taper) and float(np.max(taper)) > 0.0:
+                close_contact = True
+
+            if _future_component_encounter_possible(
+                first_state,
+                second_state,
+                symbols,
+                box_size,
+                remaining_fs,
+            ):
+                future_encounter = True
+
+    return {
+        "edges": edges,
+        "component_count": int(len(components)),
+        "close_contact": bool(close_contact),
+        "future_encounter_possible": bool(future_encounter),
+    }
+
+
+def _capture_microreactor_final_state(
+    recorders, simulation, symbol_lists, atom_ids,
+):
+    """Guarantee the termination geometry exists in every recorder."""
+    positions = simulation.positions_per_box
+    potentials = simulation.potential_per_box
+    kinetics, temperatures = simulation.thermodynamics_per_box
+    velocities_per_box = simulation.velocities_per_box
+    elapsed = float(simulation.elapsed_femtoseconds)
+
+    for box, recorder in enumerate(recorders):
+        already_captured = (
+            len(recorder) > 0
+            and abs(float(recorder.times[-1]) - elapsed) <= 1e-9
+        )
+        if already_captured:
+            continue
+        recorder.capture(
+            positions[box],
+            elapsed,
+            float(potentials[box]),
+            float(kinetics[box]),
+            float(temperatures[box]),
+            velocities=velocities_per_box[box],
+            box_size=simulation.box_size,
+            symbols=symbol_lists[box],
+            atom_ids=atom_ids[box],
+        )
+
+
 def run_microcell_group(reactants, seeds, options, frame_observer=None):
     from recorder import Recorder
+
     SimulationClass = simulation_class_for_physics(options.physics)
     boxes, infos = [], []
     for seed in seeds:
@@ -1301,46 +1609,263 @@ def run_microcell_group(reactants, seeds, options, frame_observer=None):
         device=options.device,
         random_seed=int(seeds[0]),
     )
-    measures = apply_microcell_inward_velocities(simulation, infos, options.inward_factor)
+    measures = apply_microcell_inward_velocities(
+        simulation, infos, options.inward_factor
+    )
     recorders = [
-        Recorder(simulation.symbols_for(i), simulation.box_size, maximum_frames=int(options.max_frames))
+        Recorder(
+            simulation.symbols_for(i),
+            simulation.box_size,
+            maximum_frames=int(options.max_frames),
+        )
         for i in range(len(seeds))
     ]
-    symbol_lists = [list(simulation.symbols_for(i)) for i in range(len(seeds))]
-    atom_ids = [np.arange(len(s), dtype=np.uint32) for s in symbol_lists]
-    _emit_frame_observer(frame_observer, simulation, seeds, symbol_lists, infos)
+    symbol_lists = [
+        list(simulation.symbols_for(i))
+        for i in range(len(seeds))
+    ]
+    atom_ids = [
+        np.arange(len(symbols), dtype=np.uint32)
+        for symbols in symbol_lists
+    ]
+    _emit_frame_observer(
+        frame_observer, simulation, seeds, symbol_lists, infos
+    )
 
-    total_steps = max(1, int(float(options.picoseconds) * 1000.0 / float(options.time_step)))
+    time_step_fs = float(options.time_step)
+    requested_fs = float(options.picoseconds) * 1000.0
+    total_steps = max(1, int(requested_fs / time_step_fs))
     capture_steps = max(1, int(options.capture_every))
-    sample_steps = max(1, int(round(float(options.diagnostic_sample_fs) / float(options.time_step))))
+    sample_steps = max(
+        1,
+        int(round(
+            float(options.diagnostic_sample_fs) / time_step_fs
+        )),
+    )
     sample_steps = max(1, math.gcd(capture_steps, sample_steps))
+
+    bond_threshold, formation_time_fs = bonding_settings()
+    minimum_runtime_fs = (
+        MICROREACTOR_QUIESCENCE_MIN_FORMATION_WINDOWS
+        * formation_time_fs
+    )
+    quiet_window_fs = (
+        MICROREACTOR_QUIESCENCE_QUIET_FORMATION_WINDOWS
+        * formation_time_fs
+    )
+
+    masses = (
+        simulation.masses.detach().cpu().numpy().reshape(-1)
+    )
+    per_box = int(getattr(
+        simulation, "per_box", len(masses) // max(len(seeds), 1)
+    ))
+
+    quiescence = []
+    initial_positions = simulation.positions_per_box
+    initial_velocities = simulation.velocities_per_box
+    for box, symbols in enumerate(symbol_lists):
+        mass_slice = masses[
+            box * per_box:(box + 1) * per_box
+        ]
+        initial = _microreactor_quiescence_snapshot(
+            symbols,
+            initial_positions[box],
+            initial_velocities[box],
+            mass_slice,
+            simulation.box_size,
+            requested_fs,
+            bond_threshold,
+        )
+        quiescence.append({
+            "last_edges": initial["edges"],
+            "last_activity_fs": 0.0,
+            "topology_changes": 0,
+            "close_contact_samples": int(initial["close_contact"]),
+            "future_encounter_samples": int(
+                initial["future_encounter_possible"]
+            ),
+            "last_snapshot": initial,
+        })
+
     steps_done = 0
     started = time.time()
-    stopped = False
+    numerical_failure = False
+    quiescent_completion = False
 
     while steps_done < total_steps:
         simulation.target_temperature = float(options.temperature)
         chunk = min(sample_steps, total_steps - steps_done)
         simulation.step(chunk)
         steps_done += chunk
+
+        elapsed_fs = float(simulation.elapsed_femtoseconds)
+        remaining_fs = max(0.0, requested_fs - elapsed_fs)
         positions = simulation.positions_per_box
         potentials = simulation.potential_per_box
-        if steps_done % capture_steps == 0 or steps_done >= total_steps:
-            kinetics, temperatures = simulation.thermodynamics_per_box
-            velocities_per_box = simulation.velocities_per_box
-            for box, recorder in enumerate(recorders):
-                recorder.capture(
-                    positions[box], simulation.elapsed_femtoseconds,
-                    float(potentials[box]), float(kinetics[box]), float(temperatures[box]),
-                    velocities=velocities_per_box[box], box_size=simulation.box_size,
-                    symbols=symbol_lists[box], atom_ids=atom_ids[box],
-                )
-        _emit_frame_observer(frame_observer, simulation, seeds, symbol_lists, infos)
-        if not np.all(np.isfinite(np.asarray(potentials, dtype=float))):
-            stopped = True
+        velocities_per_box = simulation.velocities_per_box
+
+        finite = (
+            np.all(np.isfinite(np.asarray(potentials, dtype=float)))
+            and np.all(np.isfinite(np.asarray(positions, dtype=float)))
+            and np.all(np.isfinite(
+                np.asarray(velocities_per_box, dtype=float)
+            ))
+        )
+        if not finite:
+            numerical_failure = True
             break
 
-    return recorders, simulation, time.time()-started, stopped, measures, [None]*len(seeds), infos
+        all_quiet = elapsed_fs + 1e-9 >= minimum_runtime_fs
+
+        for box, symbols in enumerate(symbol_lists):
+            mass_slice = masses[
+                box * per_box:(box + 1) * per_box
+            ]
+            snapshot = _microreactor_quiescence_snapshot(
+                symbols,
+                positions[box],
+                velocities_per_box[box],
+                mass_slice,
+                simulation.box_size,
+                remaining_fs,
+                bond_threshold,
+            )
+            state = quiescence[box]
+
+            topology_changed = (
+                snapshot["edges"] != state["last_edges"]
+            )
+            if topology_changed:
+                state["topology_changes"] += 1
+                state["last_edges"] = snapshot["edges"]
+
+            if snapshot["close_contact"]:
+                state["close_contact_samples"] += 1
+            if snapshot["future_encounter_possible"]:
+                state["future_encounter_samples"] += 1
+
+            active_now = bool(
+                topology_changed
+                or snapshot["close_contact"]
+                or snapshot["future_encounter_possible"]
+            )
+            if active_now:
+                state["last_activity_fs"] = elapsed_fs
+
+            state["last_snapshot"] = snapshot
+            quiet_for_fs = elapsed_fs - float(
+                state["last_activity_fs"]
+            )
+            box_quiet = bool(
+                elapsed_fs + 1e-9 >= minimum_runtime_fs
+                and quiet_for_fs + 1e-9 >= quiet_window_fs
+                and not snapshot["close_contact"]
+                and not snapshot["future_encounter_possible"]
+            )
+            all_quiet = all_quiet and box_quiet
+
+        capture_now = (
+            steps_done % capture_steps == 0
+            or steps_done >= total_steps
+            or all_quiet
+        )
+        if capture_now:
+            kinetics, temperatures = simulation.thermodynamics_per_box
+            for box, recorder in enumerate(recorders):
+                already_captured = (
+                    len(recorder) > 0
+                    and abs(
+                        float(recorder.times[-1]) - elapsed_fs
+                    ) <= 1e-9
+                )
+                if not already_captured:
+                    recorder.capture(
+                        positions[box],
+                        elapsed_fs,
+                        float(potentials[box]),
+                        float(kinetics[box]),
+                        float(temperatures[box]),
+                        velocities=velocities_per_box[box],
+                        box_size=simulation.box_size,
+                        symbols=symbol_lists[box],
+                        atom_ids=atom_ids[box],
+                    )
+
+        _emit_frame_observer(
+            frame_observer, simulation, seeds, symbol_lists, infos
+        )
+
+        if all_quiet:
+            quiescent_completion = True
+            break
+
+    # Even numerical failures and non-capture-boundary exits retain the exact
+    # final finite geometry when possible. Quiescent completion in particular
+    # is a successful experiment, not a failure.
+    if not numerical_failure:
+        _capture_microreactor_final_state(
+            recorders, simulation, symbol_lists, atom_ids
+        )
+
+    actual_fs = float(simulation.elapsed_femtoseconds)
+    if numerical_failure:
+        termination_reason = "numerical_failure"
+    elif quiescent_completion:
+        termination_reason = "quiescent"
+    else:
+        termination_reason = "duration_complete"
+
+    for box, info in enumerate(infos):
+        state = quiescence[box]
+        snapshot = state.get("last_snapshot") or {}
+        info["termination"] = {
+            "version": MICROREACTOR_QUIESCENCE_VERSION,
+            "reason": termination_reason,
+            "requested_time_fs": float(requested_fs),
+            "actual_time_fs": actual_fs,
+            "requested_picoseconds": float(options.picoseconds),
+            "actual_picoseconds": actual_fs / 1000.0,
+            "completed_early": bool(quiescent_completion),
+            "minimum_runtime_fs": float(minimum_runtime_fs),
+            "quiet_window_fs": float(quiet_window_fs),
+            "last_activity_fs": float(state["last_activity_fs"]),
+            "quiet_for_fs": max(
+                0.0, actual_fs - float(state["last_activity_fs"])
+            ),
+            "topology_changes": int(state["topology_changes"]),
+            "close_contact_samples": int(
+                state["close_contact_samples"]
+            ),
+            "future_encounter_samples": int(
+                state["future_encounter_samples"]
+            ),
+            "final_component_count": int(
+                snapshot.get("component_count", 0)
+            ),
+            "final_close_contact": bool(
+                snapshot.get("close_contact", False)
+            ),
+            "future_encounter_possible_at_end": bool(
+                snapshot.get("future_encounter_possible", False)
+            ),
+            "criterion": (
+                "after the minimum runtime, require a continuous quiet "
+                "window with no topology change, no cross-component "
+                "reactive contact, and no ballistic component encounter "
+                "predicted within the remaining requested simulation time"
+            ),
+        }
+
+    return (
+        recorders,
+        simulation,
+        time.time() - started,
+        numerical_failure,
+        measures,
+        [None] * len(seeds),
+        infos,
+    )
 
 
 def outcome_for_reactants(recorder, reactants, library="molecules"):
@@ -1372,8 +1897,10 @@ def summarise_microcell(recorder, reactants, seed, options, wall_seconds, stoppe
         "file": f"run_s{int(seed):04d}.npz",
         "seed": int(seed),
         "finished": True,
-        "experiment_type": "reaction_microcell",
+        "experiment_type": "reaction_microreactor",
         "experiment_family": "microcell",
+        "environment_mode": "microreactor",
+        "environment_version": 1,
         **physics,
         "temperature_K": float(options.temperature),
         "box": float(options.box),
@@ -1400,6 +1927,34 @@ def summarise_microcell(recorder, reactants, seed, options, wall_seconds, stoppe
         "minimum_gap_A": float(options.minimum_gap_A),
         "inward_factor": float(options.inward_factor),
         "microcell_info": cell_info or {},
+        "cluster_volume_A3": float((cell_info or {}).get("cluster_volume_A3", 0.0)),
+        "object_density_per_A3": float(
+            (cell_info or {}).get("object_density_per_A3", 0.0)
+        ),
+        "atom_density_per_A3": float(
+            (cell_info or {}).get("atom_density_per_A3", 0.0)
+        ),
+        "placement_distribution": (cell_info or {}).get(
+            "placement_distribution", "legacy"
+        ),
+        "termination": (cell_info or {}).get("termination", {
+            "reason": (
+                "numerical_failure"
+                if stopped_early else "duration_complete"
+            ),
+            "completed_early": False,
+        }),
+        "termination_reason": (
+            (cell_info or {}).get("termination") or {}
+        ).get(
+            "reason",
+            "numerical_failure" if stopped_early else "duration_complete",
+        ),
+        "terminated_quiescent": bool(
+            ((cell_info or {}).get("termination") or {}).get(
+                "reason"
+            ) == "quiescent"
+        ),
         "thermal_rms_speed": float((velocity_measure or {}).get("thermal_rms_speed", 0.0)),
         "inward_speed": float((velocity_measure or {}).get("inward_speed", 0.0)),
     }

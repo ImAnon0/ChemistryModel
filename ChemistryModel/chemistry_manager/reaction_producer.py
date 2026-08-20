@@ -8,6 +8,7 @@ import secrets
 from datetime import datetime
 from pathlib import Path
 import subprocess
+import time
 from types import SimpleNamespace
 
 import numpy as np
@@ -22,6 +23,36 @@ from .trust import MoleculeTrust, trust_level, trusted_molecules
 
 
 FORMAT_VERSION = 1
+
+# Windows can briefly deny an atomic rename while Defender, an indexer, an
+# editor, or another reader has the freshly-written file open. Keep atomic
+# replacement semantics, but tolerate those transient sharing/access locks.
+_ATOMIC_REPLACE_RETRY_DELAYS_S = (
+    0.01, 0.02, 0.05, 0.10, 0.20, 0.40, 0.80, 1.00,
+)
+
+
+def _replace_with_retry(source, destination):
+    """Atomically replace destination, retrying transient Windows file locks."""
+    source = Path(source)
+    destination = Path(destination)
+
+    for attempt in range(len(_ATOMIC_REPLACE_RETRY_DELAYS_S) + 1):
+        try:
+            os.replace(source, destination)
+            return
+        except OSError as problem:
+            winerror = getattr(problem, "winerror", None)
+            retryable = (
+                isinstance(problem, PermissionError)
+                or winerror in (5, 32, 33)
+            )
+            if (
+                not retryable
+                or attempt >= len(_ATOMIC_REPLACE_RETRY_DELAYS_S)
+            ):
+                raise
+            time.sleep(_ATOMIC_REPLACE_RETRY_DELAYS_S[attempt])
 ELEMENTAL_REACTANTS = ("atom:H", "atom:C", "atom:N", "atom:O")
 PHYSICS_FILES = (
     "reactive.py", "reactive_torch.py", "batched_torch.py",
@@ -57,14 +88,89 @@ CONFIG_REUSE_EXPONENT = 1.20
 APPROACH_SIMILARITY_SCALE = 0.45
 IMPACT_SIMILARITY_SCALE = 0.22
 TEMPERATURE_SIMILARITY_SCALE_K = 300.0
+# Microreactors are the primary discovery environment. Pair probes remain a
+# deliberately smaller channel for mechanistic/targeted exploration.
 PAIR_FAMILY_WEIGHT = 1.0
-MICROCELL_FAMILY_WEIGHT = 1.0
-MICROCELL_OBJECT_COUNT_WEIGHTS = {3: 0.55, 4: 0.30, 5: 0.15}
+MICROCELL_FAMILY_WEIGHT = 3.0
+
+# Stage-2 outcome-aware planner. A fixed exploration share ignores historical
+# success and uses novelty alone, preventing early lucky results from trapping
+# discovery in one chemistry family.
+OUTCOME_PLANNER_VERSION = 1
+OUTCOME_EXPLORATION_PROBABILITY = 0.25
+OUTCOME_PRIOR_STRENGTH = 4.0
+OUTCOME_SIMILARITY_MINIMUM = 0.02
+OUTCOME_MULTIPLIER_MIN = 0.55
+OUTCOME_MULTIPLIER_MAX = 2.75
+OUTCOME_REACTION_BONUS = 0.45
+OUTCOME_NO_REACTION_PENALTY = 0.35
+OUTCOME_NEW_PRODUCT_BONUS = 0.70
+OUTCOME_QM_VALIDATED_BONUS = 1.10
+OUTCOME_CM_VALIDATED_BONUS = 0.35
+OUTCOME_REJECTED_PENALTY = 0.45
+OUTCOME_UNSTABLE_PENALTY = 0.35
+
+# Stage-3 automatic local refinement. Refinement is deliberately only a share
+# of the microreactor budget so successful chemistry cannot consume discovery.
+REFINEMENT_PLANNER_VERSION = 1
+REFINEMENT_MICROREACTOR_PROBABILITY = 0.30
+REFINEMENT_MAX_DEPTH = 2
+REFINEMENT_MAX_CHILDREN_BY_PARENT_DEPTH = {0: 6, 1: 3}
+REFINEMENT_INWARD_STEP = 0.20
+REFINEMENT_RADIUS_FRACTION = 0.12
+REFINEMENT_GAP_STEP_A = 0.15
+REFINEMENT_COMPOSITION_CANDIDATES = 8
+REFINEMENT_PARENT_QM_VALIDATED_BONUS = 4.0
+REFINEMENT_PARENT_CM_VALIDATED_BONUS = 1.5
+REFINEMENT_PARENT_NEW_PRODUCT_BONUS = 2.0
+REFINEMENT_PARENT_REACTION_BONUS = 1.0
+REFINEMENT_PARENT_REJECTED_PENALTY = 2.0
+
+# Stage-4 broad-envelope / wild exploration. This is a small guaranteed
+# exploration channel, not a replacement for outcome-aware planning. Each wild
+# experiment broadens one dominant initial-condition dimension so its result
+# remains interpretable.
+WILD_PLANNER_VERSION = 1
+WILD_EXPLORATION_PROBABILITY = 0.08
+WILD_PAIR_DIMENSIONS = (
+    "collision_speed",
+    "impact_parameter",
+    "start_gap",
+    "temperature",
+)
+WILD_PAIR_APPROACH_FACTOR_RANGE = (4.0, 8.0)
+WILD_PAIR_IMPACT_FRACTION_RANGE = (0.80, 1.80)
+WILD_PAIR_START_GAP_RANGE_A = (1.50, 5.00)
+WILD_TEMPERATURE_RANGE_K = (150.0, 1600.0)
+
+WILD_MICROCELL_DIMENSIONS = (
+    "temperature",
+    "density",
+    "inward_factor",
+    "minimum_gap",
+    "composition_imbalance",
+    "object_count",
+)
+WILD_MICROCELL_INWARD_LOW_RANGE = (0.00, 0.25)
+WILD_MICROCELL_INWARD_HIGH_RANGE = (1.45, 2.00)
+WILD_MICROCELL_RADIUS_TIGHT_FACTOR_RANGE = (0.65, 0.82)
+WILD_MICROCELL_RADIUS_LOOSE_FACTOR_RANGE = (1.20, 1.55)
+WILD_MICROCELL_GAP_TIGHT_RANGE_A = (1.60, 1.68)
+WILD_MICROCELL_GAP_LOOSE_RANGE_A = (2.50, 3.20)
+WILD_MICROCELL_DOMINANT_FRACTION_RANGE = (0.65, 0.85)
+WILD_MICROCELL_OBJECT_COUNTS = (7, 8)
+
+MICROCELL_OBJECT_COUNT_WEIGHTS = {
+    3: 0.12, 4: 0.18, 5: 0.22, 6: 0.20, 7: 0.16, 8: 0.12,
+}
+# Base radius is scaled with object count so larger microreactors do not
+# become artificially denser solely because they contain more objects.
 MICROCELL_CLUSTER_RADIUS_RANGE_A = (2.8, 4.8)
 MICROCELL_MINIMUM_GAP_RANGE_A = (1.7, 2.4)
 MICROCELL_INWARD_FACTOR_RANGE = (0.35, 1.35)
 MICROCELL_COMPOSITION_REUSE_EXPONENT = 1.0
 MICROCELL_CONFIG_REUSE_EXPONENT = 1.1
+MICROREACTOR_ENVIRONMENT_VERSION = 1
 
 
 def _atomic_json(path, payload):
@@ -75,7 +181,7 @@ def _atomic_json(path, payload):
         json.dumps(_plain(payload), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
-    os.replace(temporary, path)
+    _replace_with_retry(temporary, path)
 
 
 def _plain(value):
@@ -169,7 +275,12 @@ def _pair_key(first_id, second_id):
 
 
 def _history_records(output_root):
-    """Read completed teacher experiments from both legacy and daily layouts."""
+    """Read completed experiments with their persisted chemistry outcomes.
+
+    Historical novelty code still sees the specification fields at top level,
+    while ``experiment_outcome`` makes the result side available to the future
+    adaptive planner without introducing a second history database.
+    """
     root = Path(output_root)
     records = []
     if not root.is_dir():
@@ -183,8 +294,671 @@ def _history_records(output_root):
             continue
         spec = record.get("specification")
         if isinstance(spec, dict):
-            records.append(spec)
+            row = dict(spec)
+            outcome = record.get("experiment_outcome")
+            if isinstance(outcome, dict):
+                row["experiment_outcome"] = outcome
+            records.append(row)
     return records
+
+
+def _history_with_current_product_trust(
+    history, molecule_root="molecules", qm_root=None,
+):
+    """Return history with product trust refreshed from the current library.
+
+    ``experiment_outcome`` is an immutable record of what was known when the
+    experiment finished. Planning needs a live view as well: a product that
+    was WAITING_QM yesterday may be QM_VALIDATED or REJECTED today.
+    """
+    trust_cache = {}
+    refreshed = []
+
+    for historical in history:
+        row = dict(historical)
+        outcome = historical.get("experiment_outcome")
+        if not isinstance(outcome, dict):
+            refreshed.append(row)
+            continue
+
+        outcome = dict(outcome)
+        current_trust = {}
+        product_ids = sorted({
+            str(value)
+            for value in outcome.get("product_species", [])
+            if value
+        })
+
+        for molecule_id in product_ids:
+            if molecule_id not in trust_cache:
+                try:
+                    molecule = molecule_scanner.molecule_store.load_molecule(
+                        molecule_id, root=molecule_root
+                    )
+                    trust_cache[molecule_id] = trust_level(
+                        molecule, qm_root=qm_root
+                    ).value
+                except Exception:
+                    trust_cache[molecule_id] = "UNKNOWN"
+            current_trust[molecule_id] = trust_cache[molecule_id]
+
+        outcome["current_product_trust"] = current_trust
+        row["experiment_outcome"] = outcome
+        refreshed.append(row)
+
+    return refreshed
+
+
+def _composition_overlap(first_reactants, second_reactants):
+    """Weighted-Jaccard overlap between two reactant multisets."""
+    first = collections.Counter(str(value) for value in first_reactants)
+    second = collections.Counter(str(value) for value in second_reactants)
+    keys = set(first) | set(second)
+    if not keys:
+        return 0.0
+    intersection = sum(min(first[key], second[key]) for key in keys)
+    union = sum(max(first[key], second[key]) for key in keys)
+    return float(intersection / max(union, 1))
+
+
+def _microreactor_outcome_similarity(candidate, previous):
+    """Similarity used only to transfer outcome evidence between environments."""
+    if previous.get("experiment_family") != "microcell":
+        return 0.0
+    if not isinstance(previous.get("experiment_outcome"), dict):
+        return 0.0
+
+    composition = _composition_overlap(
+        candidate.get("reactants", []),
+        previous.get("reactants", []),
+    )
+    if composition <= 0.0:
+        return 0.0
+
+    temperature_delta = abs(
+        float(candidate.get("temperature_K", 0.0))
+        - float(previous.get("temperature_K", 0.0))
+    )
+    inward_delta = abs(
+        float(candidate.get("inward_factor", 0.0))
+        - float(previous.get("inward_factor", 0.0))
+    )
+    gap_delta = abs(
+        float(candidate.get("minimum_gap_A", 0.0))
+        - float(previous.get("minimum_gap_A", 0.0))
+    )
+
+    candidate_density = max(
+        float(candidate.get("atom_density_per_A3", 0.0)), 1e-12
+    )
+    previous_density = max(
+        float(previous.get("atom_density_per_A3", candidate_density)), 1e-12
+    )
+    density_log_delta = abs(np.log(candidate_density / previous_density))
+
+    condition_similarity = np.exp(
+        -temperature_delta / TEMPERATURE_SIMILARITY_SCALE_K
+        -inward_delta / 0.45
+        -gap_delta / 0.40
+        -density_log_delta / 0.70
+    )
+
+    # Composition is the stronger signal. Squaring it prevents a single shared
+    # reactant in otherwise unrelated soups from transferring much evidence.
+    return float((composition ** 2) * condition_similarity)
+
+
+def _historical_outcome_delta(previous):
+    """Signed usefulness of one completed microreactor experiment.
+
+    Zero is the neutral prior. Positive outcomes earn future attention; dead,
+    rejected or unstable chemistry reduces it. The result never decides
+    validation and never excludes an experiment by itself.
+    """
+    outcome = previous.get("experiment_outcome")
+    if not isinstance(outcome, dict):
+        return None
+
+    reacted = bool(
+        outcome.get("reacted", False)
+        or int(outcome.get("reaction_event_count", 0) or 0) > 0
+    )
+    delta = (
+        OUTCOME_REACTION_BONUS
+        if reacted
+        else -OUTCOME_NO_REACTION_PENALTY
+    )
+
+    new_products = {
+        str(value)
+        for value in outcome.get("new_product_species", [])
+        if value
+    }
+    if new_products:
+        # Reward discovering at least one new topology. Multiple products in a
+        # single run do not linearly multiply influence.
+        delta += OUTCOME_NEW_PRODUCT_BONUS * (
+            1.0 - np.exp(-float(len(new_products)))
+        )
+
+    product_ids = {
+        str(value)
+        for value in outcome.get("product_species", [])
+        if value
+    }
+    current_trust = outcome.get("current_product_trust") or {}
+    if product_ids:
+        denominator = float(len(product_ids))
+        qm_validated = sum(
+            current_trust.get(product_id)
+            == MoleculeTrust.QM_VALIDATED.value
+            for product_id in product_ids
+        )
+        cm_validated = sum(
+            current_trust.get(product_id)
+            == MoleculeTrust.CM_VALIDATED.value
+            for product_id in product_ids
+        )
+        rejected = sum(
+            current_trust.get(product_id)
+            == MoleculeTrust.REJECTED.value
+            for product_id in product_ids
+        )
+        delta += OUTCOME_QM_VALIDATED_BONUS * qm_validated / denominator
+        delta += OUTCOME_CM_VALIDATED_BONUS * cm_validated / denominator
+        delta -= OUTCOME_REJECTED_PENALTY * rejected / denominator
+
+    if outcome.get("stable") is False:
+        delta -= OUTCOME_UNSTABLE_PENALTY
+
+    return float(delta)
+
+
+def microreactor_outcome_multiplier(candidate, history):
+    """Confidence-shrunk outcome multiplier and diagnostics for one candidate."""
+    weighted_delta = 0.0
+    evidence = 0.0
+    matched_records = 0
+
+    for previous in history:
+        similarity = _microreactor_outcome_similarity(candidate, previous)
+        if similarity < OUTCOME_SIMILARITY_MINIMUM:
+            continue
+
+        delta = _historical_outcome_delta(previous)
+        if delta is None:
+            continue
+
+        outcome = previous.get("experiment_outcome") or {}
+        reliability = (
+            0.5
+            if outcome.get("postprocess_status") == "warning"
+            else 1.0
+        )
+        weight = float(similarity) * reliability
+        weighted_delta += weight * float(delta)
+        evidence += weight
+        matched_records += 1
+
+    if evidence <= 0.0:
+        return {
+            "multiplier": 1.0,
+            "evidence": 0.0,
+            "matched_records": 0,
+            "mean_outcome_delta": 0.0,
+            "confidence": 0.0,
+        }
+
+    mean_delta = weighted_delta / evidence
+    confidence = evidence / (evidence + OUTCOME_PRIOR_STRENGTH)
+    multiplier = float(np.clip(
+        1.0 + confidence * mean_delta,
+        OUTCOME_MULTIPLIER_MIN,
+        OUTCOME_MULTIPLIER_MAX,
+    ))
+
+    return {
+        "multiplier": multiplier,
+        "evidence": float(evidence),
+        "matched_records": int(matched_records),
+        "mean_outcome_delta": float(mean_delta),
+        "confidence": float(confidence),
+    }
+
+
+def _refinement_depth(spec):
+    refinement = spec.get("refinement")
+    if isinstance(refinement, dict):
+        return int(refinement.get("depth", 0) or 0)
+    return int(spec.get("refinement_depth", 0) or 0)
+
+
+def _refinement_parent_score(previous):
+    """Score whether one completed microreactor deserves local follow-up."""
+    if previous.get("experiment_family") != "microcell":
+        return 0.0
+
+    outcome = previous.get("experiment_outcome")
+    if not isinstance(outcome, dict):
+        return 0.0
+    if outcome.get("stable") is False:
+        return 0.0
+
+    reacted = bool(
+        outcome.get("reacted", False)
+        or int(outcome.get("reaction_event_count", 0) or 0) > 0
+    )
+    if not reacted:
+        return 0.0
+
+    if _refinement_depth(previous) >= REFINEMENT_MAX_DEPTH:
+        return 0.0
+
+    score = REFINEMENT_PARENT_REACTION_BONUS
+    new_products = {
+        str(value)
+        for value in outcome.get("new_product_species", [])
+        if value
+    }
+    if new_products:
+        score += REFINEMENT_PARENT_NEW_PRODUCT_BONUS
+
+    current_trust = outcome.get("current_product_trust") or {}
+    relevant_products = new_products or {
+        str(value)
+        for value in outcome.get("product_species", [])
+        if value
+    }
+    if relevant_products:
+        qm_validated = sum(
+            current_trust.get(product_id)
+            == MoleculeTrust.QM_VALIDATED.value
+            for product_id in relevant_products
+        )
+        cm_validated = sum(
+            current_trust.get(product_id)
+            == MoleculeTrust.CM_VALIDATED.value
+            for product_id in relevant_products
+        )
+        rejected = sum(
+            current_trust.get(product_id)
+            == MoleculeTrust.REJECTED.value
+            for product_id in relevant_products
+        )
+        denominator = float(len(relevant_products))
+        score += (
+            REFINEMENT_PARENT_QM_VALIDATED_BONUS
+            * qm_validated / denominator
+        )
+        score += (
+            REFINEMENT_PARENT_CM_VALIDATED_BONUS
+            * cm_validated / denominator
+        )
+        score -= (
+            REFINEMENT_PARENT_REJECTED_PENALTY
+            * rejected / denominator
+        )
+
+        # If every newly-discovered product was rejected, do not spend a
+        # dedicated refinement budget mapping that parent.
+        if (
+            new_products
+            and rejected == len(new_products)
+            and qm_validated == 0
+            and cm_validated == 0
+        ):
+            return 0.0
+
+    if outcome.get("postprocess_status") == "warning":
+        score *= 0.5
+
+    return float(max(score, 0.0))
+
+
+def _refinement_child_counts(history):
+    counts = collections.Counter()
+    for row in history:
+        refinement = row.get("refinement")
+        if not isinstance(refinement, dict):
+            continue
+        parent_id = refinement.get("parent_experiment_id")
+        if parent_id:
+            counts[str(parent_id)] += 1
+    return counts
+
+
+def _eligible_refinement_parents(history, allowed_ids=None):
+    """Completed parents that still have depth/budget and usable reactants."""
+    allowed = None if allowed_ids is None else {
+        str(value) for value in allowed_ids
+    }
+    child_counts = _refinement_child_counts(history)
+    rows = []
+
+    for previous in history:
+        parent_id = previous.get("id")
+        if not parent_id:
+            continue
+
+        score = _refinement_parent_score(previous)
+        if score <= 0.0:
+            continue
+
+        reactants = [str(value) for value in previous.get("reactants", [])]
+        if len(reactants) < 3 or len(reactants) > 8:
+            continue
+        if allowed is not None and any(
+            reactant_id not in allowed for reactant_id in reactants
+        ):
+            continue
+
+        depth = _refinement_depth(previous)
+        maximum_children = int(
+            REFINEMENT_MAX_CHILDREN_BY_PARENT_DEPTH.get(depth, 0)
+        )
+        used_children = int(child_counts[str(parent_id)])
+        if used_children >= maximum_children:
+            continue
+
+        rows.append({
+            "spec": previous,
+            "score": float(score),
+            "children_used": used_children,
+            "children_limit": maximum_children,
+        })
+
+    return rows
+
+
+def _refinement_mutation_key(refinement):
+    if not isinstance(refinement, dict):
+        return None
+    mutation = refinement.get("mutation")
+    if not isinstance(mutation, dict):
+        return None
+    return json.dumps(
+        _plain(mutation), sort_keys=True, separators=(",", ":")
+    )
+
+
+def _existing_refinement_mutations(history, parent_id):
+    found = set()
+    for row in history:
+        refinement = row.get("refinement")
+        if not isinstance(refinement, dict):
+            continue
+        if str(refinement.get("parent_experiment_id")) != str(parent_id):
+            continue
+        key = _refinement_mutation_key(refinement)
+        if key:
+            found.add(key)
+    return found
+
+
+def _refinement_candidate_from_parent(
+    parent, number, reactant_ids, temperature_K, cluster_radius_A,
+    minimum_gap_A, inward_factor, generator, molecule_root, profile,
+    reactant_cache, mutation,
+):
+    """Rebuild all derived microreactor fields for one one-variable child."""
+
+    def cached(reactant_id):
+        if reactant_id not in reactant_cache:
+            reactant_cache[reactant_id] = _load_reactant(
+                reactant_id, molecule_root
+            )
+        return reactant_cache[reactant_id]
+
+    reactant_ids = [str(value) for value in reactant_ids]
+    reactants = [cached(reactant_id) for reactant_id in reactant_ids]
+    object_count = len(reactants)
+    if object_count < 3 or object_count > 8:
+        return None
+
+    cluster_radius_A = float(cluster_radius_A)
+    minimum_gap_A = float(minimum_gap_A)
+    inward_factor = float(inward_factor)
+    temperature_K = float(temperature_K)
+
+    max_radius = max((_radius(row) for row in reactants), default=0.0)
+    total_atoms = int(sum(len(row["symbols"]) for row in reactants))
+    composition = {
+        reactant_id: int(count)
+        for reactant_id, count in sorted(
+            collections.Counter(reactant_ids).items()
+        )
+    }
+    cluster_volume = (4.0 / 3.0) * np.pi * cluster_radius_A ** 3
+    count_scale = (float(object_count) / 3.0) ** (1.0 / 3.0)
+    base_radius = cluster_radius_A / count_scale
+
+    parent_refinement = parent.get("refinement")
+    parent_depth = _refinement_depth(parent)
+    root_id = (
+        str(parent_refinement.get("root_experiment_id"))
+        if isinstance(parent_refinement, dict)
+        and parent_refinement.get("root_experiment_id")
+        else str(parent["id"])
+    )
+    depth = parent_depth + 1
+    refinement = {
+        "version": REFINEMENT_PLANNER_VERSION,
+        "parent_experiment_id": str(parent["id"]),
+        "root_experiment_id": root_id,
+        "depth": int(depth),
+        "mutation": _plain(mutation),
+    }
+
+    return {
+        "number": int(number),
+        "experiment_family": "microcell",
+        "environment_mode": "microreactor",
+        "environment_version": MICROREACTOR_ENVIRONMENT_VERSION,
+        "category": "microreactor_refinement",
+        "reactants": reactant_ids,
+        "composition": composition,
+        "reactant_formulas": [row.get("formula") for row in reactants],
+        "object_count": int(object_count),
+        "total_atoms": int(total_atoms),
+        "simulation_seed": int(generator.integers(0, 2**31 - 1)),
+        "profile": profile,
+        "temperature_K": temperature_K,
+        "base_cluster_radius_A": float(base_radius),
+        "cluster_radius_A": cluster_radius_A,
+        "minimum_gap_A": minimum_gap_A,
+        "inward_factor": inward_factor,
+        "cluster_volume_A3": float(cluster_volume),
+        "object_density_per_A3": float(object_count / cluster_volume),
+        "atom_density_per_A3": float(total_atoms / cluster_volume),
+        "box_A": float(
+            max(14.0, 2.0 * (cluster_radius_A + max_radius + 2.5))
+        ),
+        "refinement_depth": int(depth),
+        "refinement": refinement,
+    }
+
+
+def _build_refinement_candidates(
+    parent, number, generator, pool, molecule_root, profile, reactant_cache,
+    history,
+):
+    """Generate interpretable one-variable descendants of one parent."""
+    reactant_ids = [str(value) for value in parent.get("reactants", [])]
+    if len(reactant_ids) < 3 or len(reactant_ids) > 8:
+        return []
+
+    temperature = float(parent["temperature_K"])
+    cluster_radius = float(parent["cluster_radius_A"])
+    minimum_gap = float(parent["minimum_gap_A"])
+    inward_factor = float(parent["inward_factor"])
+    mutations = []
+
+    # Temperature: immediate lower/higher level from the existing production
+    # temperature set. Each child changes only temperature.
+    ordered_temperatures = sorted(float(value) for value in TEMPERATURES_K)
+    lower = [value for value in ordered_temperatures if value < temperature]
+    higher = [value for value in ordered_temperatures if value > temperature]
+    if lower:
+        value = lower[-1]
+        mutations.append((
+            list(reactant_ids), value, cluster_radius, minimum_gap,
+            inward_factor,
+            {"type": "temperature_K", "from": temperature, "to": value},
+        ))
+    if higher:
+        value = higher[0]
+        mutations.append((
+            list(reactant_ids), value, cluster_radius, minimum_gap,
+            inward_factor,
+            {"type": "temperature_K", "from": temperature, "to": value},
+        ))
+
+    # Inward bias.
+    for sign in (-1.0, 1.0):
+        value = float(np.clip(
+            inward_factor + sign * REFINEMENT_INWARD_STEP,
+            MICROCELL_INWARD_FACTOR_RANGE[0],
+            MICROCELL_INWARD_FACTOR_RANGE[1],
+        ))
+        if abs(value - inward_factor) > 1e-9:
+            mutations.append((
+                list(reactant_ids), temperature, cluster_radius, minimum_gap,
+                value,
+                {"type": "inward_factor", "from": inward_factor, "to": value},
+            ))
+
+    # Cluster radius changes density while composition remains identical.
+    for factor in (
+        1.0 - REFINEMENT_RADIUS_FRACTION,
+        1.0 + REFINEMENT_RADIUS_FRACTION,
+    ):
+        value = max(1.0, cluster_radius * factor)
+        mutations.append((
+            list(reactant_ids), temperature, value, minimum_gap,
+            inward_factor,
+            {
+                "type": "cluster_radius_A",
+                "from": cluster_radius,
+                "to": value,
+            },
+        ))
+
+    # Initial minimum separation.
+    for sign in (-1.0, 1.0):
+        value = float(np.clip(
+            minimum_gap + sign * REFINEMENT_GAP_STEP_A,
+            MICROCELL_MINIMUM_GAP_RANGE_A[0],
+            MICROCELL_MINIMUM_GAP_RANGE_A[1],
+        ))
+        if abs(value - minimum_gap) > 1e-9:
+            mutations.append((
+                list(reactant_ids), temperature, cluster_radius, value,
+                inward_factor,
+                {"type": "minimum_gap_A", "from": minimum_gap, "to": value},
+            ))
+
+    # Composition edits stay local: remove one object, add one currently
+    # allowed reactant, or replace one object. Limit generated alternatives so
+    # large trusted libraries do not explode the candidate set.
+    allowed = list(pool["atoms"]) + list(pool["molecules"])
+    allowed = sorted({str(value) for value in allowed})
+
+    if len(reactant_ids) > 3:
+        for index, removed in enumerate(reactant_ids):
+            child = list(reactant_ids)
+            child.pop(index)
+            mutations.append((
+                child, temperature, cluster_radius, minimum_gap, inward_factor,
+                {
+                    "type": "composition_remove",
+                    "removed": str(removed),
+                    "index": int(index),
+                },
+            ))
+
+    if len(reactant_ids) < 8 and allowed:
+        sampled = list(allowed)
+        generator.shuffle(sampled)
+        for added in sampled[:REFINEMENT_COMPOSITION_CANDIDATES]:
+            child = list(reactant_ids) + [str(added)]
+            mutations.append((
+                child, temperature, cluster_radius, minimum_gap, inward_factor,
+                {"type": "composition_add", "added": str(added)},
+            ))
+
+    if allowed:
+        replacement_pool = list(allowed)
+        generator.shuffle(replacement_pool)
+        emitted = 0
+        for index, old_id in enumerate(reactant_ids):
+            for new_id in replacement_pool:
+                if str(new_id) == str(old_id):
+                    continue
+                child = list(reactant_ids)
+                child[index] = str(new_id)
+                mutations.append((
+                    child, temperature, cluster_radius, minimum_gap,
+                    inward_factor,
+                    {
+                        "type": "composition_replace",
+                        "index": int(index),
+                        "removed": str(old_id),
+                        "added": str(new_id),
+                    },
+                ))
+                emitted += 1
+                break
+            if emitted >= REFINEMENT_COMPOSITION_CANDIDATES:
+                break
+
+    used = _existing_refinement_mutations(history, parent["id"])
+    candidates = []
+    seen = set()
+
+    for (
+        child_reactants, child_temperature, child_radius, child_gap,
+        child_inward, mutation,
+    ) in mutations:
+        mutation_key = json.dumps(
+            _plain(mutation), sort_keys=True, separators=(",", ":")
+        )
+        if mutation_key in used or mutation_key in seen:
+            continue
+        seen.add(mutation_key)
+
+        candidate = _refinement_candidate_from_parent(
+            parent,
+            number,
+            child_reactants,
+            child_temperature,
+            child_radius,
+            child_gap,
+            child_inward,
+            generator,
+            molecule_root,
+            profile,
+            reactant_cache,
+            mutation,
+        )
+        if candidate is not None:
+            candidates.append(candidate)
+
+    return candidates
+
+
+def _choose_refinement_parent(generator, eligible):
+    if not eligible:
+        return None
+    weights = [
+        max(float(row["score"]), NOVELTY_FLOOR)
+        * (
+            1.0
+            - float(row["children_used"])
+            / max(float(row["children_limit"]), 1.0)
+        )
+        for row in eligible
+    ]
+    return _weighted_choice(generator, eligible, weights)
 
 
 def _usage_counts(history):
@@ -381,6 +1155,72 @@ def _build_candidate_spec(
     }
 
 
+def _build_wild_pair_candidate(
+    number, category, collision_class, speed_class, generator, pool,
+    molecule_root, profile, reactant_cache, wild_dimension=None,
+):
+    """Broaden exactly one pair-probe dimension beyond the normal envelope."""
+    candidate = _build_candidate_spec(
+        number, category, collision_class, speed_class, generator, pool,
+        molecule_root, profile, reactant_cache,
+    )
+    dimension = str(
+        wild_dimension
+        if wild_dimension is not None
+        else generator.choice(WILD_PAIR_DIMENSIONS)
+    )
+    if dimension not in WILD_PAIR_DIMENSIONS:
+        raise ValueError(f"unknown wild pair dimension: {dimension}")
+
+    before = None
+    after = None
+    if dimension == "collision_speed":
+        before = float(candidate["approach_factor"])
+        after = float(generator.uniform(*WILD_PAIR_APPROACH_FACTOR_RANGE))
+        candidate["approach_factor"] = after
+        candidate["speed_class"] = "wild"
+
+    elif dimension == "impact_parameter":
+        before = float(candidate["impact_fraction"])
+        after = float(generator.uniform(*WILD_PAIR_IMPACT_FRACTION_RANGE))
+        candidate["impact_fraction"] = after
+        candidate["impact_parameter_A"] = float(
+            after * float(candidate["impact_scale_A"])
+        )
+        candidate["collision_class"] = "wild_impact"
+
+    elif dimension == "start_gap":
+        before = float(candidate["start_gap_A"])
+        after = float(generator.uniform(*WILD_PAIR_START_GAP_RANGE_A))
+        candidate["start_gap_A"] = after
+
+    elif dimension == "temperature":
+        before = float(candidate["temperature_K"])
+        after = float(generator.uniform(*WILD_TEMPERATURE_RANGE_K))
+        candidate["temperature_K"] = after
+
+    if dimension in ("impact_parameter", "start_gap"):
+        first = reactant_cache[candidate["reactant_a"]]
+        second = reactant_cache[candidate["reactant_b"]]
+        minimum_box = characterisation.minimum_pair_box_size(
+            first, second, float(candidate["start_gap_A"])
+        )
+        candidate["box_A"] = float(max(
+            12.0,
+            minimum_box
+            + 2.0 * float(candidate["impact_parameter_A"])
+            + 2.0,
+        ))
+
+    candidate["wild_exploration"] = {
+        "version": WILD_PLANNER_VERSION,
+        "dimension": dimension,
+        "from": before,
+        "to": after,
+    }
+    return candidate
+
+
 
 def _composition_key(reactant_ids):
     return tuple(sorted(collections.Counter(str(v) for v in reactant_ids).items()))
@@ -413,39 +1253,284 @@ def microcell_novelty_weight(candidate, history):
 
 
 def _build_microcell_candidate(number, generator, pool, molecule_root, profile, reactant_cache):
+    """Build one small reactive environment rather than one prescribed collision."""
     ids = list(pool["atoms"]) + list(pool["molecules"])
+    if not ids:
+        raise ValueError("microreactor has no allowed reactants")
+
     counts = list(MICROCELL_OBJECT_COUNT_WEIGHTS)
-    weights = np.asarray([MICROCELL_OBJECT_COUNT_WEIGHTS[x] for x in counts], dtype=float)
+    weights = np.asarray(
+        [MICROCELL_OBJECT_COUNT_WEIGHTS[x] for x in counts], dtype=float
+    )
     weights /= weights.sum()
     object_count = int(generator.choice(counts, p=weights))
     reactant_ids = [str(generator.choice(ids)) for _ in range(object_count)]
 
     def cached(reactant_id):
         if reactant_id not in reactant_cache:
-            reactant_cache[reactant_id] = _load_reactant(reactant_id, molecule_root)
+            reactant_cache[reactant_id] = _load_reactant(
+                reactant_id, molecule_root
+            )
         return reactant_cache[reactant_id]
 
     reactants = [cached(rid) for rid in reactant_ids]
-    cluster_radius = float(generator.uniform(*MICROCELL_CLUSTER_RADIUS_RANGE_A))
+
+    # Keep roughly comparable object density as object count grows.  This is
+    # an initial-condition sampling rule only; it does not alter MD physics.
+    base_radius = float(
+        generator.uniform(*MICROCELL_CLUSTER_RADIUS_RANGE_A)
+    )
+    count_scale = (float(object_count) / 3.0) ** (1.0 / 3.0)
+    cluster_radius = base_radius * count_scale
+
     minimum_gap = float(generator.uniform(*MICROCELL_MINIMUM_GAP_RANGE_A))
     inward_factor = float(generator.uniform(*MICROCELL_INWARD_FACTOR_RANGE))
     temperature = float(generator.choice(TEMPERATURES_K))
     max_radius = max((_radius(r) for r in reactants), default=0.0)
+    total_atoms = int(sum(len(r["symbols"]) for r in reactants))
+    composition = {
+        reactant_id: int(count)
+        for reactant_id, count in sorted(
+            collections.Counter(reactant_ids).items()
+        )
+    }
+    cluster_volume = (4.0 / 3.0) * np.pi * cluster_radius ** 3
+
     return {
         "number": int(number),
+        # Preserve the historical family name so old summaries/scanners remain
+        # compatible; environment_mode identifies the richer experiment.
         "experiment_family": "microcell",
-        "category": "microcell",
+        "environment_mode": "microreactor",
+        "environment_version": MICROREACTOR_ENVIRONMENT_VERSION,
+        "category": "microreactor",
         "reactants": reactant_ids,
+        "composition": composition,
         "reactant_formulas": [r.get("formula") for r in reactants],
         "object_count": object_count,
+        "total_atoms": total_atoms,
         "simulation_seed": int(generator.integers(0, 2**31 - 1)),
         "profile": profile,
         "temperature_K": temperature,
+        "base_cluster_radius_A": base_radius,
         "cluster_radius_A": cluster_radius,
         "minimum_gap_A": minimum_gap,
         "inward_factor": inward_factor,
-        "box_A": float(max(14.0, 2.0 * (cluster_radius + max_radius + 2.5))),
+        "cluster_volume_A3": float(cluster_volume),
+        "object_density_per_A3": float(object_count / cluster_volume),
+        "atom_density_per_A3": float(total_atoms / cluster_volume),
+        "box_A": float(
+            max(14.0, 2.0 * (cluster_radius + max_radius + 2.5))
+        ),
     }
+
+
+def _rebuild_microcell_candidate(
+    candidate, reactant_ids, molecule_root, reactant_cache, *,
+    base_cluster_radius_A=None, minimum_gap_A=None,
+    inward_factor=None, temperature_K=None,
+):
+    """Recompute all derived microreactor fields after one planner mutation."""
+
+    def cached(reactant_id):
+        if reactant_id not in reactant_cache:
+            reactant_cache[reactant_id] = _load_reactant(
+                reactant_id, molecule_root
+            )
+        return reactant_cache[reactant_id]
+
+    reactant_ids = [str(value) for value in reactant_ids]
+    if len(reactant_ids) < 3 or len(reactant_ids) > 8:
+        raise ValueError("wild microreactor object count must remain within 3..8")
+
+    reactants = [cached(reactant_id) for reactant_id in reactant_ids]
+    object_count = len(reactants)
+    total_atoms = int(sum(len(row["symbols"]) for row in reactants))
+
+    base_radius = float(
+        candidate["base_cluster_radius_A"]
+        if base_cluster_radius_A is None
+        else base_cluster_radius_A
+    )
+    count_scale = (float(object_count) / 3.0) ** (1.0 / 3.0)
+    cluster_radius = float(base_radius * count_scale)
+    minimum_gap = float(
+        candidate["minimum_gap_A"]
+        if minimum_gap_A is None else minimum_gap_A
+    )
+    inward = float(
+        candidate["inward_factor"]
+        if inward_factor is None else inward_factor
+    )
+    temperature = float(
+        candidate["temperature_K"]
+        if temperature_K is None else temperature_K
+    )
+
+    composition = {
+        reactant_id: int(count)
+        for reactant_id, count in sorted(
+            collections.Counter(reactant_ids).items()
+        )
+    }
+    max_radius = max((_radius(row) for row in reactants), default=0.0)
+    cluster_volume = (4.0 / 3.0) * np.pi * cluster_radius ** 3
+
+    rebuilt = dict(candidate)
+    rebuilt.update({
+        "reactants": reactant_ids,
+        "composition": composition,
+        "reactant_formulas": [row.get("formula") for row in reactants],
+        "object_count": int(object_count),
+        "total_atoms": int(total_atoms),
+        "temperature_K": temperature,
+        "base_cluster_radius_A": base_radius,
+        "cluster_radius_A": cluster_radius,
+        "minimum_gap_A": minimum_gap,
+        "inward_factor": inward,
+        "cluster_volume_A3": float(cluster_volume),
+        "object_density_per_A3": float(object_count / cluster_volume),
+        "atom_density_per_A3": float(total_atoms / cluster_volume),
+        "box_A": float(
+            max(14.0, 2.0 * (cluster_radius + max_radius + 2.5))
+        ),
+    })
+    return rebuilt
+
+
+def _build_wild_microcell_candidate(
+    number, generator, pool, molecule_root, profile, reactant_cache,
+    wild_dimension=None,
+):
+    """Broaden one microreactor dimension while preserving placement safety."""
+    candidate = _build_microcell_candidate(
+        number, generator, pool, molecule_root, profile, reactant_cache
+    )
+    dimension = str(
+        wild_dimension
+        if wild_dimension is not None
+        else generator.choice(WILD_MICROCELL_DIMENSIONS)
+    )
+    if dimension not in WILD_MICROCELL_DIMENSIONS:
+        raise ValueError(f"unknown wild microreactor dimension: {dimension}")
+
+    reactant_ids = list(candidate["reactants"])
+    before = None
+    after = None
+    metadata = {}
+
+    if dimension == "temperature":
+        before = float(candidate["temperature_K"])
+        after = float(generator.uniform(*WILD_TEMPERATURE_RANGE_K))
+        candidate = _rebuild_microcell_candidate(
+            candidate, reactant_ids, molecule_root, reactant_cache,
+            temperature_K=after,
+        )
+
+    elif dimension == "density":
+        before = float(candidate["base_cluster_radius_A"])
+        if generator.random() < 0.5:
+            factor = float(generator.uniform(
+                *WILD_MICROCELL_RADIUS_TIGHT_FACTOR_RANGE
+            ))
+            metadata["direction"] = "denser"
+        else:
+            factor = float(generator.uniform(
+                *WILD_MICROCELL_RADIUS_LOOSE_FACTOR_RANGE
+            ))
+            metadata["direction"] = "looser"
+        after = float(before * factor)
+        metadata["radius_factor"] = factor
+        candidate = _rebuild_microcell_candidate(
+            candidate, reactant_ids, molecule_root, reactant_cache,
+            base_cluster_radius_A=after,
+        )
+
+    elif dimension == "inward_factor":
+        before = float(candidate["inward_factor"])
+        if generator.random() < 0.5:
+            after = float(generator.uniform(
+                *WILD_MICROCELL_INWARD_LOW_RANGE
+            ))
+            metadata["direction"] = "weak"
+        else:
+            after = float(generator.uniform(
+                *WILD_MICROCELL_INWARD_HIGH_RANGE
+            ))
+            metadata["direction"] = "strong"
+        candidate = _rebuild_microcell_candidate(
+            candidate, reactant_ids, molecule_root, reactant_cache,
+            inward_factor=after,
+        )
+
+    elif dimension == "minimum_gap":
+        before = float(candidate["minimum_gap_A"])
+        if generator.random() < 0.5:
+            after = float(generator.uniform(
+                *WILD_MICROCELL_GAP_TIGHT_RANGE_A
+            ))
+            metadata["direction"] = "tighter"
+        else:
+            after = float(generator.uniform(
+                *WILD_MICROCELL_GAP_LOOSE_RANGE_A
+            ))
+            metadata["direction"] = "looser"
+        candidate = _rebuild_microcell_candidate(
+            candidate, reactant_ids, molecule_root, reactant_cache,
+            minimum_gap_A=after,
+        )
+
+    elif dimension == "composition_imbalance":
+        before = list(reactant_ids)
+        allowed = sorted({
+            str(value)
+            for value in list(pool["atoms"]) + list(pool["molecules"])
+        })
+        dominant = str(generator.choice(allowed))
+        fraction = float(generator.uniform(
+            *WILD_MICROCELL_DOMINANT_FRACTION_RANGE
+        ))
+        dominant_count = max(
+            2, min(len(reactant_ids), int(np.ceil(
+                fraction * len(reactant_ids)
+            )))
+        )
+        alternatives = [value for value in allowed if value != dominant]
+        child = [dominant] * dominant_count
+        while len(child) < len(reactant_ids):
+            source = alternatives or [dominant]
+            child.append(str(generator.choice(source)))
+        generator.shuffle(child)
+        after = list(child)
+        metadata.update({
+            "dominant_reactant": dominant,
+            "dominant_fraction_target": fraction,
+        })
+        candidate = _rebuild_microcell_candidate(
+            candidate, child, molecule_root, reactant_cache,
+        )
+
+    elif dimension == "object_count":
+        before = int(candidate["object_count"])
+        target_count = int(generator.choice(WILD_MICROCELL_OBJECT_COUNTS))
+        allowed = list(pool["atoms"]) + list(pool["molecules"])
+        child = [
+            str(generator.choice(allowed)) for _ in range(target_count)
+        ]
+        after = target_count
+        candidate = _rebuild_microcell_candidate(
+            candidate, child, molecule_root, reactant_cache,
+        )
+
+    candidate["category"] = "microreactor_wild"
+    candidate["wild_exploration"] = {
+        "version": WILD_PLANNER_VERSION,
+        "dimension": dimension,
+        "from": _plain(before),
+        "to": _plain(after),
+        **metadata,
+    }
+    return candidate
 
 
 def _choose_experiment_family(generator):
@@ -458,48 +1543,273 @@ def _choose_experiment_family(generator):
 def generate_experiment_specs(
     count, master_seed, molecule_root="molecules", qm_root=None,
     profile="balanced", history=None, invocation_id=None,
+    pair_number_offset=0, wild_probability=WILD_EXPLORATION_PROBABILITY,
 ):
     count = int(count)
     if count < 1:
         raise ValueError("experiment count must be at least one")
     if profile not in SPEED_RANGES:
         raise ValueError(f"unknown reaction-production profile: {profile}")
+    wild_probability = float(wild_probability)
+    if not 0.0 <= wild_probability <= 1.0:
+        raise ValueError("wild exploration probability must be between 0 and 1")
 
     pool = allowed_reactants(molecule_root, qm_root=qm_root)
     generator = np.random.default_rng(int(master_seed))
     categories = ["atom_atom", "atom_molecule", "molecule_atom", "molecule_molecule"] if pool["molecules"] else ["atom_atom"]
     collisions = ["direct", "glancing", "near_miss"]
     speeds = ["low", "moderate", "high"]
-    working_history = [dict(row) for row in (history or [])]
+    historical = _history_with_current_product_trust(
+        history or [], molecule_root=molecule_root, qm_root=qm_root
+    )
+    working_history = [dict(row) for row in historical]
+    historical_outcome_count = sum(
+        isinstance(row.get("experiment_outcome"), dict)
+        for row in historical
+    )
     cache = {}
     specs = []
-    pair_number = 0
+    pair_number = int(pair_number_offset)
+    allowed_ids = set(pool["atoms"]) | set(pool["molecules"])
+    eligible_refinement = _eligible_refinement_parents(
+        historical, allowed_ids=allowed_ids
+    )
 
     for number in range(count):
         family = _choose_experiment_family(generator)
+        wild_exploration = bool(
+            wild_probability > 0.0
+            and generator.random() < wild_probability
+        )
         candidates, weights = [], []
 
         if family == "pair":
             category = categories[pair_number % len(categories)]
             pair_number += 1
-            for candidate_number in range(NOVELTY_CANDIDATES_PER_SLOT):
-                candidate = _build_candidate_spec(
-                    number,
-                    category,
-                    collisions[candidate_number % len(collisions)],
-                    speeds[(candidate_number // len(collisions)) % len(speeds)],
-                    generator, pool, molecule_root, profile, cache,
-                )
-                candidate["experiment_family"] = "pair"
-                candidates.append(candidate)
-                weights.append(novelty_weight(candidate, working_history))
+
+            if wild_exploration:
+                for candidate_number in range(NOVELTY_CANDIDATES_PER_SLOT):
+                    dimension = WILD_PAIR_DIMENSIONS[
+                        candidate_number % len(WILD_PAIR_DIMENSIONS)
+                    ]
+                    candidate = _build_wild_pair_candidate(
+                        number,
+                        category,
+                        collisions[candidate_number % len(collisions)],
+                        speeds[
+                            (candidate_number // len(collisions))
+                            % len(speeds)
+                        ],
+                        generator,
+                        pool,
+                        molecule_root,
+                        profile,
+                        cache,
+                        wild_dimension=dimension,
+                    )
+                    candidate["experiment_family"] = "pair"
+                    novelty = novelty_weight(
+                        candidate, working_history
+                    )
+                    candidate["planner"] = {
+                        "version": OUTCOME_PLANNER_VERSION,
+                        "wild_version": WILD_PLANNER_VERSION,
+                        "mode": "wild_exploration",
+                        "wild_family": "pair",
+                        "wild_dimension": dimension,
+                        "wild_probability": float(wild_probability),
+                        "novelty_weight": float(novelty),
+                        "outcome_multiplier": 1.0,
+                        "final_weight": float(novelty),
+                    }
+                    candidates.append(candidate)
+                    weights.append(novelty)
+            else:
+                for candidate_number in range(NOVELTY_CANDIDATES_PER_SLOT):
+                    candidate = _build_candidate_spec(
+                        number,
+                        category,
+                        collisions[candidate_number % len(collisions)],
+                        speeds[
+                            (candidate_number // len(collisions))
+                            % len(speeds)
+                        ],
+                        generator, pool, molecule_root, profile, cache,
+                    )
+                    candidate["experiment_family"] = "pair"
+                    novelty = novelty_weight(
+                        candidate, working_history
+                    )
+                    candidate["planner"] = {
+                        "version": OUTCOME_PLANNER_VERSION,
+                        "mode": "pair_novelty",
+                        "novelty_weight": float(novelty),
+                        "outcome_multiplier": 1.0,
+                        "final_weight": float(novelty),
+                    }
+                    candidates.append(candidate)
+                    weights.append(novelty)
         else:
-            for _ in range(NOVELTY_CANDIDATES_PER_SLOT):
-                candidate = _build_microcell_candidate(
-                    number, generator, pool, molecule_root, profile, cache
+            if wild_exploration:
+                for candidate_number in range(NOVELTY_CANDIDATES_PER_SLOT):
+                    dimension = WILD_MICROCELL_DIMENSIONS[
+                        candidate_number % len(WILD_MICROCELL_DIMENSIONS)
+                    ]
+                    candidate = _build_wild_microcell_candidate(
+                        number,
+                        generator,
+                        pool,
+                        molecule_root,
+                        profile,
+                        cache,
+                        wild_dimension=dimension,
+                    )
+                    novelty = microcell_novelty_weight(
+                        candidate, working_history
+                    )
+                    learned = microreactor_outcome_multiplier(
+                        candidate, working_history
+                    )
+                    candidate["planner"] = {
+                        "version": OUTCOME_PLANNER_VERSION,
+                        "wild_version": WILD_PLANNER_VERSION,
+                        "mode": "wild_exploration",
+                        "wild_family": "microcell",
+                        "wild_dimension": dimension,
+                        "wild_probability": float(wild_probability),
+                        "novelty_weight": float(novelty),
+                        # Wild allocation is an exploration guarantee, so
+                        # historical outcomes are recorded diagnostically but
+                        # cannot suppress the experiment back into the known
+                        # region.
+                        "outcome_multiplier": 1.0,
+                        "learned_outcome_multiplier": float(
+                            learned["multiplier"]
+                        ),
+                        "outcome_evidence": float(learned["evidence"]),
+                        "matched_history_records": int(
+                            learned["matched_records"]
+                        ),
+                        "final_weight": float(novelty),
+                    }
+                    candidates.append(candidate)
+                    weights.append(novelty)
+            else:
+                use_refinement = bool(
+                    eligible_refinement
+                    and generator.random()
+                    < REFINEMENT_MICROREACTOR_PROBABILITY
                 )
-                candidates.append(candidate)
-                weights.append(microcell_novelty_weight(candidate, working_history))
+
+                if use_refinement:
+                    parent_row = _choose_refinement_parent(
+                        generator, eligible_refinement
+                    )
+                    parent = parent_row["spec"] if parent_row else None
+                    refinement_candidates = (
+                        _build_refinement_candidates(
+                            parent,
+                            number,
+                            generator,
+                            pool,
+                            molecule_root,
+                            profile,
+                            cache,
+                            working_history,
+                        )
+                        if parent is not None else []
+                    )
+
+                    for candidate in refinement_candidates[
+                        :NOVELTY_CANDIDATES_PER_SLOT
+                    ]:
+                        novelty = microcell_novelty_weight(
+                            candidate, working_history
+                        )
+                        candidate["planner"] = {
+                            "version": OUTCOME_PLANNER_VERSION,
+                            "refinement_version": REFINEMENT_PLANNER_VERSION,
+                            "mode": "microreactor_refinement",
+                            "novelty_weight": float(novelty),
+                            "outcome_multiplier": 1.0,
+                            "final_weight": float(novelty),
+                            "parent_experiment_id": str(parent["id"]),
+                            "parent_score": float(parent_row["score"]),
+                            "parent_children_used": int(
+                                parent_row["children_used"]
+                            ),
+                            "parent_children_limit": int(
+                                parent_row["children_limit"]
+                            ),
+                            "refinement_probability": float(
+                                REFINEMENT_MICROREACTOR_PROBABILITY
+                            ),
+                        }
+                        candidates.append(candidate)
+                        weights.append(novelty)
+
+                    # If a parent has exhausted its distinct one-variable
+                    # mutations, fall back to normal discovery rather than
+                    # wasting the slot.
+                    if not candidates:
+                        use_refinement = False
+
+                if not use_refinement:
+                    # A fixed fraction is pure exploration. Before any stage-1
+                    # outcome exists, all microreactors naturally remain
+                    # novelty-only.
+                    exploration = (
+                        historical_outcome_count == 0
+                        or generator.random()
+                        < OUTCOME_EXPLORATION_PROBABILITY
+                    )
+                    planner_mode = (
+                        "microreactor_exploration"
+                        if exploration
+                        else "microreactor_outcome_aware"
+                    )
+
+                    for _ in range(NOVELTY_CANDIDATES_PER_SLOT):
+                        candidate = _build_microcell_candidate(
+                            number, generator, pool, molecule_root, profile, cache
+                        )
+                        novelty = microcell_novelty_weight(
+                            candidate, working_history
+                        )
+                        learned = microreactor_outcome_multiplier(
+                            candidate, working_history
+                        )
+                        outcome_multiplier = (
+                            1.0 if exploration else learned["multiplier"]
+                        )
+                        final_weight = float(novelty * outcome_multiplier)
+
+                        candidate["planner"] = {
+                            "version": OUTCOME_PLANNER_VERSION,
+                            "mode": planner_mode,
+                            "exploration_probability": (
+                                OUTCOME_EXPLORATION_PROBABILITY
+                            ),
+                            "novelty_weight": float(novelty),
+                            "outcome_multiplier": float(outcome_multiplier),
+                            "learned_outcome_multiplier": float(
+                                learned["multiplier"]
+                            ),
+                            "outcome_evidence": float(learned["evidence"]),
+                            "matched_history_records": int(
+                                learned["matched_records"]
+                            ),
+                            "mean_outcome_delta": float(
+                                learned["mean_outcome_delta"]
+                            ),
+                            "outcome_confidence": float(learned["confidence"]),
+                            "final_weight": final_weight,
+                            "historical_outcome_records": int(
+                                historical_outcome_count
+                            ),
+                        }
+                        candidates.append(candidate)
+                        weights.append(final_weight)
 
         spec = dict(_weighted_choice(generator, candidates, weights))
         spec["master_seed"] = int(master_seed)
@@ -509,6 +1819,18 @@ def generate_experiment_specs(
         spec["id"] = "EXP_" + _canonical_hash(identity)
         specs.append(spec)
         working_history.append(spec)
+
+        refinement = spec.get("refinement")
+        if isinstance(refinement, dict):
+            parent_id = str(refinement.get("parent_experiment_id", ""))
+            for row in eligible_refinement:
+                if str(row["spec"].get("id")) == parent_id:
+                    row["children_used"] = int(row["children_used"]) + 1
+                    break
+            eligible_refinement = [
+                row for row in eligible_refinement
+                if int(row["children_used"]) < int(row["children_limit"])
+            ]
 
     return specs, pool
 
@@ -653,7 +1975,7 @@ def _write_teacher_shard(path, frames, *, experiment_id="", production_id=""):
             ["+".join(row["selection_reasons"]) for row in frames], dtype="U96"
         ),
     )
-    os.replace(temporary, path)
+    _replace_with_retry(temporary, path)
 
 
 def _options_for(spec, production_root, molecule_root, duration_ps, device,
@@ -779,7 +2101,9 @@ def _write_day_summary(day_root):
         family = str(spec.get("experiment_family", "pair"))
         families[family] += 1
         if family == "microcell":
-            microcell_compositions.add(_composition_key(spec.get("reactants", [])))
+            microcell_compositions.add(
+                _composition_key(spec.get("reactants", []))
+            )
         categories[str(spec.get("category", "unknown"))] += 1
         collisions[str(spec.get("collision_class", "unknown"))] += 1
         speeds[str(spec.get("speed_class", "unknown"))] += 1
@@ -988,6 +2312,9 @@ def run_production(
     ordinary_interval_fs=10.0, event_window_fs=5.0,
     diagnostic_sample_fs=1.0, capture_every=4,
     physics="optimised-valence", progress=None, result_observer=None,
+    invocation_id=None, manager_run_id=None,
+    planner_pair_offset=0,
+    wild_probability=WILD_EXPLORATION_PROBABILITY,
 ):
     """Attempt exactly `count` fresh experiments for this invocation.
 
@@ -1008,6 +2335,9 @@ def run_production(
         raise ValueError("diagnostic sample interval must be greater than zero")
     if int(capture_every) < 1:
         raise ValueError("capture interval must be at least one step")
+    wild_probability = float(wild_probability)
+    if not 0.0 <= wild_probability <= 1.0:
+        raise ValueError("wild exploration probability must be between 0 and 1")
     if str(physics) not in ("standard", "high_fidelity", "optimised-valence"):
         raise ValueError(f"unsupported characterisation physics: {physics}")
 
@@ -1031,19 +2361,24 @@ def run_production(
     else:
         resolved_device = str(device)
 
-    invocation_nonce = secrets.token_hex(6)
-    invocation_id = (
-        "INV_"
-        + datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
-        + "_"
-        + invocation_nonce
-    )
+    if invocation_id is None:
+        invocation_nonce = secrets.token_hex(6)
+        invocation_id = (
+            "INV_"
+            + datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+            + "_"
+            + invocation_nonce
+        )
+    else:
+        invocation_id = str(invocation_id)
 
     history = _history_records(output_root)
     specs, pool = generate_experiment_specs(
         count, used_master_seed, molecule_root=molecule_root,
         qm_root=qm_root, profile=profile, history=history,
         invocation_id=invocation_id,
+        pair_number_offset=planner_pair_offset,
+        wild_probability=wild_probability,
     )
 
     trusted_pool = []
@@ -1059,6 +2394,7 @@ def run_production(
     invocation = {
         "format_version": FORMAT_VERSION,
         "id": invocation_id,
+        "manager_run_id": manager_run_id,
         "date": day,
         "status": "running",
         "requested": count,
@@ -1079,6 +2415,54 @@ def run_production(
         "diagnostic_sample_fs": float(diagnostic_sample_fs),
         "capture_every": int(capture_every),
         "chemistrymodel_git_revision": revision,
+        "planner": {
+            "version": OUTCOME_PLANNER_VERSION,
+            "microreactor_primary_weight": float(MICROCELL_FAMILY_WEIGHT),
+            "pair_probe_weight": float(PAIR_FAMILY_WEIGHT),
+            "microreactor_exploration_probability": float(
+                OUTCOME_EXPLORATION_PROBABILITY
+            ),
+            "outcome_prior_strength": float(OUTCOME_PRIOR_STRENGTH),
+            "outcome_multiplier_range": [
+                float(OUTCOME_MULTIPLIER_MIN),
+                float(OUTCOME_MULTIPLIER_MAX),
+            ],
+            "wild_exploration": {
+                "version": WILD_PLANNER_VERSION,
+                "probability": float(wild_probability),
+                "pair_dimensions": list(WILD_PAIR_DIMENSIONS),
+                "microreactor_dimensions": list(WILD_MICROCELL_DIMENSIONS),
+            },
+            "historical_completed_records": int(len(history)),
+            "historical_outcome_records": int(sum(
+                isinstance(row.get("experiment_outcome"), dict)
+                for row in history
+            )),
+            "refinement": {
+                "version": REFINEMENT_PLANNER_VERSION,
+                "microreactor_probability": float(
+                    REFINEMENT_MICROREACTOR_PROBABILITY
+                ),
+                "maximum_depth": int(REFINEMENT_MAX_DEPTH),
+                "maximum_children_by_parent_depth": {
+                    str(key): int(value)
+                    for key, value in
+                    REFINEMENT_MAX_CHILDREN_BY_PARENT_DEPTH.items()
+                },
+                "eligible_parents": int(len(
+                    _eligible_refinement_parents(
+                        _history_with_current_product_trust(
+                            history,
+                            molecule_root=molecule_root,
+                            qm_root=qm_root,
+                        ),
+                        allowed_ids=(
+                            set(pool["atoms"]) | set(pool["molecules"])
+                        ),
+                    )
+                )),
+            },
+        },
         "allowed_atoms": pool["atoms"],
         "trusted_molecules": trusted_pool,
         "specifications": specs,
@@ -1184,6 +2568,7 @@ def run_production(
                 "experiment_id": spec["id"],
                 "production_id": invocation_id,
                 "invocation_id": invocation_id,
+                "manager_run_id": manager_run_id,
                 "mixture": "reaction teacher production",
                 "experiment_family": family,
                 "chemistrymodel_git_revision": revision,
@@ -1201,6 +2586,7 @@ def run_production(
                 "status": "complete",
                 "production_id": invocation_id,
                 "invocation_id": invocation_id,
+                "manager_run_id": manager_run_id,
                 "experiment_id": spec["id"],
                 "experiment_family": family,
                 "specification": spec,
@@ -1282,7 +2668,76 @@ def run_production(
                 routed = {"queued": 0, "duplicates": 0}
                 postprocess_warning = f"{type(problem).__name__}: {problem}"
 
+            experiment_outcome = {
+                "schema_version": 1,
+                "characterisation_outcome": entry.get(
+                    "characterisation_outcome", "unknown"
+                ),
+                "reacted": bool(entry.get("reacted", False)),
+                "stable": bool(entry.get("stable", True)),
+                "reaction_event_count": int(len(experiment_events)),
+                "reaction_event_ids": [
+                    str(event.get("event_id"))
+                    for event in experiment_events
+                    if event.get("event_id")
+                ],
+                "product_species": [
+                    str(row["id"]) for row in products_now
+                    if row.get("id")
+                ],
+                "new_product_species": [
+                    str(row["id"]) for row in products_now
+                    if row.get("id") and row.get("new_this_experiment")
+                ],
+                "product_results": products_now,
+                "queued_for_qm": int(routed["queued"]),
+                "duplicate_queue_events": int(routed["duplicates"]),
+                "postprocess_status": (
+                    "warning" if postprocess_warning else "complete"
+                ),
+                "postprocess_warning": postprocess_warning,
+            }
+            record["experiment_outcome"] = experiment_outcome
+            _atomic_json(
+                experiments_dir / f"{spec['id']}.json",
+                record,
+            )
+
             if result_observer:
+                termination = entry.get("termination")
+                if not isinstance(termination, dict):
+                    termination = {}
+
+                actual_ps = float(entry.get(
+                    "picoseconds",
+                    float(getattr(simulation, "elapsed_femtoseconds", 0.0))
+                    / 1000.0,
+                ))
+                requested_ps = float(entry.get(
+                    "requested_picoseconds", duration_ps
+                ))
+
+                if family == "microcell":
+                    termination_reason = str(
+                        entry.get("termination_reason")
+                        or termination.get("reason")
+                        or (
+                            "duration_complete"
+                            if actual_ps + 1e-9 >= requested_ps
+                            else "ended_early"
+                        )
+                    )
+                else:
+                    termination_reason = (
+                        "numerical_failure"
+                        if stopped_early
+                        else (
+                            "duration_complete"
+                            if actual_ps + 1e-9 >= requested_ps
+                            else "ended_early"
+                        )
+                    )
+
                 result_observer({
                     "number": number,
                     "total": len(specs),
@@ -1296,6 +2751,9 @@ def run_production(
                     "queued_for_qm": routed["queued"],
                     "duplicate_queue_events": routed["duplicates"],
                     "postprocess_warning": postprocess_warning,
+                    "actual_picoseconds": actual_ps,
+                    "requested_picoseconds": requested_ps,
+                    "termination_reason": termination_reason,
                 })
 
         except Exception as problem:
@@ -1305,12 +2763,29 @@ def run_production(
                 "status": "failed",
                 "production_id": invocation_id,
                 "invocation_id": invocation_id,
+                "manager_run_id": manager_run_id,
                 "experiment_id": spec["id"],
                 "specification": spec,
                 "error": f"{type(problem).__name__}: {problem}",
                 "chemistrymodel_git_revision": revision,
                 "physics_source_sha256": source_hash,
                 "device": resolved_device,
+            }
+            failure["experiment_outcome"] = {
+                "schema_version": 1,
+                "characterisation_outcome": "failed",
+                "reacted": False,
+                "stable": False,
+                "reaction_event_count": 0,
+                "reaction_event_ids": [],
+                "product_species": [],
+                "new_product_species": [],
+                "product_results": [],
+                "queued_for_qm": 0,
+                "duplicate_queue_events": 0,
+                "postprocess_status": "not_run",
+                "postprocess_warning": None,
+                "error": failure["error"],
             }
             _atomic_json(experiments_dir / f"{spec['id']}.json", failure)
             if result_observer:
@@ -1325,6 +2800,8 @@ def run_production(
                     "queued_for_qm": 0,
                     "duplicate_queue_events": 0,
                     "error": failure["error"],
+                    "requested_picoseconds": float(duration_ps),
+                    "termination_reason": "failed",
                 })
 
     _rebuild_recording_index(records_dir, completed_records)
@@ -1421,10 +2898,11 @@ def run_production(
         "scan": scan,
         "outcomes": outcomes,
         "trusted_molecules": len(pool["molecules"]),
+        "wild_probability": float(wild_probability),
         "master_seed": used_master_seed,
         "master_seed_source": (
             "random" if master_seed is None else "explicit"
         ),
         "day_summary": day_summary,
+        "experiment_ids": [str(spec["id"]) for spec in specs],
     }
-

@@ -6,6 +6,7 @@ from chemistry_manager import CandidateState, ManagerStore
 from chemistry_manager.cli import main
 from chemistry_manager.discovery import discover, ingest_teacher_data
 from chemistry_manager.qm import process_qm_queue
+from chemistry_manager import reaction_producer
 
 
 def event(event_id="abc123", seed=7):
@@ -38,6 +39,30 @@ def test_store_persists_candidates_and_deduplicates_event_ids(tmp_path):
     assert waiting[0]["id"] == "EVENT_abc123"
     assert waiting[0]["provenance"]["seed"] == 7
     assert waiting[0]["products"][0]["id"] == "SP_000001"
+
+
+def test_promote_existing_refreshes_provenance_without_reporting_new_queue(
+    tmp_path,
+):
+    store = ManagerStore(tmp_path / "state.json")
+    log = tmp_path / "events.jsonl"
+    first = store.add_discovery_events([event("refresh")], log)
+    second = store.add_discovery_events(
+        [event("refresh")],
+        log,
+        source_kind="full_cm_teacher_event",
+        source_extra={"production_id": "INV_refresh"},
+        promote_existing=True,
+    )
+
+    assert first["added"] == 1
+    assert second["added"] == 0
+    assert second["duplicates"] == 1
+    assert second["refreshed"] == 1
+
+    candidate = store.candidates(CandidateState.WAITING_QM)[0]
+    assert candidate["source"]["kind"] == "full_cm_teacher_event"
+    assert candidate["source"]["production_id"] == "INV_refresh"
 
 
 def test_store_transitions_follow_the_v1_state_machine(tmp_path):
@@ -605,6 +630,7 @@ def test_daily_teacher_ingest_is_repeatable_and_does_not_double_register(
     assert second["teacher_frames_added"] == 0
     assert second["queued_for_qm"] == 0
     assert second["duplicate_candidates"] == 1
+    assert second["refreshed_candidates"] == 1
     assert len(store.candidates(CandidateState.WAITING_QM)) == 1
 
 
@@ -754,3 +780,425 @@ def test_store_can_find_unique_product_ids_by_state(tmp_path):
             "SP_000001", CandidateState.WAITING_QM
         )
     ) == 2
+
+
+def _planner_history_row(
+    experiment_id="EXP_parent",
+    *,
+    reacted=True,
+    stable=True,
+    new_products=("SP_new",),
+    trust="QM_VALIDATED",
+    depth=0,
+):
+    outcome = {
+        "reacted": bool(reacted),
+        "stable": bool(stable),
+        "reaction_event_count": 1 if reacted else 0,
+        "new_product_species": list(new_products),
+        "product_species": list(new_products),
+        "current_product_trust": {
+            product_id: trust for product_id in new_products
+        },
+        "postprocess_status": "complete",
+    }
+    row = {
+        "id": experiment_id,
+        "experiment_family": "microcell",
+        "reactants": ["atom:H", "atom:C", "atom:O"],
+        "temperature_K": 500.0,
+        "cluster_radius_A": 4.0,
+        "minimum_gap_A": 2.0,
+        "inward_factor": 0.8,
+        "atom_density_per_A3": 0.03,
+        "experiment_outcome": outcome,
+    }
+    if depth:
+        row["refinement_depth"] = depth
+        row["refinement"] = {
+            "depth": depth,
+            "root_experiment_id": "EXP_root",
+            "parent_experiment_id": "EXP_root",
+            "mutation": {"type": "test", "to": depth},
+        }
+    return row
+
+
+def test_refinement_parent_prefers_qm_validated_success_and_rejects_dead_runs():
+    qm_parent = _planner_history_row(trust="QM_VALIDATED")
+    unvalidated_parent = _planner_history_row(
+        experiment_id="EXP_unvalidated", trust="UNVALIDATED"
+    )
+    rejected_parent = _planner_history_row(
+        experiment_id="EXP_rejected", trust="REJECTED"
+    )
+    dead_parent = _planner_history_row(
+        experiment_id="EXP_dead", reacted=False
+    )
+    unstable_parent = _planner_history_row(
+        experiment_id="EXP_unstable", stable=False
+    )
+
+    assert (
+        reaction_producer._refinement_parent_score(qm_parent)
+        > reaction_producer._refinement_parent_score(unvalidated_parent)
+        > 0.0
+    )
+    assert reaction_producer._refinement_parent_score(rejected_parent) == 0.0
+    assert reaction_producer._refinement_parent_score(dead_parent) == 0.0
+    assert reaction_producer._refinement_parent_score(unstable_parent) == 0.0
+
+
+def test_refinement_parent_depth_and_child_budget_are_bounded():
+    parent = _planner_history_row()
+    history = [parent]
+
+    for number in range(
+        reaction_producer.REFINEMENT_MAX_CHILDREN_BY_PARENT_DEPTH[0]
+    ):
+        history.append({
+            **_planner_history_row(
+                experiment_id=f"EXP_child_{number}", depth=1
+            ),
+            "refinement": {
+                "depth": 1,
+                "root_experiment_id": parent["id"],
+                "parent_experiment_id": parent["id"],
+                "mutation": {"type": "temperature_K", "to": number},
+            },
+        })
+
+    eligible = reaction_producer._eligible_refinement_parents(
+        history,
+        allowed_ids={"atom:H", "atom:C", "atom:O"},
+    )
+    assert all(row["spec"]["id"] != parent["id"] for row in eligible)
+
+    depth_two = _planner_history_row(
+        experiment_id="EXP_depth_two", depth=2
+    )
+    assert reaction_producer._refinement_parent_score(depth_two) == 0.0
+
+
+def test_refinement_candidates_change_one_dimension_and_record_lineage(
+    monkeypatch,
+):
+    parent = _planner_history_row()
+    pool = {
+        "atoms": ["atom:H", "atom:C", "atom:N", "atom:O"],
+        "molecules": [],
+    }
+
+    def fake_load(reactant_id, molecule_root):
+        symbol = reactant_id.split(":", 1)[1]
+        return {
+            "id": reactant_id,
+            "formula": symbol,
+            "symbols": [symbol],
+            "positions": [[0.0, 0.0, 0.0]],
+            "bonds": [],
+        }
+
+    monkeypatch.setattr(
+        reaction_producer, "_load_reactant", fake_load
+    )
+    generator = reaction_producer.np.random.default_rng(123)
+    candidates = reaction_producer._build_refinement_candidates(
+        parent,
+        0,
+        generator,
+        pool,
+        "molecules",
+        "balanced",
+        {},
+        [parent],
+    )
+
+    assert candidates
+    assert all(
+        candidate["refinement"]["parent_experiment_id"] == parent["id"]
+        for candidate in candidates
+    )
+    assert all(candidate["refinement_depth"] == 1 for candidate in candidates)
+    assert all(3 <= candidate["object_count"] <= 8 for candidate in candidates)
+
+    temperature_children = [
+        candidate for candidate in candidates
+        if candidate["refinement"]["mutation"]["type"] == "temperature_K"
+    ]
+    assert temperature_children
+    for candidate in temperature_children:
+        assert candidate["reactants"] == parent["reactants"]
+        assert candidate["cluster_radius_A"] == parent["cluster_radius_A"]
+        assert candidate["minimum_gap_A"] == parent["minimum_gap_A"]
+        assert candidate["inward_factor"] == parent["inward_factor"]
+        assert candidate["temperature_K"] != parent["temperature_K"]
+
+
+def test_refinement_reuses_no_completed_parent_mutation(monkeypatch):
+    parent = _planner_history_row()
+    used_child = {
+        **_planner_history_row(
+            experiment_id="EXP_used_child", depth=1
+        ),
+        "refinement": {
+            "depth": 1,
+            "root_experiment_id": parent["id"],
+            "parent_experiment_id": parent["id"],
+            "mutation": {
+                "type": "temperature_K",
+                "from": 500.0,
+                "to": 250.0,
+            },
+        },
+    }
+
+    def fake_load(reactant_id, molecule_root):
+        symbol = reactant_id.split(":", 1)[1]
+        return {
+            "id": reactant_id,
+            "formula": symbol,
+            "symbols": [symbol],
+            "positions": [[0.0, 0.0, 0.0]],
+            "bonds": [],
+        }
+
+    monkeypatch.setattr(
+        reaction_producer, "_load_reactant", fake_load
+    )
+    generator = reaction_producer.np.random.default_rng(456)
+    candidates = reaction_producer._build_refinement_candidates(
+        parent,
+        0,
+        generator,
+        {
+            "atoms": ["atom:H", "atom:C", "atom:N", "atom:O"],
+            "molecules": [],
+        },
+        "molecules",
+        "balanced",
+        {},
+        [parent, used_child],
+    )
+
+    mutation_keys = {
+        reaction_producer._refinement_mutation_key(
+            candidate["refinement"]
+        )
+        for candidate in candidates
+    }
+    used_key = reaction_producer._refinement_mutation_key(
+        used_child["refinement"]
+    )
+    assert used_key not in mutation_keys
+
+
+def _fake_atomic_reactant(reactant_id):
+    symbol = str(reactant_id).split(":", 1)[-1]
+    return {
+        "id": str(reactant_id),
+        "formula": symbol,
+        "symbols": [symbol],
+        "positions": [[0.0, 0.0, 0.0]],
+        "bonds": [],
+    }
+
+
+def test_wild_pair_collision_speed_reaches_beyond_normal_profile(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        reaction_producer, "_load_reactant",
+        lambda reactant_id, molecule_root: _fake_atomic_reactant(reactant_id),
+    )
+    generator = reaction_producer.np.random.default_rng(99)
+    candidate = reaction_producer._build_wild_pair_candidate(
+        0,
+        "atom_atom",
+        "direct",
+        "high",
+        generator,
+        {"atoms": ["atom:H", "atom:O"], "molecules": []},
+        "molecules",
+        "balanced",
+        {},
+        wild_dimension="collision_speed",
+    )
+
+    assert candidate["wild_exploration"]["dimension"] == "collision_speed"
+    assert candidate["speed_class"] == "wild"
+    assert (
+        reaction_producer.WILD_PAIR_APPROACH_FACTOR_RANGE[0]
+        <= candidate["approach_factor"]
+        <= reaction_producer.WILD_PAIR_APPROACH_FACTOR_RANGE[1]
+    )
+    assert candidate["approach_factor"] > max(
+        high for low, high in
+        reaction_producer.SPEED_RANGES["balanced"].values()
+    )
+
+
+def test_wild_microreactor_modes_keep_valid_object_bounds_and_provenance(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        reaction_producer, "_load_reactant",
+        lambda reactant_id, molecule_root: _fake_atomic_reactant(reactant_id),
+    )
+    pool = {
+        "atoms": ["atom:H", "atom:C", "atom:N", "atom:O"],
+        "molecules": [],
+    }
+
+    for index, dimension in enumerate(
+        reaction_producer.WILD_MICROCELL_DIMENSIONS
+    ):
+        generator = reaction_producer.np.random.default_rng(500 + index)
+        candidate = reaction_producer._build_wild_microcell_candidate(
+            0,
+            generator,
+            pool,
+            "molecules",
+            "balanced",
+            {},
+            wild_dimension=dimension,
+        )
+        assert candidate["category"] == "microreactor_wild"
+        assert candidate["wild_exploration"]["dimension"] == dimension
+        assert 3 <= candidate["object_count"] <= 8
+        assert candidate["cluster_radius_A"] > 0.0
+        assert candidate["atom_density_per_A3"] > 0.0
+
+        if dimension == "temperature":
+            low, high = reaction_producer.WILD_TEMPERATURE_RANGE_K
+            assert low <= candidate["temperature_K"] <= high
+        elif dimension == "inward_factor":
+            value = candidate["inward_factor"]
+            assert (
+                reaction_producer.WILD_MICROCELL_INWARD_LOW_RANGE[0]
+                <= value
+                <= reaction_producer.WILD_MICROCELL_INWARD_LOW_RANGE[1]
+                or
+                reaction_producer.WILD_MICROCELL_INWARD_HIGH_RANGE[0]
+                <= value
+                <= reaction_producer.WILD_MICROCELL_INWARD_HIGH_RANGE[1]
+            )
+        elif dimension == "minimum_gap":
+            value = candidate["minimum_gap_A"]
+            assert (
+                reaction_producer.WILD_MICROCELL_GAP_TIGHT_RANGE_A[0]
+                <= value
+                <= reaction_producer.WILD_MICROCELL_GAP_TIGHT_RANGE_A[1]
+                or
+                reaction_producer.WILD_MICROCELL_GAP_LOOSE_RANGE_A[0]
+                <= value
+                <= reaction_producer.WILD_MICROCELL_GAP_LOOSE_RANGE_A[1]
+            )
+        elif dimension == "object_count":
+            assert candidate["object_count"] in (
+                reaction_producer.WILD_MICROCELL_OBJECT_COUNTS
+            )
+
+
+def test_planner_can_force_wild_microreactor_without_changing_family_weights(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        reaction_producer,
+        "allowed_reactants",
+        lambda *args, **kwargs: {
+            "atoms": ["atom:H", "atom:C", "atom:N", "atom:O"],
+            "molecules": [],
+            "trusted_molecule_records": [],
+        },
+    )
+    monkeypatch.setattr(
+        reaction_producer, "_load_reactant",
+        lambda reactant_id, molecule_root: _fake_atomic_reactant(reactant_id),
+    )
+    monkeypatch.setattr(
+        reaction_producer,
+        "_choose_experiment_family",
+        lambda generator: "microcell",
+    )
+
+    specs, _ = reaction_producer.generate_experiment_specs(
+        4,
+        12345,
+        molecule_root="molecules",
+        history=[],
+        wild_probability=1.0,
+    )
+
+    assert len(specs) == 4
+    assert all(spec["experiment_family"] == "microcell" for spec in specs)
+    assert all(spec["planner"]["mode"] == "wild_exploration" for spec in specs)
+    assert all(
+        spec["planner"]["wild_family"] == "microcell" for spec in specs
+    )
+    assert all("wild_exploration" in spec for spec in specs)
+
+
+def test_pair_novelty_can_be_tested_without_rng_family_assumption(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        reaction_producer,
+        "allowed_reactants",
+        lambda *args, **kwargs: {
+            "atoms": ["atom:H", "atom:C", "atom:N", "atom:O"],
+            "molecules": [],
+            "trusted_molecule_records": [],
+        },
+    )
+    monkeypatch.setattr(
+        reaction_producer, "_load_reactant",
+        lambda reactant_id, molecule_root: _fake_atomic_reactant(reactant_id),
+    )
+    monkeypatch.setattr(
+        reaction_producer,
+        "_choose_experiment_family",
+        lambda generator: "pair",
+    )
+
+    specs, _ = reaction_producer.generate_experiment_specs(
+        3,
+        77,
+        molecule_root="molecules",
+        history=[],
+        wild_probability=0.0,
+    )
+
+    assert len(specs) == 3
+    assert all(spec["experiment_family"] == "pair" for spec in specs)
+    assert all(spec["planner"]["mode"] == "pair_novelty" for spec in specs)
+
+
+def test_normal_microreactor_object_count_contract_is_three_to_eight(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        reaction_producer, "_load_reactant",
+        lambda reactant_id, molecule_root: _fake_atomic_reactant(reactant_id),
+    )
+    generator = reaction_producer.np.random.default_rng(2026)
+    pool = {
+        "atoms": ["atom:H", "atom:C", "atom:N", "atom:O"],
+        "molecules": [],
+    }
+    counts = {
+        reaction_producer._build_microcell_candidate(
+            number,
+            generator,
+            pool,
+            "molecules",
+            "balanced",
+            {},
+        )["object_count"]
+        for number in range(64)
+    }
+
+    assert counts
+    assert min(counts) >= 3
+    assert max(counts) <= 8
+

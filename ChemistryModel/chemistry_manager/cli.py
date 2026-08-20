@@ -76,6 +76,13 @@ def build_parser():
         "--profile", choices=("balanced", "gentle", "reactive"),
         default="balanced",
     )
+    produce.add_argument(
+        "--wild-probability", type=float, default=0.08,
+        help=(
+            "share of experiments reserved for one-dimension broad-envelope "
+            "exploration (default: %(default)s)"
+        ),
+    )
     produce.add_argument("--output-root", default=str(DEFAULT_TEACHER_ROOT))
     produce.add_argument("--molecule-root", default=str(DEFAULT_MOLECULE_ROOT))
     produce.add_argument("--qm-root", default=None)
@@ -93,6 +100,47 @@ def build_parser():
     produce.add_argument("--event-window-fs", type=float, default=5.0)
     produce.add_argument("--diagnostic-sample-fs", type=float, default=1.0)
     produce.add_argument("--capture-every", type=int, default=4)
+
+    autonomous = commands.add_parser(
+        "run",
+        help="run the sequential autonomous discovery/QM loop",
+    )
+    autonomous.add_argument("--count", type=int, default=None)
+    autonomous.add_argument("--duration", type=float, default=None)
+    autonomous.add_argument("--qm-every", type=int, default=None)
+    autonomous.add_argument("--master-seed", type=int, default=None)
+    autonomous.add_argument(
+        "--profile", choices=("balanced", "gentle", "reactive"),
+        default=None,
+    )
+    autonomous.add_argument(
+        "--wild-probability", type=float, default=None,
+        help=(
+            "broad-envelope exploration share; omitted uses the current "
+            "default for a new run and the saved value on resume"
+        ),
+    )
+    autonomous.add_argument("--output-root", default=str(DEFAULT_TEACHER_ROOT))
+    autonomous.add_argument("--molecule-root", default=None)
+    autonomous.add_argument("--qm-root", default=None)
+    autonomous.add_argument("--device", default=None)
+    autonomous.add_argument(
+        "--physics",
+        choices=("optimised-valence", "standard", "high_fidelity"),
+        default=None,
+    )
+    autonomous.add_argument("--ordinary-frame-fs", type=float, default=None)
+    autonomous.add_argument("--event-window-fs", type=float, default=None)
+    autonomous.add_argument("--diagnostic-sample-fs", type=float, default=None)
+    autonomous.add_argument("--capture-every", type=int, default=None)
+    autonomous.add_argument("--method", default=None)
+    autonomous.add_argument("--basis", default=None)
+    autonomous.add_argument("--threads", type=int, default=None)
+    autonomous.add_argument("--memory", default=None)
+    autonomous.add_argument(
+        "--resume", default=None,
+        help="resume a RUN_... receipt from the selected teacher root",
+    )
     ingest_parser.add_argument(
         "--no-scan", action="store_true",
         help="only import the scanner's existing formation-event log",
@@ -136,6 +184,60 @@ def _candidate_product_ids(candidates):
             if isinstance(product, dict) and product.get("id"):
                 found.add(str(product["id"]))
     return found
+
+
+def _print_reaction_result(item):
+    if item.get("outcome") == "failed":
+        requested = item.get("requested_picoseconds")
+        runtime_text = (
+            "" if requested is None
+            else f"  requested {float(requested):.2f} ps"
+        )
+        print(
+            f"       FAILED:{runtime_text}  "
+            f"{item.get('error', 'unknown error')}"
+        )
+        return
+
+    actual = item.get("actual_picoseconds")
+    requested = item.get("requested_picoseconds")
+    reason = str(item.get("termination_reason") or "unknown")
+    if actual is not None and requested is not None:
+        reason_text = {
+            "quiescent": "quiescent",
+            "duration_complete": "full duration",
+            "numerical_failure": "numerical failure",
+            "ended_early": "ended early",
+        }.get(reason, reason.replace("_", " "))
+        print(
+            f"       runtime: {float(actual):.2f} / "
+            f"{float(requested):.2f} ps  ({reason_text})"
+        )
+
+    events = int(item.get("reaction_events", 0))
+    products = item.get("products") or []
+    print(
+        f"       result: {item.get('outcome', 'no reaction')}; "
+        + (
+            "no reaction event" if events == 0
+            else f"{events} reaction event(s)"
+        )
+    )
+    for product in products:
+        novelty = "NEW" if product.get("new_this_experiment") else "known"
+        print(
+            f"       {product['id']} {product.get('formula') or '?'}  "
+            f"{novelty} / {product.get('trust', 'UNKNOWN')}"
+        )
+        queue = product.get("queue")
+        if queue == CandidateState.WAITING_QM.value:
+            print("         -> WAITING_QM")
+        elif queue == CandidateState.QM_VALIDATED.value:
+            print("         -> QM_VALIDATED / trusted")
+        elif queue == CandidateState.QM_REJECTED.value:
+            print("         -> QM_REJECTED")
+        elif queue == "trusted":
+            print("         -> trusted reactant")
 
 
 def print_status(store, molecule_root=DEFAULT_MOLECULE_ROOT, qm_root=None):
@@ -257,6 +359,10 @@ def main(argv=None):
                 print(f"Queued directly for QM:    {result['queued_for_qm']}")
                 print(f"Already-trusted events:    {result['already_trusted_events']}")
                 print(f"Duplicate candidates:      {result['duplicate_candidates']}")
+                print(
+                    f"Existing candidates refreshed: "
+                    f"{result.get('refreshed_candidates', 0)}"
+                )
                 print(f"Registry:                  {result['registry']}")
                 if result["invalid"]:
                     print(f"Invalid teacher records:   {len(result['invalid'])}")
@@ -297,6 +403,76 @@ def main(argv=None):
             print("Use ingest for existing scanner data or produce_reactions for teacher data.")
             return 0
 
+        if options.command == "run":
+            from .manager_runner import run_manager
+
+            def manager_progress(number, total, spec):
+                planner = spec.get("planner") or {}
+                mode = str(planner.get("mode", "planning")).replace("_", " ")
+                print(
+                    f"[{number}/{total}] {mode}  {spec.get('category', 'experiment')}  "
+                    f"{spec.get('reactant_a', '?')} + {spec.get('reactant_b', '?')}"
+                )
+
+            def checkpoint_output(checkpoint):
+                print()
+                print(
+                    f"QM {checkpoint['kind']} checkpoint after "
+                    f"{checkpoint['after_completed_experiments']} simulations"
+                )
+                print(f"  waiting:          {checkpoint['waiting_before']}")
+                print(f"  validated:        {checkpoint['validated']}")
+                print(f"  rejected:         {checkpoint['rejected']}")
+                print(f"  still waiting:    {checkpoint['still_waiting']}")
+                print(f"  trusted reactants:{checkpoint['trusted_reactants']:>5}")
+                if checkpoint["kind"] != "final":
+                    print("continuing...")
+                print()
+
+            result = run_manager(
+                store,
+                count=options.count,
+                duration_ps=options.duration,
+                qm_every=options.qm_every,
+                device=options.device,
+                master_seed=options.master_seed,
+                profile=options.profile,
+                output_root=options.output_root,
+                molecule_root=options.molecule_root,
+                qm_root=options.qm_root,
+                physics=options.physics,
+                ordinary_interval_fs=options.ordinary_frame_fs,
+                event_window_fs=options.event_window_fs,
+                diagnostic_sample_fs=options.diagnostic_sample_fs,
+                capture_every=options.capture_every,
+                wild_probability=options.wild_probability,
+                qm_method=options.method,
+                qm_basis=options.basis,
+                qm_threads=options.threads,
+                qm_memory=options.memory,
+                resume=options.resume,
+                progress=manager_progress,
+                result_observer=_print_reaction_result,
+                qm_observer=checkpoint_output,
+            )
+            print("Autonomous Chemistry Manager")
+            print()
+            print(f"Run:                     {result['run_id']}")
+            print(f"Status:                  {result['status']}")
+            print(f"Requested experiments:   {result['requested_experiments']}")
+            print(f"Completed experiments:   {result['completed_experiments']}")
+            print(f"Failed experiments:      {result['failed_experiments']}")
+            print(f"QM validated:            {result['qm_validated_count']}")
+            print(f"QM rejected:             {result['qm_rejected_count']}")
+            print(f"Master seed:             {result['master_seed']}")
+            print(
+                f"Wild exploration:        "
+                f"{100.0 * float(result['wild_probability']):.1f}%"
+            )
+            print(f"Device:                  {result['device']}")
+            print(f"Receipt:                 {result['receipt_path']}")
+            return 0
+
         if options.command == "produce_reactions":
             from .reaction_producer import run_production
 
@@ -306,6 +482,10 @@ def main(argv=None):
                 raise ValueError("diagnostic-sample-fs must be greater than zero")
             if options.capture_every < 1:
                 raise ValueError("capture-every must be at least one")
+            if not 0.0 <= options.wild_probability <= 1.0:
+                raise ValueError(
+                    "wild-probability must be between 0 and 1"
+                )
 
             def progress(number, total, spec):
                 print(
@@ -315,42 +495,7 @@ def main(argv=None):
                 )
 
             def result_observer(item):
-                if item.get("outcome") == "failed":
-                    print(f"       FAILED: {item.get('error', 'unknown error')}")
-                    return
-
-                events = int(item.get("reaction_events", 0))
-                products = item.get("products") or []
-                if events == 0:
-                    print(
-                        f"       result: {item.get('outcome', 'no reaction')}; "
-                        "no reaction event"
-                    )
-                    return
-
-                print(
-                    f"       result: {item.get('outcome', 'reaction')}; "
-                    f"{events} reaction event(s)"
-                )
-                for product in products:
-                    novelty = (
-                        "NEW" if product.get("new_this_experiment")
-                        else "known"
-                    )
-                    print(
-                        f"       {product['id']} "
-                        f"{product.get('formula') or '?'}  "
-                        f"{novelty} / {product.get('trust', 'UNKNOWN')}"
-                    )
-                    queue = product.get("queue")
-                    if queue == CandidateState.WAITING_QM.value:
-                        print("         -> WAITING_QM")
-                    elif queue == CandidateState.QM_VALIDATED.value:
-                        print("         -> QM_VALIDATED / trusted")
-                    elif queue == CandidateState.QM_REJECTED.value:
-                        print("         -> QM_REJECTED")
-                    elif queue == "trusted":
-                        print("         -> trusted reactant")
+                _print_reaction_result(item)
 
             result = run_production(
                 store,
@@ -367,6 +512,7 @@ def main(argv=None):
                 diagnostic_sample_fs=options.diagnostic_sample_fs,
                 capture_every=options.capture_every,
                 physics=options.physics,
+                wild_probability=options.wild_probability,
                 progress=progress,
                 result_observer=result_observer,
             )
@@ -379,6 +525,10 @@ def main(argv=None):
             print(f"Completed:               {result['completed_now']}")
             print(f"Failed:                  {result['failed_now']}")
             print(f"Master seed:             {result['master_seed']} ({result['master_seed_source']})")
+            print(
+                f"Wild exploration:        "
+                f"{100.0 * float(result['wild_probability']):.1f}%"
+            )
             print(f"Teacher frames written:  {result['teacher_frames_written_now']}")
             print(f"New reactions detected:  {result['new_events']}")
             print(f"Queued for QM now:       {result['new_candidates_queued']}")
