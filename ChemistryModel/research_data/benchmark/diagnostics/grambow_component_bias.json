@@ -1,0 +1,497 @@
+{
+  "component_source": "research_data\\benchmark\\diagnostics\\grambow_full_component_audit_components.csv",
+  "classification_source": "research_data\\benchmark\\diagnostics\\grambow_failure_diagnosis.json",
+  "row_count": 200,
+  "interpretation_warning": "Correlations and frozen-endpoint term removals identify candidate causes only; they are not parameter fits or acceptable production changes.",
+  "barrier": {
+    "current_metrics": {
+      "count": 200,
+      "mae_eV": 4.519547217672763,
+      "rmse_eV": 6.4830763877027735,
+      "signed_mean_eV": 1.8843275980688745,
+      "sign_agreement": 0.87
+    },
+    "component_correlations": [
+      {
+        "component": "base_overcoordination",
+        "signed_error_correlation": 0.8434062355345867,
+        "absolute_error_correlation": 0.7615485776347497,
+        "mean_absolute_contribution_eV": 6.396025746452104
+      },
+      {
+        "component": "valence_topology_correction",
+        "signed_error_correlation": -0.8147062470044102,
+        "absolute_error_correlation": 0.6781278891265976,
+        "mean_absolute_contribution_eV": 1.6226581443978245
+      },
+      {
+        "component": "base_angle",
+        "signed_error_correlation": 0.8020613518275516,
+        "absolute_error_correlation": 0.6802053610762034,
+        "mean_absolute_contribution_eV": 2.805025427887714
+      },
+      {
+        "component": "base_bond",
+        "signed_error_correlation": -0.33169527592949977,
+        "absolute_error_correlation": 0.07713017066477883,
+        "mean_absolute_contribution_eV": 2.654497881474876
+      },
+      {
+        "component": "effective_angle_total",
+        "signed_error_correlation": 0.324022610477416,
+        "absolute_error_correlation": 0.1910736712668224,
+        "mean_absolute_contribution_eV": 1.6144729205379156
+      },
+      {
+        "component": "h_state_correction",
+        "signed_error_correlation": -0.1780592381077367,
+        "absolute_error_correlation": 0.04233260457477594,
+        "mean_absolute_contribution_eV": 1.4397429477515118
+      }
+    ],
+    "pressure_correlations": [
+      {
+        "metric": "heavy_base_overcoordination_eV",
+        "signed_error_correlation": 0.9112051754428084,
+        "absolute_error_correlation": 0.8864640112360938
+      },
+      {
+        "metric": "coordination_gap_sum",
+        "signed_error_correlation": 0.7451324790477528,
+        "absolute_error_correlation": 0.5829519677544934
+      },
+      {
+        "metric": "max_coordination_gap",
+        "signed_error_correlation": 0.6267670421424351,
+        "absolute_error_correlation": 0.4507602673472393
+      },
+      {
+        "metric": "max_radial_valence_excess",
+        "signed_error_correlation": 0.573845405466266,
+        "absolute_error_correlation": 0.30338634979564594
+      },
+      {
+        "metric": "radially_overcoordinated_atom_count",
+        "signed_error_correlation": 0.3544898795884272,
+        "absolute_error_correlation": 0.07118037558014477
+      },
+      {
+        "metric": "suppressed_contact_count",
+        "signed_error_correlation": 0.21721583472674685,
+        "absolute_error_correlation": -0.01113221591095267
+      },
+      {
+        "metric": "hydrogen_base_overcoordination_eV",
+        "signed_error_correlation": 0.19177701828299984,
+        "absolute_error_correlation": 0.034642339446901406
+      }
+    ],
+    "largest_component_counts_all": {
+      "base_overcoordination": 106,
+      "base_angle": 26,
+      "h_state_correction": 1,
+      "base_bond": 55,
+      "valence_topology_correction": 7,
+      "effective_angle_total": 5
+    },
+    "largest_component_counts_top50": {
+      "base_overcoordination": 42,
+      "base_angle": 7,
+      "h_state_correction": 1
+    },
+    "term_removal_sensitivity": [
+      {
+        "count": 200,
+        "mae_eV": 4.519547217672763,
+        "rmse_eV": 6.4830763877027735,
+        "signed_mean_eV": 1.8843275980688745,
+        "sign_agreement": 0.87,
+        "scenario": "current",
+        "warning": "frozen-endpoint term-removal diagnostic; not a physical model"
+      },
+      {
+        "count": 200,
+        "mae_eV": 2.245190662252195,
+        "rmse_eV": 2.8273962283418124,
+        "signed_mean_eV": 0.2501899891741222,
+        "sign_agreement": 0.95,
+        "scenario": "remove_heavy_base_overcoordination_diagnostic",
+        "warning": "frozen-endpoint term-removal diagnostic; not a physical model"
+      },
+      {
+        "count": 200,
+        "mae_eV": 4.173269786344257,
+        "rmse_eV": 5.196185587251421,
+        "signed_mean_eV": -2.6153659889276946,
+        "sign_agreement": 0.595,
+        "scenario": "remove_all_base_overcoordination_diagnostic",
+        "warning": "frozen-endpoint term-removal diagnostic; not a physical model"
+      },
+      {
+        "count": 200,
+        "mae_eV": 3.8010243350812862,
+        "rmse_eV": 5.916701013179651,
+        "signed_mean_eV": 0.7412903498426303,
+        "sign_agreement": 0.865,
+        "scenario": "remove_effective_angle_diagnostic",
+        "warning": "frozen-endpoint term-removal diagnostic; not a physical model"
+      },
+      {
+        "count": 200,
+        "mae_eV": 5.505813581218721,
+        "rmse_eV": 7.659886785653624,
+        "signed_mean_eV": 3.247291154342703,
+        "sign_agreement": 0.92,
+        "scenario": "remove_h_state_correction_diagnostic",
+        "warning": "frozen-endpoint term-removal diagnostic; not a physical model"
+      },
+      {
+        "count": 200,
+        "mae_eV": 2.0956970639261883,
+        "rmse_eV": 2.626089607282799,
+        "signed_mean_eV": -0.8928472590521218,
+        "sign_agreement": 0.925,
+        "scenario": "remove_heavy_over_and_effective_angle_diagnostic",
+        "warning": "frozen-endpoint term-removal diagnostic; not a physical model"
+      }
+    ]
+  },
+  "reaction": {
+    "current_metrics": {
+      "count": 200,
+      "mae_eV": 4.405767420381828,
+      "rmse_eV": 7.06884080888085,
+      "signed_mean_eV": -0.138714571230582,
+      "sign_agreement": 0.735
+    },
+    "component_correlations": [
+      {
+        "component": "valence_topology_correction",
+        "signed_error_correlation": -0.8927630021739441,
+        "absolute_error_correlation": 0.8515018896141872,
+        "mean_absolute_contribution_eV": 1.7713463687942956
+      },
+      {
+        "component": "base_overcoordination",
+        "signed_error_correlation": 0.8869701496347026,
+        "absolute_error_correlation": 0.8840707009253194,
+        "mean_absolute_contribution_eV": 3.581744316134678
+      },
+      {
+        "component": "base_angle",
+        "signed_error_correlation": 0.8712602636134757,
+        "absolute_error_correlation": 0.8369977962058505,
+        "mean_absolute_contribution_eV": 3.2140698967460457
+      },
+      {
+        "component": "effective_angle_total",
+        "signed_error_correlation": 0.3827898327788881,
+        "absolute_error_correlation": 0.2230134365770945,
+        "mean_absolute_contribution_eV": 1.8022715864319168
+      },
+      {
+        "component": "base_bond",
+        "signed_error_correlation": -0.30860797163031417,
+        "absolute_error_correlation": 0.41294142365829134,
+        "mean_absolute_contribution_eV": 3.1438364644031873
+      },
+      {
+        "component": "h_state_correction",
+        "signed_error_correlation": -0.10181907234035721,
+        "absolute_error_correlation": 0.07189966166781693,
+        "mean_absolute_contribution_eV": 2.220446049250313e-18
+      }
+    ],
+    "pressure_correlations": [
+      {
+        "metric": "heavy_base_overcoordination_eV",
+        "signed_error_correlation": 0.8869701496347027,
+        "absolute_error_correlation": 0.8840707009253194
+      },
+      {
+        "metric": "coordination_gap_sum",
+        "signed_error_correlation": 0.8064266757462155,
+        "absolute_error_correlation": 0.7248694277445746
+      },
+      {
+        "metric": "max_coordination_gap",
+        "signed_error_correlation": 0.6954135730456175,
+        "absolute_error_correlation": 0.5442015400230699
+      },
+      {
+        "metric": "max_radial_valence_excess",
+        "signed_error_correlation": 0.6910019800826297,
+        "absolute_error_correlation": 0.5381435415816158
+      },
+      {
+        "metric": "suppressed_contact_count",
+        "signed_error_correlation": 0.4807563773189328,
+        "absolute_error_correlation": 0.39451755520010323
+      },
+      {
+        "metric": "radially_overcoordinated_atom_count",
+        "signed_error_correlation": 0.40634951999989677,
+        "absolute_error_correlation": 0.323232834350682
+      },
+      {
+        "metric": "hydrogen_base_overcoordination_eV",
+        "signed_error_correlation": 0.0,
+        "absolute_error_correlation": 0.0
+      }
+    ],
+    "largest_component_counts_all": {
+      "base_overcoordination": 51,
+      "base_angle": 47,
+      "base_bond": 88,
+      "effective_angle_total": 12,
+      "valence_topology_correction": 2
+    },
+    "largest_component_counts_top50": {
+      "base_overcoordination": 29,
+      "base_angle": 18,
+      "base_bond": 3
+    },
+    "term_removal_sensitivity": [
+      {
+        "count": 200,
+        "mae_eV": 4.405767420381828,
+        "rmse_eV": 7.06884080888085,
+        "signed_mean_eV": -0.138714571230582,
+        "sign_agreement": 0.735,
+        "scenario": "current",
+        "warning": "frozen-endpoint term-removal diagnostic; not a physical model"
+      },
+      {
+        "count": 200,
+        "mae_eV": 3.0498803594612607,
+        "rmse_eV": 3.95924149455828,
+        "signed_mean_eV": 1.0459324284101301,
+        "sign_agreement": 0.725,
+        "scenario": "remove_heavy_base_overcoordination_diagnostic",
+        "warning": "frozen-endpoint term-removal diagnostic; not a physical model"
+      },
+      {
+        "count": 200,
+        "mae_eV": 3.0498803594612607,
+        "rmse_eV": 3.95924149455828,
+        "signed_mean_eV": 1.0459324284101301,
+        "sign_agreement": 0.725,
+        "scenario": "remove_all_base_overcoordination_diagnostic",
+        "warning": "frozen-endpoint term-removal diagnostic; not a physical model"
+      },
+      {
+        "count": 200,
+        "mae_eV": 3.838205077617942,
+        "rmse_eV": 6.533184365304293,
+        "signed_mean_eV": -0.1908090829011146,
+        "sign_agreement": 0.7,
+        "scenario": "remove_effective_angle_diagnostic",
+        "warning": "frozen-endpoint term-removal diagnostic; not a physical model"
+      },
+      {
+        "count": 200,
+        "mae_eV": 4.405767420381828,
+        "rmse_eV": 7.06884080888085,
+        "signed_mean_eV": -0.138714571230582,
+        "sign_agreement": 0.735,
+        "scenario": "remove_h_state_correction_diagnostic",
+        "warning": "frozen-endpoint term-removal diagnostic; not a physical model"
+      },
+      {
+        "count": 200,
+        "mae_eV": 2.6050409283241693,
+        "rmse_eV": 3.5134352883057756,
+        "signed_mean_eV": 0.9938379167395975,
+        "sign_agreement": 0.755,
+        "scenario": "remove_heavy_over_and_effective_angle_diagnostic",
+        "warning": "frozen-endpoint term-removal diagnostic; not a physical model"
+      }
+    ]
+  },
+  "class_pressure_summary": [
+    {
+      "primary_class": "multi-bond dissociation",
+      "count": 6,
+      "barrier_error_mean_eV": -12.487620724037887,
+      "barrier_heavy_over_delta_mean_eV": -14.251591015776931,
+      "reaction_error_mean_eV": -15.509638373021318,
+      "reaction_heavy_over_delta_mean_eV": -21.2947558391116
+    },
+    {
+      "primary_class": "H transfer (N-H -> O-H)",
+      "count": 1,
+      "barrier_error_mean_eV": 12.380754425637285,
+      "barrier_heavy_over_delta_mean_eV": 13.280165606129597,
+      "reaction_error_mean_eV": -2.232317046887502,
+      "reaction_heavy_over_delta_mean_eV": -0.5069595786077307
+    },
+    {
+      "primary_class": "C-N formation",
+      "count": 1,
+      "barrier_error_mean_eV": 10.686734584837374,
+      "barrier_heavy_over_delta_mean_eV": 0.1685466140488193,
+      "reaction_error_mean_eV": 10.012552199472715,
+      "reaction_heavy_over_delta_mean_eV": 0.01730096963774709
+    },
+    {
+      "primary_class": "H transfer (C/O-H -> H-H)",
+      "count": 3,
+      "barrier_error_mean_eV": 5.889204456139865,
+      "barrier_heavy_over_delta_mean_eV": 2.1927747490736276,
+      "reaction_error_mean_eV": 3.7079305251887695,
+      "reaction_heavy_over_delta_mean_eV": -0.002912816259860391
+    },
+    {
+      "primary_class": "H transfer (C/O-H -> O-H)",
+      "count": 1,
+      "barrier_error_mean_eV": 5.46690664685233,
+      "barrier_heavy_over_delta_mean_eV": 7.778000349100946,
+      "reaction_error_mean_eV": 4.4295805990258685,
+      "reaction_heavy_over_delta_mean_eV": 7.778
+    },
+    {
+      "primary_class": "C-C dissociation",
+      "count": 4,
+      "barrier_error_mean_eV": -4.412238208916099,
+      "barrier_heavy_over_delta_mean_eV": -6.723427914680409,
+      "reaction_error_mean_eV": -6.314393793433123,
+      "reaction_heavy_over_delta_mean_eV": -9.270065235812837
+    },
+    {
+      "primary_class": "H transfer (C-H -> N-H)",
+      "count": 17,
+      "barrier_error_mean_eV": 3.7190945183658592,
+      "barrier_heavy_over_delta_mean_eV": 4.328117949921451,
+      "reaction_error_mean_eV": 3.7553278734062263,
+      "reaction_heavy_over_delta_mean_eV": 4.834184875878655
+    },
+    {
+      "primary_class": "H transfer (C-H -> O-H)",
+      "count": 27,
+      "barrier_error_mean_eV": 3.356217742852585,
+      "barrier_heavy_over_delta_mean_eV": 3.6921483976866747,
+      "reaction_error_mean_eV": 1.6739248532934792,
+      "reaction_heavy_over_delta_mean_eV": 0.8469595311085341
+    },
+    {
+      "primary_class": "bond rearrangement",
+      "count": 41,
+      "barrier_error_mean_eV": 3.2365970747449895,
+      "barrier_heavy_over_delta_mean_eV": 4.001897818948202,
+      "reaction_error_mean_eV": -0.36617578020894687,
+      "reaction_heavy_over_delta_mean_eV": -0.9430009487710733
+    },
+    {
+      "primary_class": "H transfer (N-H -> N-H)",
+      "count": 1,
+      "barrier_error_mean_eV": -3.1869491679043946,
+      "barrier_heavy_over_delta_mean_eV": -3.88015766022718,
+      "reaction_error_mean_eV": 0.5281794808108486,
+      "reaction_heavy_over_delta_mean_eV": 0.9413981758612966
+    },
+    {
+      "primary_class": "H transfer (C/N-H -> H-H)",
+      "count": 3,
+      "barrier_error_mean_eV": -2.846726828503487,
+      "barrier_heavy_over_delta_mean_eV": -5.758891687400983,
+      "reaction_error_mean_eV": -2.8279301061440285,
+      "reaction_heavy_over_delta_mean_eV": -6.737656066864683
+    },
+    {
+      "primary_class": "N-N dissociation",
+      "count": 1,
+      "barrier_error_mean_eV": -2.7527211917653105,
+      "barrier_heavy_over_delta_mean_eV": -2.9485668501724778,
+      "reaction_error_mean_eV": -2.511905078805423,
+      "reaction_heavy_over_delta_mean_eV": -2.8291436029516155
+    },
+    {
+      "primary_class": "C-N dissociation",
+      "count": 2,
+      "barrier_error_mean_eV": -2.2915476483331574,
+      "barrier_heavy_over_delta_mean_eV": -0.9995833303190323,
+      "reaction_error_mean_eV": -3.9205953716339756,
+      "reaction_heavy_over_delta_mean_eV": -0.9995007120629511
+    },
+    {
+      "primary_class": "H transfer (C/O-H -> C/H-H)",
+      "count": 1,
+      "barrier_error_mean_eV": 2.1220579735199934,
+      "barrier_heavy_over_delta_mean_eV": 0.015364707566688895,
+      "reaction_error_mean_eV": 1.320886131300064,
+      "reaction_heavy_over_delta_mean_eV": 0.07940492619947523
+    },
+    {
+      "primary_class": "H transfer (C-H -> C-H)",
+      "count": 59,
+      "barrier_error_mean_eV": 1.9544736593159089,
+      "barrier_heavy_over_delta_mean_eV": 1.8466351022702887,
+      "reaction_error_mean_eV": -0.7737498215192378,
+      "reaction_heavy_over_delta_mean_eV": -1.7311117912370548
+    },
+    {
+      "primary_class": "O-O formation",
+      "count": 1,
+      "barrier_error_mean_eV": 1.927305623325509,
+      "barrier_heavy_over_delta_mean_eV": 0.7237406132365631,
+      "reaction_error_mean_eV": 1.8652588003082258,
+      "reaction_heavy_over_delta_mean_eV": -1.4312363019718308
+    },
+    {
+      "primary_class": "H transfer (N-H -> H-H)",
+      "count": 2,
+      "barrier_error_mean_eV": 1.86673363155138,
+      "barrier_heavy_over_delta_mean_eV": 0.49238538842786944,
+      "reaction_error_mean_eV": 0.6017786350030327,
+      "reaction_heavy_over_delta_mean_eV": -0.008216175378671598
+    },
+    {
+      "primary_class": "H transfer (C-H -> H-H)",
+      "count": 16,
+      "barrier_error_mean_eV": 1.6928297319887498,
+      "barrier_heavy_over_delta_mean_eV": -1.1208112380023871,
+      "reaction_error_mean_eV": 1.8874750092222516,
+      "reaction_heavy_over_delta_mean_eV": -2.054104268084203
+    },
+    {
+      "primary_class": "H transfer (N-H -> C-H)",
+      "count": 5,
+      "barrier_error_mean_eV": 1.1918918982383104,
+      "barrier_heavy_over_delta_mean_eV": 0.8131627642427594,
+      "reaction_error_mean_eV": -0.8719046614342559,
+      "reaction_heavy_over_delta_mean_eV": 0.5258203245189359
+    },
+    {
+      "primary_class": "H transfer (O-H -> C-H)",
+      "count": 2,
+      "barrier_error_mean_eV": -0.9491942321382467,
+      "barrier_heavy_over_delta_mean_eV": -0.24436913168977875,
+      "reaction_error_mean_eV": -1.4167333280921852,
+      "reaction_heavy_over_delta_mean_eV": -0.29237397761923767
+    },
+    {
+      "primary_class": "H transfer (C-H -> C/H-H)",
+      "count": 1,
+      "barrier_error_mean_eV": 0.9164541045299757,
+      "barrier_heavy_over_delta_mean_eV": 0.0,
+      "reaction_error_mean_eV": 3.0902427780914508,
+      "reaction_heavy_over_delta_mean_eV": 0.0
+    },
+    {
+      "primary_class": "H transfer (O-H -> N-H)",
+      "count": 1,
+      "barrier_error_mean_eV": 0.8178703308216306,
+      "barrier_heavy_over_delta_mean_eV": 0.9193757860167091,
+      "reaction_error_mean_eV": -2.2292617784517006,
+      "reaction_heavy_over_delta_mean_eV": 0.9144558994232366
+    },
+    {
+      "primary_class": "H transfer (O-H -> O-H)",
+      "count": 4,
+      "barrier_error_mean_eV": -0.05481998942275457,
+      "barrier_heavy_over_delta_mean_eV": 0.7369169546435353,
+      "reaction_error_mean_eV": 2.2295496710446994,
+      "reaction_heavy_over_delta_mean_eV": 2.94105374029213
+    }
+  ]
+}

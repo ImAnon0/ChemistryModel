@@ -1,0 +1,64 @@
+{
+  "generated": "2026-08-20T22:28:08+01:00",
+  "input": "research_data\\benchmark\\grambow_endpoints.json",
+  "reactions_attempted": 200,
+  "reactions_scored": 200,
+  "reactions_failed": 0,
+  "coverage_fraction": 1.0,
+  "barrier_height": {
+    "count": 200,
+    "mae_eV": 4.519547217672763,
+    "rmse_eV": 6.4830763877027735,
+    "median_absolute_eV": 3.187412886218741,
+    "max_absolute_eV": 35.50213447191645,
+    "signed_mean_eV": 1.8843275980688745
+  },
+  "reaction_energy": {
+    "count": 200,
+    "mae_eV": 4.405767420381828,
+    "rmse_eV": 7.06884080888085,
+    "median_absolute_eV": 3.0472716289560857,
+    "max_absolute_eV": 49.37459912643908,
+    "signed_mean_eV": -0.138714571230582
+  },
+  "barrier_sign_agreement": 0.87,
+  "box_size_angstrom": 30.0,
+  "device": "cuda",
+  "physics": "optimised-valence",
+  "topology": "current",
+  "physics_fingerprint": {
+    "requested_physics": "optimised-valence",
+    "simulation_class": "valence_state_optimised_torch.OptimisedValenceStateBatchedSimulation",
+    "physics_model": "reactive_v7_factorisable_valence_optimised_experimental",
+    "physics_model_revision": 1,
+    "h_state_active": true,
+    "high_fidelity_active": false,
+    "topology_mode": "current",
+    "production_topology_exclusions": [],
+    "effective_topology_exclusions": [],
+    "constants": {
+      "h_state_model": "reactive_v2_h_state_reference",
+      "h_state_revision": 0,
+      "h_state_mixing": 0.472744
+    },
+    "git_revision": "ed34f6a1fd589945f92d548b33198fda6526d19f",
+    "source_sha256": "328b75d20f4ed5aa4ce891604ef1f8b9f3cc463b199767c1559d32fa29b85aa9",
+    "source_files": [
+      "batched_torch.py",
+      "benchmark_reaction_barriers.py",
+      "h_state_torch.py",
+      "reactive.py",
+      "reactive_torch.py",
+      "valence_state_batched_membership_torch.py",
+      "valence_state_cached_h_topology_torch.py",
+      "valence_state_factorised_batched_torch.py",
+      "valence_state_factorised_torch.py",
+      "valence_state_optimised_torch.py",
+      "valence_state_torch.py"
+    ],
+    "fingerprint_sha256": "6fe6140dff82c084334bbd1f19082e328f7cc05e3cfcbdd47cb5c11af947de38"
+  },
+  "torch_version": "2.13.0+cu130",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "failures": []
+}

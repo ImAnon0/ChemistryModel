@@ -1,0 +1,31 @@
+{
+  "generated": "2026-08-20T18:16:22+01:00",
+  "input": "research_data\\benchmark\\grambow_endpoints.json",
+  "reactions_attempted": 10,
+  "reactions_scored": 10,
+  "reactions_failed": 0,
+  "coverage_fraction": 1.0,
+  "barrier_height": {
+    "count": 10,
+    "mae_eV": 7.553743243898237,
+    "rmse_eV": 11.922809427186122,
+    "median_absolute_eV": 4.092707018539983,
+    "max_absolute_eV": 34.05556072112361,
+    "signed_mean_eV": -0.8600386960965334
+  },
+  "reaction_energy": {
+    "count": 10,
+    "mae_eV": 9.329160974801935,
+    "rmse_eV": 15.756278247171707,
+    "median_absolute_eV": 4.99091028153536,
+    "max_absolute_eV": 47.00457925540853,
+    "signed_mean_eV": -4.272325609876466
+  },
+  "barrier_sign_agreement": 0.7,
+  "box_size_angstrom": 30.0,
+  "device": "cuda",
+  "physics": null,
+  "torch_version": "2.13.0+cu130",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "failures": []
+}

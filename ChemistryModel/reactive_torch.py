@@ -509,6 +509,35 @@ class ReactiveSimulation:
             self._over_scale_cache = (cache_key, scale)
         return scale
 
+
+    def topology_taper(self, taper, centre_types, other_types, mask):
+        """Contacts that contribute to radial chemistry but not topology.
+
+        Some close radial contacts are not chemical neighbours.  They still
+        need their Morse interaction (repulsion/attraction), but feeding them
+        into valence counting and angle construction creates artificial
+        coordination and geometry constraints.  Keep this separate from the
+        radial taper because H-state/high-fidelity corrections need the actual
+        pair contact.
+        """
+        topology = taper
+
+        excluded = getattr(R, "TOPOLOGY_ONLY_EXCLUDED_PAIRS", ())
+        if not excluded:
+            return topology
+
+        remove = torch.zeros_like(topology, dtype=torch.bool)
+
+        for first, second in excluded:
+            i = int(R.ELEMENT_INDEX[first])
+            j = int(R.ELEMENT_INDEX[second])
+            remove = remove | (
+                ((centre_types == i) & (other_types == j))
+                | ((centre_types == j) & (other_types == i))
+            )
+
+        return torch.where(remove & (mask > 0.0), torch.zeros_like(topology), topology)
+
     def energy_per_atom(self, positions):
         # Optional profiling sink installed only by the dedicated profiler.
         # Normal simulation physics and execution are unchanged when absent.
@@ -557,6 +586,13 @@ class ReactiveSimulation:
 
         taper = 0.5 * (1.0 + torch.cos(np.pi * fraction)) * mask
 
+        # Radial contact and chemical topology are intentionally separate.
+        # Some close contacts should still feel Morse physics but should not
+        # consume valence or create angle domains.
+        topology_taper = self.topology_taper(
+            taper, centre_types, other_types, mask
+        )
+
         # Read-only diagnostics reuse the exact pair state already evaluated
         # for forces. Detached views do not retain the autograd graph and are
         # replaced by the next force calculation.
@@ -579,6 +615,7 @@ class ReactiveSimulation:
             )
 
         coordination = torch.sum(taper, dim=1)
+        topology_coordination = torch.sum(topology_taper, dim=1)
 
         valence = self.valence[self.types]
 
@@ -692,7 +729,9 @@ class ReactiveSimulation:
                 "centre_types": centre_types,
                 "other_types": other_types,
                 "taper": taper,
+                "topology_taper": topology_taper,
                 "coordination": coordination,
+                "topology_coordination": topology_coordination,
                 "valence": valence,
                 "order": order,
                 "lower": lower,
@@ -727,14 +766,14 @@ class ReactiveSimulation:
         # at once; without this the halfway point is the most
         # stable place to be and nothing has a barrier at all.
 
-        excess = torch.clamp(coordination - valence, min=0.0)
+        topology_excess = torch.clamp(topology_coordination - valence, min=0.0)
 
         over_per_atom = (
             self.over_penalty
             * self.over_coordination_scale(
                 taper, unsoftened_depth, mask, cache_key=positions
             )
-            * excess ** 2
+            * topology_excess ** 2
         )
 
         if profile_sink is not None:
@@ -748,7 +787,7 @@ class ReactiveSimulation:
 
         # ---- angles, from electron domain counting ----
 
-        bonded_order = torch.sum(taper * order, dim=1)
+        bonded_order = torch.sum(topology_taper * order, dim=1)
 
         outer = self.outer_electrons[self.types]
 
@@ -756,7 +795,7 @@ class ReactiveSimulation:
             (outer - bonded_order) / 2.0, min=0.0
         )
 
-        steric = torch.clamp(coordination + lone_pairs, 2.0, 4.0)
+        steric = torch.clamp(topology_coordination + lone_pairs, 2.0, 4.0)
 
         # Linear at two domains, trigonal at three, tetrahedral
         # at four, interpolated in between.
@@ -799,7 +838,7 @@ class ReactiveSimulation:
             if cached is not None and cached[0] is positions:
                 cached[1]["angle"] = angle
 
-        angle_pair_taper = taper[:, :, None] * taper[:, None, :]
+        angle_pair_taper = topology_taper[:, :, None] * topology_taper[:, None, :]
 
         # A new angle needs both of its bonds to be mature. The old product
         # made an emerging contact impose geometry too early: in CH3 + CH3,
@@ -807,8 +846,8 @@ class ReactiveSimulation:
         # of the cutoff. Use a smoothly rounded weaker-contact taper so the
         # angle grows with the less established bond without a force cusp
         # when the two contacts exchange roles.
-        first_taper = taper[:, :, None]
-        second_taper = taper[:, None, :]
+        first_taper = topology_taper[:, :, None]
+        second_taper = topology_taper[:, None, :]
         taper_difference = first_taper - second_taper
         weaker_taper = 0.5 * (
             first_taper
