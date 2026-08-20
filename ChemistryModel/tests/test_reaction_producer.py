@@ -285,6 +285,15 @@ def test_production_is_fresh_daily_attempt_and_failures_do_not_abort(
         molecule_scanner, "scan_recordings",
         lambda runs_root, library_root: {"scanned": 1, "formation_events": 0},
     )
+    monkeypatch.setattr(
+        molecule_scanner,
+        "record_controlled_final_event",
+        lambda *args, **kwargs: {
+            "status": "no reaction",
+            "event": None,
+            "created_species": [],
+        },
+    )
     monkeypatch.setattr(producer, "read_events", lambda path: ([], []))
 
     first = producer.run_production(
@@ -353,3 +362,84 @@ def test_explicit_seed_is_preserved_but_invocations_are_still_independent(
     assert first["master_seed_source"] == "explicit"
     assert second["master_seed_source"] == "explicit"
 
+
+
+def test_events_for_experiment_only_returns_matching_recording():
+    events = [
+        {"event_id": "a", "recording": "x/EXP_one.npz"},
+        {"event_id": "b", "recording": "x/EXP_two.npz"},
+    ]
+    found = producer._events_for_experiment(events, "EXP_two")
+    assert [row["event_id"] for row in found] == ["b"]
+
+
+def test_full_cm_router_goes_straight_to_qm(tmp_path, monkeypatch):
+    from chemistry_manager.discovery import route_full_cm_events_to_qm
+
+    molecules = tmp_path / "molecules"
+    molecules.mkdir()
+    store = ManagerStore(tmp_path / "state.json")
+    reaction = {
+        "event_id": "full_cm_event",
+        "recording": "teacher_data/2026-08-19/recordings/EXP_one.npz",
+        "products": [{"id": "SP_new", "formula": "CH"}],
+        "reactants": [{"formula": "C"}, {"formula": "H"}],
+        "formed_bonds": [],
+        "broken_bonds": [],
+    }
+    monkeypatch.setattr(
+        "chemistry_manager.trust.trusted_molecules",
+        lambda *args, **kwargs: [],
+    )
+
+    result = route_full_cm_events_to_qm(
+        store, [reaction], molecules,
+        production_id="INV_test",
+        teacher_layout="live_production",
+    )
+
+    assert result["queued"] == 1
+    assert len(store.candidates(CandidateState.WAITING_QM)) == 1
+    assert len(store.candidates(CandidateState.WAITING_CHARACTERISATION)) == 0
+
+
+def test_controlled_final_event_routing_bypasses_characterisation_queue(
+    tmp_path, monkeypatch
+):
+    from chemistry_manager.discovery import route_full_cm_events_to_qm
+
+    molecules = tmp_path / "molecules"
+    molecules.mkdir()
+    store = ManagerStore(tmp_path / "state.json")
+    reaction = {
+        "event_id": "controlled_final",
+        "event_kind": "controlled_final_state",
+        "recording": "teacher_data/2026-08-20/recordings/EXP_one.npz",
+        "products": [{"id": "SP_new", "formula": "H2"}],
+        "reactants": [{"formula": "H", "count": 2}],
+        "formed_bonds": [{"atom_ids": [0, 1], "symbols": ["H", "H"]}],
+        "broken_bonds": [],
+    }
+    monkeypatch.setattr(
+        "chemistry_manager.trust.trusted_molecules",
+        lambda *args, **kwargs: [],
+    )
+
+    result = route_full_cm_events_to_qm(
+        store,
+        [reaction],
+        molecules,
+        production_id="INV_test",
+        teacher_layout="live_production",
+    )
+
+    assert result["queued"] == 1
+    assert len(store.candidates(CandidateState.WAITING_QM)) == 1
+    assert len(store.candidates(CandidateState.WAITING_CHARACTERISATION)) == 0
+
+
+def test_producer_source_isolates_postprocessing_from_md_failure():
+    source = Path(producer.__file__).read_text(encoding="utf-8")
+    assert "record_controlled_final_event" in source
+    assert "postprocess_warning" in source
+    assert "cannot retroactively fail MD" in source

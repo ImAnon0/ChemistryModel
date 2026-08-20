@@ -1,17 +1,15 @@
-"""Candidate states and the deliberately small v1 transition graph."""
+"""Candidate states for the direct full-CM -> QM workflow."""
 
 from enum import Enum
 
 
 class CandidateState(str, Enum):
-    WAITING_CHARACTERISATION = "WAITING_CHARACTERISATION"
     WAITING_QM = "WAITING_QM"
     QM_VALIDATED = "QM_VALIDATED"
     QM_REJECTED = "QM_REJECTED"
 
 
 TRANSITIONS = {
-    CandidateState.WAITING_CHARACTERISATION: {CandidateState.WAITING_QM},
     CandidateState.WAITING_QM: {
         CandidateState.QM_VALIDATED,
         CandidateState.QM_REJECTED,
@@ -22,13 +20,15 @@ TRANSITIONS = {
 
 
 def coerce_state(value):
-    """Return a validated CandidateState without accepting unknown strings."""
-
+    """Return a validated CandidateState, migrating removed legacy wait states."""
     if isinstance(value, CandidateState):
         return value
-    if str(value) == "WAITING_FULL_CM":
-        return CandidateState.WAITING_CHARACTERISATION
-    return CandidateState(str(value))
+
+    text = str(value)
+    if text in ("WAITING_FULL_CM", "WAITING_CHARACTERISATION"):
+        return CandidateState.WAITING_QM
+
+    return CandidateState(text)
 
 
 def require_transition(previous, following):

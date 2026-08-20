@@ -33,7 +33,7 @@ def test_store_persists_candidates_and_deduplicates_event_ids(tmp_path):
     assert not first.add_discovery_event(event(), tmp_path / "events.jsonl")
 
     second = ManagerStore(path)
-    waiting = second.candidates(CandidateState.WAITING_CHARACTERISATION)
+    waiting = second.candidates(CandidateState.WAITING_QM)
     assert len(waiting) == 1
     assert waiting[0]["id"] == "EVENT_abc123"
     assert waiting[0]["provenance"]["seed"] == 7
@@ -44,11 +44,9 @@ def test_store_transitions_follow_the_v1_state_machine(tmp_path):
     store = ManagerStore(tmp_path / "state.json")
     store.add_discovery_event(event(), tmp_path / "events.jsonl")
 
-    store.transition("EVENT_abc123", CandidateState.WAITING_QM)
     store.transition("EVENT_abc123", CandidateState.QM_VALIDATED)
 
     counts = store.counts()
-    assert counts[CandidateState.WAITING_CHARACTERISATION] == 0
     assert counts[CandidateState.QM_VALIDATED] == 1
 
     try:
@@ -59,21 +57,36 @@ def test_store_transitions_follow_the_v1_state_machine(tmp_path):
         raise AssertionError("terminal candidates must not move backwards")
 
 
-def test_legacy_waiting_full_cm_state_migrates_in_memory(tmp_path):
+def test_legacy_wait_states_are_persistently_migrated_to_qm(tmp_path):
     path = tmp_path / "state.json"
     path.write_text(json.dumps({
         "format_version": 1,
         "candidates": {
-            "EVENT_old": {"id": "EVENT_old", "state": "WAITING_FULL_CM"}
+            "EVENT_old_full": {
+                "id": "EVENT_old_full",
+                "state": "WAITING_FULL_CM",
+                "products": [{"id": "SP_old_full"}],
+            },
+            "EVENT_old_char": {
+                "id": "EVENT_old_char",
+                "state": "WAITING_CHARACTERISATION",
+                "products": [{"id": "SP_old_char"}],
+            },
         },
     }), encoding="utf-8")
 
     store = ManagerStore(path)
-    waiting = store.candidates(CandidateState.WAITING_CHARACTERISATION)
+    result = store.migrate_legacy_wait_states()
 
-    assert len(waiting) == 1
-    assert waiting[0]["state"] == "WAITING_CHARACTERISATION"
-    assert "WAITING_FULL_CM" in path.read_text(encoding="utf-8")
+    assert result["migrated"] == 2
+    waiting = store.candidates(CandidateState.WAITING_QM)
+    assert len(waiting) == 2
+
+    persisted = json.loads(path.read_text(encoding="utf-8"))
+    assert {
+        row["state"] for row in persisted["candidates"].values()
+    } == {"WAITING_QM"}
+    assert persisted["candidates"]["EVENT_old_char"]["products"][0]["id"] == "SP_old_char"
 
 
 def test_corrupt_store_is_reported_without_being_overwritten(tmp_path):
@@ -92,12 +105,15 @@ def test_corrupt_store_is_reported_without_being_overwritten(tmp_path):
 
 
 def test_status_is_clean_for_a_new_store(tmp_path, capsys):
-    code = main(["--state-file", str(tmp_path / "state.json"), "status"])
+    code = main([
+        "--state-file", str(tmp_path / "state.json"),
+        "status", "--molecule-root", str(tmp_path / "molecules"),
+    ])
     output = capsys.readouterr().out
 
     assert code == 0
     assert "Chemistry Manager" in output
-    assert "Waiting for characterisation:" in output
+    assert "Waiting for QM validation:" in output
     assert "QM validated:" in output
     assert output.count("0") >= 4
     assert not (tmp_path / "state.json").exists()
@@ -132,14 +148,9 @@ def test_discover_reuses_scanner_event_log_and_is_repeatable(
     assert second["already_known"] == 1
 
 
-def test_empty_processing_commands_return_cleanly(tmp_path, capsys):
+def test_empty_qm_command_returns_cleanly(tmp_path, capsys):
     state = str(tmp_path / "state.json")
 
-    assert main(["--state-file", state, "validate"]) == 0
-    assert (
-        capsys.readouterr().out.strip()
-        == "Nothing waiting for controlled characterisation."
-    )
     assert main(["--state-file", state, "qm"]) == 0
     assert capsys.readouterr().out.strip() == "Nothing waiting for QM validation."
 
@@ -225,7 +236,6 @@ def test_ingest_teacher_data_registers_shard_and_routes_untrusted_product_to_qm(
     assert result["teacher_frames_added"] == 7
     assert result["queued_for_qm"] == 1
     assert len(store.candidates(CandidateState.WAITING_QM)) == 1
-    assert len(store.candidates(CandidateState.WAITING_CHARACTERISATION)) == 0
 
 
 def test_ingest_teacher_data_does_not_queue_already_trusted_product(
@@ -279,102 +289,29 @@ def test_ingest_teacher_data_does_not_queue_already_trusted_product(
     assert store.counts()[CandidateState.WAITING_QM] == 0
 
 
-def test_teacher_ingest_promotes_legacy_characterisation_candidate_to_qm(tmp_path):
-    store = ManagerStore(tmp_path / "state.json")
-    store.add_discovery_event(event("old_teacher"), tmp_path / "events.jsonl")
-    assert len(store.candidates(CandidateState.WAITING_CHARACTERISATION)) == 1
+def test_generic_discovery_queues_directly_to_qm(tmp_path, monkeypatch):
+    molecule_root = tmp_path / "molecules"
+    molecule_root.mkdir()
+    event_log = molecule_root / "formation_events.jsonl"
+    event_log.write_text(json.dumps(event("generic_qm")) + "\n", encoding="utf-8")
 
-    result = store.add_discovery_events(
-        [event("old_teacher")],
-        tmp_path / "events.jsonl",
-        initial_state=CandidateState.WAITING_QM,
-        source_kind="full_cm_teacher_event",
-        source_extra={"production_id": "PROD_old"},
-        promote_existing=True,
+    monkeypatch.setattr(
+        molecule_scanner,
+        "scan_recordings",
+        lambda *args, **kwargs: {
+            "scanned": 0,
+            "unchanged": 1,
+            "formation_events": 0,
+        },
     )
 
-    assert result["added"] == 1
-    assert result["duplicates"] == 1
-    assert len(store.candidates(CandidateState.WAITING_CHARACTERISATION)) == 0
+    store = ManagerStore(tmp_path / "state.json")
+    result = discover(store, tmp_path / "runs", molecule_root)
+
+    assert result["queued"] == 1
     waiting = store.candidates(CandidateState.WAITING_QM)
     assert len(waiting) == 1
-    assert waiting[0]["source"]["kind"] == "full_cm_teacher_event"
-    assert waiting[0]["source"]["production_id"] == "PROD_old"
-
-
-def test_cleanup_legacy_characterisation_previews_without_changes(tmp_path, capsys):
-    state = tmp_path / "state.json"
-    store = ManagerStore(state)
-    store.add_discovery_event(event("legacy_one"), tmp_path / "events.jsonl")
-    store.add_discovery_events(
-        [event("teacher_one")],
-        tmp_path / "events.jsonl",
-        initial_state=CandidateState.WAITING_QM,
-        source_kind="full_cm_teacher_event",
-        source_extra={"production_id": "PROD_test"},
-    )
-
-    assert main([
-        "--state-file", str(state),
-        "cleanup", "--legacy-characterisation",
-    ]) == 0
-
-    output = capsys.readouterr().out
-    assert "Candidates targeted:             1" in output
-    assert "No changes made." in output
-    assert len(store.candidates(CandidateState.WAITING_CHARACTERISATION)) == 1
-    assert len(store.candidates(CandidateState.WAITING_QM)) == 1
-
-
-def test_cleanup_legacy_characterisation_requires_confirm_and_preserves_other_states(
-    tmp_path, capsys
-):
-    state = tmp_path / "state.json"
-    store = ManagerStore(state)
-
-    store.add_discovery_event(event("legacy_one"), tmp_path / "events.jsonl")
-    store.add_discovery_event(event("legacy_two"), tmp_path / "events.jsonl")
-    store.add_discovery_events(
-        [event("teacher_qm")],
-        tmp_path / "events.jsonl",
-        initial_state=CandidateState.WAITING_QM,
-        source_kind="full_cm_teacher_event",
-        source_extra={"production_id": "PROD_test"},
-    )
-
-    assert main([
-        "--state-file", str(state),
-        "cleanup", "--legacy-characterisation", "--confirm",
-    ]) == 0
-
-    output = capsys.readouterr().out
-    assert "Removed legacy candidates:       2" in output
-    assert len(store.candidates(CandidateState.WAITING_CHARACTERISATION)) == 0
-
-    qm = store.candidates(CandidateState.WAITING_QM)
-    assert len(qm) == 1
-    assert qm[0]["source"]["kind"] == "full_cm_teacher_event"
-
-
-def test_cleanup_store_only_targets_formation_event_source_kind(tmp_path):
-    store = ManagerStore(tmp_path / "state.json")
-    store.add_discovery_event(event("legacy"), tmp_path / "events.jsonl")
-    store.add_discovery_events(
-        [event("future_surrogate")],
-        tmp_path / "events.jsonl",
-        initial_state=CandidateState.WAITING_CHARACTERISATION,
-        source_kind="cheap_surrogate_event",
-    )
-
-    preview = store.legacy_characterisation_candidates()
-    assert [row["id"] for row in preview] == ["EVENT_legacy"]
-
-    result = store.remove_legacy_characterisation_candidates()
-    assert result["removed"] == 1
-
-    remaining = store.candidates(CandidateState.WAITING_CHARACTERISATION)
-    assert len(remaining) == 1
-    assert remaining[0]["source"]["kind"] == "cheap_surrogate_event"
+    assert waiting[0]["source"]["kind"] == "full_cm_formation_event"
 
 
 def _write_manager_molecule(root, molecule_id, symbols=("H", "H")):
@@ -787,3 +724,33 @@ def test_teacher_ingest_preserves_legacy_prod_layout_alongside_daily(
     assert result["experiments_added"] == 2
     assert result["teacher_frames_added"] == 5
 
+
+
+def test_status_reports_idle_unvalidated_molecule(tmp_path, capsys):
+    molecules = tmp_path / "molecules"
+    _write_manager_molecule(molecules, "SP_idle")
+    state = tmp_path / "state.json"
+
+    assert main([
+        "--state-file", str(state),
+        "status", "--molecule-root", str(molecules),
+    ]) == 0
+    output = capsys.readouterr().out
+    assert "Unvalidated, not queued:" in output
+    assert "SP_idle" in output
+
+
+def test_store_can_find_unique_product_ids_by_state(tmp_path):
+    store = ManagerStore(tmp_path / "state.json")
+    store.add_discovery_events(
+        [event("one"), event("two")],
+        tmp_path / "events.jsonl",
+        initial_state=CandidateState.WAITING_QM,
+        source_kind="full_cm_teacher_event",
+    )
+    assert store.product_ids(CandidateState.WAITING_QM) == ["SP_000001"]
+    assert len(
+        store.candidates_for_product(
+            "SP_000001", CandidateState.WAITING_QM
+        )
+    ) == 2

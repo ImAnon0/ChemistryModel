@@ -47,12 +47,24 @@ def _load_json(path, fallback):
 
 def _write_json_atomic(path, payload):
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-    temporary = path + ".tmp"
-
-    with open(temporary, "w", encoding="utf-8") as handle:
-        json.dump(payload, handle, indent=2)
-
-    os.replace(temporary, path)
+    temporary = f"{path}.{os.getpid()}.{time.time_ns()}.tmp"
+    try:
+        with open(temporary, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+        for attempt in range(5):
+            try:
+                os.replace(temporary, path)
+                return
+            except PermissionError:
+                if attempt >= 4:
+                    raise
+                time.sleep(0.02 * (attempt + 1))
+    finally:
+        try:
+            if os.path.exists(temporary):
+                os.remove(temporary)
+        except OSError:
+            pass
 
 
 def load_manifest(library_root=molecule_store.DEFAULT_ROOT):
@@ -828,6 +840,150 @@ def _scan_one(recording, previous_manifest, inherited_manifest, library_root,
         },
     }
 
+
+
+def _reactant_descriptors(reactants):
+    grouped = collections.OrderedDict()
+    for reactant in reactants:
+        item = {
+            "formula": reactant.get("formula"),
+            "atoms": int(reactant.get("atoms", len(reactant.get("symbols", [])))),
+            "heavy_atoms": int(reactant.get(
+                "heavy_atoms",
+                sum(str(symbol) != "H" for symbol in reactant.get("symbols", [])),
+            )),
+            "count": 1,
+        }
+        reactant_id = reactant.get("id")
+        if reactant_id and not str(reactant_id).startswith("atom:"):
+            item["id"] = str(reactant_id)
+        key = item.get("id") or f"formula:{item['formula']}"
+        if key not in grouped:
+            grouped[key] = item
+        else:
+            grouped[key]["count"] += 1
+    return list(grouped.values())
+
+
+def _initial_id_edges(reactants, atom_ids):
+    atom_ids = np.asarray(atom_ids, dtype=np.uint32)
+    edges = set()
+    cursor = 0
+    for reactant in reactants:
+        count = int(reactant.get("atoms", len(reactant.get("symbols", []))))
+        bonds = np.asarray(reactant.get("bonds", []), dtype=np.int32).reshape(-1, 2)
+        if cursor + count > len(atom_ids):
+            raise ValueError("controlled reactants exceed recorder atom count")
+        for first, second in bonds:
+            a = int(atom_ids[cursor + int(first)])
+            b = int(atom_ids[cursor + int(second)])
+            edges.add((min(a, b), max(a, b)))
+        cursor += count
+    if cursor != len(atom_ids):
+        raise ValueError("controlled reactants do not cover recorder atom count")
+    return edges
+
+
+def record_controlled_final_event(
+    recorder, recording_path, reactants, *,
+    library_root=molecule_store.DEFAULT_ROOT, context=None,
+):
+    """Compare known controlled reactants directly with the persisted final graph."""
+    molecule_store.require_identity_history(recorder)
+    if len(recorder) == 0:
+        raise ValueError("cannot inspect an empty controlled recording")
+
+    reactants = list(reactants)
+    final_index = len(recorder) - 1
+    components = molecule_store.molecules_at(recorder, final_index)
+
+    initial_fingerprints = sorted(
+        str(r.get("graph_fingerprint")) for r in reactants
+    )
+    final_fingerprints = sorted(
+        str(c.get("graph_fingerprint")) for c in components
+    )
+    expected_atoms = sum(
+        int(r.get("atoms", len(r.get("symbols", [])))) for r in reactants
+    )
+    final_atoms = sum(int(c.get("atoms", 0)) for c in components)
+
+    if final_atoms != expected_atoms:
+        return {"status": "unclassified", "event": None, "created_species": []}
+    if final_fingerprints == initial_fingerprints:
+        return {"status": "no reaction", "event": None, "created_species": []}
+
+    recording_path = os.path.normpath(str(recording_path))
+    recording_key = _normal_path(recording_path)
+    context = dict(context or {})
+    species_by_fingerprint = {
+        item.get("graph_fingerprint"): item
+        for item in molecule_store.list_molecules(library_root)
+        if item.get("graph_fingerprint")
+    }
+
+    created_species = []
+    for component in components:
+        if int(component.get("atoms", 0)) < 2:
+            component["species_id"] = None
+            continue
+        created = _resolve_species(
+            component, recording_path, final_index, recorder, context,
+            library_root, species_by_fingerprint, allow_create=True,
+        )
+        if created and component.get("species_id"):
+            created_species.append(str(component["species_id"]))
+
+    atom_ids = recorder.atom_ids_at(final_index)
+    before_edges = _initial_id_edges(reactants, atom_ids)
+    after_edges = set().union(
+        *(set(c.get("id_bonds", ())) for c in components)
+    ) if components else set()
+    formed = sorted(after_edges - before_edges)
+    broken = sorted(before_edges - after_edges)
+    if not formed and not broken:
+        return {"status": "no reaction", "event": None, "created_species": created_species}
+
+    final_time = float(recorder.times[final_index])
+    event_id = _event_id(recording_key, final_time, before_edges, after_edges)
+    symbols_by_id = {
+        int(atom_id): str(symbol)
+        for atom_id, symbol in zip(
+            recorder.atom_ids_at(final_index), recorder.symbols_at(final_index)
+        )
+    }
+
+    def bond_records(pairs):
+        return [{
+            "atom_ids": [int(a), int(b)],
+            "symbols": [symbols_by_id.get(int(a), "?"), symbols_by_id.get(int(b), "?")],
+        } for a, b in pairs]
+
+    event = {
+        "event_id": event_id,
+        "event_kind": "controlled_final_state",
+        "recording": recording_key,
+        "batch": context.get("batch"),
+        "seed": context.get("seed"),
+        "mixture": context.get("mixture"),
+        "time_fs": final_time,
+        "previous_frame_time_fs": float(recorder.times[0]) if len(recorder) > 1 else None,
+        "temperature_K": float(recorder.temperature[final_index]),
+        "box_A": float(recorder.box_at(final_index)),
+        "reactants": _reactant_descriptors(reactants),
+        "products": _combine_descriptors(components),
+        "formed_bonds": bond_records(formed),
+        "broken_bonds": bond_records(broken),
+        "frame_species": _all_species_counts(components),
+        "controlled_start_graph": True,
+    }
+    if event_id not in _load_existing_event_ids(library_root):
+        _append_events([event], library_root)
+    return {
+        "status": "reaction",
+        "event": event,
+        "created_species": sorted(created_species),
+    }
 
 def scan_recordings(runs_root="runs", library_root=molecule_store.DEFAULT_ROOT,
                     progress=None):

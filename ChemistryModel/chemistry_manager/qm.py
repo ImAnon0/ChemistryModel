@@ -59,7 +59,7 @@ def process_qm_queue(
     basis=qm_structure_validator.DEFAULT_BASIS,
     threads=8, memory="4 GB", limit=None,
     worker=qm_structure_validator.run_validation_in_worker,
-    progress=None,
+    progress=None, molecule_progress=None,
 ):
     waiting = store.candidates(CandidateState.WAITING_QM)
     if limit is not None:
@@ -207,6 +207,8 @@ def process_qm_queue(
                 cache[molecule_id] = result
 
             molecule_results.append(result)
+            if molecule_progress:
+                molecule_progress(number, len(waiting), candidate, dict(result))
             if result["outcome"] == "rejected":
                 candidate_rejected = True
             elif result["outcome"] == "blocked":

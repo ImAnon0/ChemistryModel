@@ -16,8 +16,9 @@ import characterisation_runner as characterisation
 import molecule_scanner
 import reactive as reactive_parameters
 
-from .discovery import event_log_path, read_events
-from .trust import trusted_molecules
+from .discovery import event_log_path, read_events, route_full_cm_events_to_qm
+from .state import CandidateState
+from .trust import MoleculeTrust, trust_level, trusted_molecules
 
 
 FORMAT_VERSION = 1
@@ -922,13 +923,71 @@ def production_summary(
     })
     return summary
 
+def _events_for_experiment(events, experiment_id):
+    found = []
+    for event in events:
+        recording = event.get("recording")
+        if not recording:
+            continue
+        try:
+            if Path(recording).stem == str(experiment_id):
+                found.append(event)
+        except (OSError, TypeError):
+            continue
+    return found
+
+
+def _product_report(
+    events, molecule_root, store, *, qm_root=None, species_before=None,
+):
+    species_before = set(species_before or ())
+    waiting_ids = set(store.product_ids(CandidateState.WAITING_QM))
+    rows = {}
+
+    for event in events:
+        for product in event.get("products") or []:
+            if not isinstance(product, dict) or not product.get("id"):
+                continue
+            molecule_id = str(product["id"])
+            row = rows.setdefault(molecule_id, {
+                "id": molecule_id,
+                "formula": product.get("formula"),
+                "new_this_experiment": molecule_id not in species_before,
+                "trust": "UNKNOWN",
+                "queue": "not queued",
+            })
+
+            try:
+                molecule = molecule_scanner.molecule_store.load_molecule(
+                    molecule_id, root=molecule_root
+                )
+                row["formula"] = molecule.get("formula") or row["formula"]
+                row["trust"] = trust_level(
+                    molecule, qm_root=qm_root
+                ).value
+            except Exception:
+                row["trust"] = "UNKNOWN"
+
+            if row["trust"] == MoleculeTrust.QM_VALIDATED.value:
+                row["queue"] = CandidateState.QM_VALIDATED.value
+            elif row["trust"] == MoleculeTrust.REJECTED.value:
+                row["queue"] = CandidateState.QM_REJECTED.value
+            elif row["trust"] == MoleculeTrust.CM_VALIDATED.value:
+                row["queue"] = "trusted"
+            elif molecule_id in waiting_ids:
+                row["queue"] = CandidateState.WAITING_QM.value
+
+    return [rows[key] for key in sorted(rows)]
+
+
+
 def run_production(
     store, *, count=12, duration_ps=0.25, master_seed=None,
     profile="balanced", output_root="teacher_data",
     molecule_root="molecules", qm_root=None, device=None,
     ordinary_interval_fs=10.0, event_window_fs=5.0,
     diagnostic_sample_fs=1.0, capture_every=4,
-    physics="optimised-valence", progress=None,
+    physics="optimised-valence", progress=None, result_observer=None,
 ):
     """Attempt exactly `count` fresh experiments for this invocation.
 
@@ -1030,6 +1089,11 @@ def run_production(
     completed_now = 0
     failed_now = 0
     frames_written = 0
+    queued_now = 0
+    duplicate_queue_events = 0
+    invocation_event_ids = set()
+    invocation_product_ids = set()
+    invocation_new_product_ids = set()
     completed_records = [
         row for row in _daily_experiment_records(root)
         if row.get("status") == "complete"
@@ -1050,6 +1114,11 @@ def run_production(
             progress(number, len(specs), progress_spec)
 
         family = str(spec.get("experiment_family", "pair"))
+        species_before = {
+            str(row["id"])
+            for row in molecule_scanner.molecule_store.list_molecules(molecule_root)
+            if row.get("id")
+        }
         collector = TeacherFrameCollector(
             ordinary_interval_fs=ordinary_interval_fs,
             event_window_fs=event_window_fs,
@@ -1157,6 +1226,78 @@ def run_production(
             completed_now += 1
             frames_written += len(frames)
 
+            # Full Optimised-Valence/H-state production already is the CM
+            # confirmation stage. Use the known starting graph directly so an
+            # early product cannot disappear inside the generic scanner warmup.
+            # This post-processing is deliberately isolated from MD success.
+            try:
+                controlled = molecule_scanner.record_controlled_final_event(
+                    recorder,
+                    records_dir / recording_name,
+                    reactants if family == "microcell" else [first, second],
+                    library_root=str(molecule_root),
+                    context={
+                        "seed": spec["simulation_seed"],
+                        "mixture": "reaction teacher production",
+                        "batch": root.name,
+                    },
+                )
+                controlled_event = controlled.get("event")
+                experiment_events = (
+                    [controlled_event] if controlled_event is not None else []
+                )
+                routed = route_full_cm_events_to_qm(
+                    store,
+                    experiment_events,
+                    molecule_root,
+                    qm_root=qm_root,
+                    production_id=invocation_id,
+                    teacher_root=root,
+                    teacher_layout="live_production",
+                )
+                queued_now += routed["queued"]
+                duplicate_queue_events += routed["duplicates"]
+                invocation_event_ids.update(
+                    str(event["event_id"])
+                    for event in experiment_events
+                    if event.get("event_id")
+                )
+
+                products_now = _product_report(
+                    experiment_events,
+                    molecule_root,
+                    store,
+                    qm_root=qm_root,
+                    species_before=species_before,
+                )
+                for product in products_now:
+                    invocation_product_ids.add(product["id"])
+                    if product["new_this_experiment"]:
+                        invocation_new_product_ids.add(product["id"])
+
+                postprocess_warning = None
+            except Exception as problem:
+                experiment_events = []
+                products_now = []
+                routed = {"queued": 0, "duplicates": 0}
+                postprocess_warning = f"{type(problem).__name__}: {problem}"
+
+            if result_observer:
+                result_observer({
+                    "number": number,
+                    "total": len(specs),
+                    "experiment_id": spec["id"],
+                    "family": family,
+                    "outcome": entry.get(
+                        "characterisation_outcome", "unknown"
+                    ),
+                    "reaction_events": len(experiment_events),
+                    "products": products_now,
+                    "queued_for_qm": routed["queued"],
+                    "duplicate_queue_events": routed["duplicates"],
+                    "postprocess_warning": postprocess_warning,
+                })
+
         except Exception as problem:
             failed_now += 1
             failure = {
@@ -1172,27 +1313,60 @@ def run_production(
                 "device": resolved_device,
             }
             _atomic_json(experiments_dir / f"{spec['id']}.json", failure)
+            if result_observer:
+                result_observer({
+                    "number": number,
+                    "total": len(specs),
+                    "experiment_id": spec["id"],
+                    "family": family,
+                    "outcome": "failed",
+                    "reaction_events": 0,
+                    "products": [],
+                    "queued_for_qm": 0,
+                    "duplicate_queue_events": 0,
+                    "error": failure["error"],
+                })
 
     _rebuild_recording_index(records_dir, completed_records)
 
-    scan = molecule_scanner.scan_recordings(
-        runs_root=str(root), library_root=str(molecule_root)
-    )
-    after_events, event_errors = read_events(event_log_path(molecule_root))
-    current_ids = {spec["id"] for spec in specs}
+    # Generic scanner runs once per invocation for transient/provenance
+    # discovery. A scanner bookkeeping failure cannot retroactively fail MD.
+    try:
+        scan = molecule_scanner.scan_recordings(
+            runs_root=str(root), library_root=str(molecule_root)
+        )
+        after_events, event_errors = read_events(event_log_path(molecule_root))
+    except Exception as problem:
+        scan = {
+            "recordings_found": 0,
+            "scanned": 0,
+            "unchanged": 0,
+            "formation_events": 0,
+            "errors": [f"{type(problem).__name__}: {problem}"],
+        }
+        after_events, event_errors = read_events(event_log_path(molecule_root))
+        event_errors = list(event_errors) + [
+            f"scanner post-process: {type(problem).__name__}: {problem}"
+        ]
 
-    def belongs_to_invocation(event):
-        recording = event.get("recording")
-        if not recording:
-            return False
-        try:
-            return Path(recording).stem in current_ids
-        except (OSError, TypeError):
-            return False
-
+    current_ids = {str(spec["id"]) for spec in specs}
     production_events = [
-        row for row in after_events if belongs_to_invocation(row)
+        row for row in after_events
+        if row.get("recording")
+        and Path(str(row["recording"])).stem in current_ids
     ]
+
+    final_routed = route_full_cm_events_to_qm(
+        store,
+        production_events,
+        molecule_root,
+        qm_root=qm_root,
+        production_id=invocation_id,
+        teacher_root=root,
+        teacher_layout="live_production",
+    )
+    queued_now += final_routed["queued"]
+    duplicate_queue_events += final_routed["duplicates"]
 
     outcomes = {}
     for record in completed_records:
@@ -1209,6 +1383,9 @@ def run_production(
         "failed": failed_now,
         "teacher_frames": frames_written,
         "reaction_events": len(production_events),
+        "queued_for_qm": queued_now,
+        "product_species": sorted(invocation_product_ids),
+        "new_product_species": sorted(invocation_new_product_ids),
         "completed_unix": datetime.now().timestamp(),
         "outcomes": outcomes,
     })
@@ -1235,9 +1412,11 @@ def run_production(
         "failed_now": failed_now,
         "teacher_frames_written_now": frames_written,
         "new_events": len(production_events),
-        "new_candidates_queued": 0,
-        "duplicate_candidates": 0,
-        "queue_handoff_deferred_to_ingest": True,
+        "new_candidates_queued": queued_now,
+        "duplicate_candidates": duplicate_queue_events,
+        "queue_handoff_deferred_to_ingest": False,
+        "product_species": sorted(invocation_product_ids),
+        "new_product_species": sorted(invocation_new_product_ids),
         "event_log_errors": event_errors,
         "scan": scan,
         "outcomes": outcomes,

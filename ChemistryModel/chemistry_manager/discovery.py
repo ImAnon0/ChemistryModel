@@ -48,7 +48,14 @@ def discover(store, runs_root, molecule_root, *, scan=True, progress=None):
 
     path = event_log_path(molecule_root)
     events, errors = read_events(path)
-    imported = store.add_discovery_events(events, path)
+    from .state import CandidateState
+
+    imported = store.add_discovery_events(
+        events,
+        path,
+        initial_state=CandidateState.WAITING_QM,
+        source_kind="full_cm_formation_event",
+    )
 
     return {
         "scan": scan_summary,
@@ -328,6 +335,52 @@ def _register_teacher_experiments(
     return added, frames
 
 
+def route_full_cm_events_to_qm(
+    store, events, molecule_root, *, qm_root=None,
+    production_id=None, teacher_root=None, teacher_layout="live_production",
+):
+    """Route already-full-CM reaction events straight to QM.
+
+    Optimised-Valence / H-state production has already passed the full-CM
+    stage, so untrusted products go directly to QM.
+    """
+    from .trust import trusted_molecules
+    from .state import CandidateState
+
+    trusted_ids = {
+        str(row["id"])
+        for row in trusted_molecules(molecule_root, qm_root=qm_root)
+        if row.get("id")
+    }
+    eligible = [
+        event for event in events
+        if _event_has_untrusted_product(event, trusted_ids)
+    ]
+
+    source_extra = {"teacher_layout": str(teacher_layout)}
+    if production_id is not None:
+        source_extra["production_id"] = str(production_id)
+    if teacher_root is not None:
+        source_extra["teacher_root"] = str(teacher_root)
+
+    imported = store.add_discovery_events(
+        eligible,
+        event_log_path(molecule_root),
+        initial_state=CandidateState.WAITING_QM,
+        source_kind="full_cm_teacher_event",
+        source_extra=source_extra,
+        promote_existing=True,
+    )
+    return {
+        "events_seen": len(events),
+        "eligible_events": len(eligible),
+        "already_trusted_events": len(events) - len(eligible),
+        "queued": imported["added"],
+        "duplicates": imported["duplicates"],
+        "trusted_ids": trusted_ids,
+    }
+
+
 def ingest_teacher_data(
     store, teacher_root, molecule_root, *,
     qm_root=None, state_file=None, scan=True,
@@ -428,26 +481,18 @@ def ingest_teacher_data(
         ]
         events_seen += len(production_events)
 
-        qm_events = [
-            event for event in production_events
-            if _event_has_untrusted_product(event, trusted_ids)
-        ]
-        already_trusted_events += len(production_events) - len(qm_events)
-
-        imported = store.add_discovery_events(
-            qm_events,
-            event_log_path(molecule_root),
-            initial_state=CandidateState.WAITING_QM,
-            source_kind="full_cm_teacher_event",
-            source_extra={
-                "production_id": source["production_id"],
-                "teacher_root": str(source["root"]),
-                "teacher_layout": source["kind"],
-            },
-            promote_existing=True,
+        routed = route_full_cm_events_to_qm(
+            store,
+            production_events,
+            molecule_root,
+            qm_root=qm_root,
+            production_id=source["production_id"],
+            teacher_root=source["root"],
+            teacher_layout=source["kind"],
         )
-        queued += imported["added"]
-        duplicates += imported["duplicates"]
+        already_trusted_events += routed["already_trusted_events"]
+        queued += routed["queued"]
+        duplicates += routed["duplicates"]
 
     if productions_added or experiments_added:
         _save_teacher_registry(registry_path, registry)

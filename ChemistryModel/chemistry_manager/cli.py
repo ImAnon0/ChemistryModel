@@ -2,6 +2,8 @@
 
 import argparse
 
+import molecule_library
+
 from .config import (
     DEFAULT_MOLECULE_ROOT, DEFAULT_RUNS_ROOT, DEFAULT_STATE_PATH,
     DEFAULT_TEACHER_ROOT,
@@ -9,10 +11,10 @@ from .config import (
 from .discovery import discover, ingest_teacher_data
 from .state import CandidateState
 from .store import ManagerStore
+from .trust import MoleculeTrust, trust_level
 
 
 LABELS = {
-    CandidateState.WAITING_CHARACTERISATION: "Waiting for characterisation",
     CandidateState.WAITING_QM: "Waiting for QM validation",
     CandidateState.QM_VALIDATED: "QM validated",
     CandidateState.QM_REJECTED: "QM rejected",
@@ -29,25 +31,11 @@ def build_parser():
         help="manager JSON overlay (default: %(default)s)",
     )
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("status", help="show queue counts")
-
-    cleanup = commands.add_parser(
-        "cleanup",
-        help="preview or remove legacy manager queue entries",
+    status = commands.add_parser(
+        "status", help="show actionable molecule and queue state"
     )
-    cleanup.add_argument(
-        "--legacy-characterisation",
-        action="store_true",
-        help=(
-            "target only WAITING_CHARACTERISATION candidates whose "
-            "source.kind is formation_event"
-        ),
-    )
-    cleanup.add_argument(
-        "--confirm",
-        action="store_true",
-        help="actually apply the requested cleanup; without this flag only preview",
-    )
+    status.add_argument("--molecule-root", default=str(DEFAULT_MOLECULE_ROOT))
+    status.add_argument("--qm-root", default=None)
 
     ingest_parser = commands.add_parser(
         "ingest", help="scan existing runs and queue discovered reactions"
@@ -58,7 +46,7 @@ def build_parser():
     )
     ingest_parser.add_argument(
         "--teacher-data", action="store_true",
-        help="register full-CM teacher datasets and queue new products directly for QM",
+        help="import/recover existing full-CM teacher datasets and queue untrusted products for QM",
     )
     ingest_parser.add_argument(
         "--teacher-root", default=str(DEFAULT_TEACHER_ROOT),
@@ -128,9 +116,6 @@ def build_parser():
         help="local date YYYY-MM-DD (default: today)",
     )
 
-    commands.add_parser(
-        "validate", help="characterise future cheap-discovery candidates with full CM"
-    )
     qm = commands.add_parser(
         "qm", help="process candidates waiting for QM validation"
     )
@@ -144,23 +129,92 @@ def build_parser():
     return parser
 
 
-def print_status(store):
+def _candidate_product_ids(candidates):
+    found = set()
+    for candidate in candidates:
+        for product in candidate.get("products") or []:
+            if isinstance(product, dict) and product.get("id"):
+                found.add(str(product["id"]))
+    return found
+
+
+def print_status(store, molecule_root=DEFAULT_MOLECULE_ROOT, qm_root=None):
     counts = store.counts()
+    waiting_candidates = store.candidates(CandidateState.WAITING_QM)
+    candidate_waiting_ids = _candidate_product_ids(waiting_candidates)
+
+    molecules = molecule_library.list_molecules(root=molecule_root)
+    rows = []
+    for molecule in molecules:
+        try:
+            level = trust_level(molecule, qm_root=qm_root)
+        except Exception:
+            level = MoleculeTrust.UNVALIDATED
+        rows.append((molecule, level))
+
+    level_by_id = {
+        str(molecule.get("id")): level
+        for molecule, level in rows
+        if molecule.get("id")
+    }
+    waiting_ids = {
+        molecule_id for molecule_id in candidate_waiting_ids
+        if level_by_id.get(molecule_id, MoleculeTrust.UNVALIDATED)
+        == MoleculeTrust.UNVALIDATED
+    }
+
+    trusted = [
+        molecule for molecule, level in rows
+        if level in (MoleculeTrust.CM_VALIDATED, MoleculeTrust.QM_VALIDATED)
+    ]
+    rejected = [
+        molecule for molecule, level in rows
+        if level == MoleculeTrust.REJECTED
+    ]
+    idle = [
+        molecule for molecule, level in rows
+        if level == MoleculeTrust.UNVALIDATED
+        and str(molecule.get("id")) not in waiting_ids
+    ]
+
     print("Chemistry Manager")
     print()
+    print("Molecules")
+    print(f"  Stored species:                   {len(molecules):>6}")
+    print(f"  Trusted reactants:                {len(trusted):>6}")
+    print(f"  Waiting for QM:                   {len(waiting_ids):>6}")
+    print(f"  Unvalidated, not queued:          {len(idle):>6}")
+    print(f"  Rejected:                         {len(rejected):>6}")
+
+    if waiting_ids:
+        by_id = {str(m.get("id")): m for m, _ in rows}
+        print()
+        print("Waiting for QM")
+        for molecule_id in sorted(waiting_ids):
+            molecule = by_id.get(molecule_id, {})
+            print(f"  {molecule_id:12} {molecule.get('formula', '?')}")
+        print()
+        print("Next: python -m chemistry_manager qm")
+
+    if idle:
+        print()
+        print("Unvalidated and not queued")
+        for molecule in idle[:20]:
+            print(
+                f"  {str(molecule.get('id')):12} "
+                f"{molecule.get('formula', '?')}"
+            )
+        if len(idle) > 20:
+            print(f"  ... and {len(idle) - 20} more")
+        print(
+            "  These structures exist in the library but are not currently "
+            "represented in WAITING_QM."
+        )
+
+    print()
+    print("Event candidate states")
     for state in CandidateState:
-        print(f"{LABELS[state] + ':':34} {counts[state]:>6}")
-
-
-def _deferred_queue(store, state, empty_message, deferred_message):
-    waiting = store.candidates(state)
-    if not waiting:
-        print(empty_message)
-        return 0
-    print(f"{len(waiting)} candidate(s) waiting.")
-    print(deferred_message)
-    print("No candidate state was changed.")
-    return 0
+        print(f"  {LABELS[state] + ':':32} {counts[state]:>6}")
 
 
 def main(argv=None):
@@ -168,53 +222,19 @@ def main(argv=None):
     store = ManagerStore(options.state_file)
 
     try:
+        migration = store.migrate_legacy_wait_states()
         if options.command == "status":
-            print_status(store)
-            return 0
-
-        if options.command == "cleanup":
-            if not options.legacy_characterisation:
-                print("No cleanup target selected.")
-                print("Use --legacy-characterisation to preview the legacy queue cleanup.")
-                return 0
-
-            targeted = store.legacy_characterisation_candidates()
-            counts = store.counts()
-
-            print("Legacy Characterisation Cleanup")
-            print()
-            print(f"Candidates targeted:             {len(targeted)}")
-            print(
-                f"Waiting for QM (untouched):      "
-                f"{counts[CandidateState.WAITING_QM]}"
-            )
-            print(
-                f"QM validated (untouched):        "
-                f"{counts[CandidateState.QM_VALIDATED]}"
-            )
-            print(
-                f"QM rejected (untouched):         "
-                f"{counts[CandidateState.QM_REJECTED]}"
-            )
-            print()
-            print(
-                "Target rule: state=WAITING_CHARACTERISATION and "
-                "source.kind=formation_event"
-            )
-
-            if not options.confirm:
-                print()
-                print("No changes made.")
+            if migration["migrated"]:
                 print(
-                    "Re-run with --confirm to remove only the candidates listed "
-                    "by this rule."
+                    f"Migrated {migration['migrated']} legacy candidate(s) "
+                    "to WAITING_QM."
                 )
-                return 0
-
-            result = store.remove_legacy_characterisation_candidates()
-            print()
-            print(f"Removed legacy candidates:       {result['removed']}")
-            print("All other candidate states and source kinds were preserved.")
+                print()
+            print_status(
+                store,
+                molecule_root=options.molecule_root,
+                qm_root=options.qm_root,
+            )
             return 0
 
         if options.command == "ingest":
@@ -260,7 +280,7 @@ def main(argv=None):
                     f"{scan['formation_events']} new event(s)."
                 )
             print(
-                f"Queued {result['queued']} reaction candidate(s); "
+                f"Queued {result['queued']} reaction candidate(s) for QM; "
                 f"{result['already_known']} already known."
             )
             if result["errors"]:
@@ -294,6 +314,44 @@ def main(argv=None):
                     f"{spec['collision_class']} / {spec['speed_class']}"
                 )
 
+            def result_observer(item):
+                if item.get("outcome") == "failed":
+                    print(f"       FAILED: {item.get('error', 'unknown error')}")
+                    return
+
+                events = int(item.get("reaction_events", 0))
+                products = item.get("products") or []
+                if events == 0:
+                    print(
+                        f"       result: {item.get('outcome', 'no reaction')}; "
+                        "no reaction event"
+                    )
+                    return
+
+                print(
+                    f"       result: {item.get('outcome', 'reaction')}; "
+                    f"{events} reaction event(s)"
+                )
+                for product in products:
+                    novelty = (
+                        "NEW" if product.get("new_this_experiment")
+                        else "known"
+                    )
+                    print(
+                        f"       {product['id']} "
+                        f"{product.get('formula') or '?'}  "
+                        f"{novelty} / {product.get('trust', 'UNKNOWN')}"
+                    )
+                    queue = product.get("queue")
+                    if queue == CandidateState.WAITING_QM.value:
+                        print("         -> WAITING_QM")
+                    elif queue == CandidateState.QM_VALIDATED.value:
+                        print("         -> QM_VALIDATED / trusted")
+                    elif queue == CandidateState.QM_REJECTED.value:
+                        print("         -> QM_REJECTED")
+                    elif queue == "trusted":
+                        print("         -> trusted reactant")
+
             result = run_production(
                 store,
                 count=options.count,
@@ -310,6 +368,7 @@ def main(argv=None):
                 capture_every=options.capture_every,
                 physics=options.physics,
                 progress=progress,
+                result_observer=result_observer,
             )
             print()
             print("Reaction Teacher Production")
@@ -322,10 +381,13 @@ def main(argv=None):
             print(f"Master seed:             {result['master_seed']} ({result['master_seed_source']})")
             print(f"Teacher frames written:  {result['teacher_frames_written_now']}")
             print(f"New reactions detected:  {result['new_events']}")
+            print(f"Queued for QM now:       {result['new_candidates_queued']}")
+            print(f"New product species:     {len(result.get('new_product_species', []))}")
             print(f"Trusted molecules used:  {result['trusted_molecules']}")
             print(f"Daily dataset:           {result['root']}")
             print("View: python -m chemistry_manager production")
-            print("Next: python -m chemistry_manager ingest --teacher-data")
+            if result["new_candidates_queued"]:
+                print("Next: python -m chemistry_manager qm")
             return 0
 
         if options.command == "production":
@@ -381,7 +443,7 @@ def main(argv=None):
             products = result.get("unique_product_species", [])
             untrusted = result.get("untrusted_product_species", [])
             print(f"Unique product species:  {len(products)}")
-            print(f"Untrusted/new products:  {len(untrusted)}")
+            print(f"Untrusted products:      {len(untrusted)}")
             if untrusted:
                 print("  " + ", ".join(untrusted))
 
@@ -414,14 +476,6 @@ def main(argv=None):
             print(f"Dataset:                 {result['root']}")
             return 0
 
-        if options.command == "validate":
-            return _deferred_queue(
-                store,
-                CandidateState.WAITING_CHARACTERISATION,
-                "Nothing waiting for controlled characterisation.",
-                "Automated controlled characterisation is not connected in v1.",
-            )
-
         if options.command == "qm":
             from .qm import process_qm_queue
 
@@ -437,6 +491,16 @@ def main(argv=None):
                     f"products: {product_text}"
                 )
 
+            def qm_molecule_progress(number, total, candidate, result):
+                molecule_id = result.get("molecule_id", "?")
+                outcome = result.get("outcome", "unknown")
+                reused = " (reused)" if result.get("reused") else ""
+                print(f"       {molecule_id}: {outcome}{reused}")
+                if outcome == "validated":
+                    print("         -> trusted reactant")
+                elif outcome == "rejected":
+                    print("         -> stored but excluded from trusted pool")
+
             result = process_qm_queue(
                 store,
                 molecule_root=options.molecule_root,
@@ -447,6 +511,7 @@ def main(argv=None):
                 memory=options.memory,
                 limit=options.limit,
                 progress=qm_progress,
+                molecule_progress=qm_molecule_progress,
             )
             print()
             print("QM Queue")

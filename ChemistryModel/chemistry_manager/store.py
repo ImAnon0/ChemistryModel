@@ -67,6 +67,40 @@ class ManagerStore:
         )
         os.replace(temporary, self.path)
 
+    def migrate_legacy_wait_states(self):
+        """Persist removed legacy wait states as WAITING_QM.
+
+        Candidate identity, products, source and provenance are left untouched.
+        This is safe to call repeatedly.
+        """
+        if not self.path.exists():
+            return {"migrated": 0, "candidate_ids": []}
+
+        try:
+            raw = json.loads(self.path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as problem:
+            raise ValueError(
+                f"manager state is not valid JSON: {self.path}"
+            ) from problem
+
+        candidates = raw.get("candidates", {})
+        migrated = []
+        for candidate_id, candidate in candidates.items():
+            if not isinstance(candidate, dict):
+                continue
+            state = str(candidate.get("state"))
+            if state in ("WAITING_FULL_CM", "WAITING_CHARACTERISATION"):
+                candidate["state"] = CandidateState.WAITING_QM.value
+                migrated.append(str(candidate_id))
+
+        if migrated:
+            self.save(raw)
+
+        return {
+            "migrated": len(migrated),
+            "candidate_ids": sorted(migrated),
+        }
+
     def candidates(self, state=None):
         rows = list(self.load()["candidates"].values())
         if state is not None:
@@ -80,42 +114,9 @@ class ManagerStore:
             counts[coerce_state(row["state"])] += 1
         return counts
 
-    def legacy_characterisation_candidates(self):
-        """Return old generic formation events still waiting for characterisation."""
-        rows = []
-        for candidate in self.load()["candidates"].values():
-            if (
-                coerce_state(candidate["state"])
-                == CandidateState.WAITING_CHARACTERISATION
-                and (candidate.get("source") or {}).get("kind") == "formation_event"
-            ):
-                rows.append(copy.deepcopy(candidate))
-        return sorted(rows, key=lambda row: row["id"])
-
-    def remove_legacy_characterisation_candidates(self):
-        """Delete only legacy generic formation events waiting for characterisation."""
-        document = self.load()
-        removed = []
-        for candidate_id, candidate in list(document["candidates"].items()):
-            if (
-                coerce_state(candidate["state"])
-                == CandidateState.WAITING_CHARACTERISATION
-                and (candidate.get("source") or {}).get("kind") == "formation_event"
-            ):
-                removed.append(candidate_id)
-                del document["candidates"][candidate_id]
-
-        if removed:
-            self.save(document)
-
-        return {
-            "removed": len(removed),
-            "candidate_ids": sorted(removed),
-        }
-
     def add_discovery_event(
         self, event, event_log, *,
-        initial_state=CandidateState.WAITING_CHARACTERISATION,
+        initial_state=CandidateState.WAITING_QM,
         source_kind="formation_event",
         source_extra=None,
         promote_existing=False,
@@ -131,7 +132,7 @@ class ManagerStore:
 
     def add_discovery_events(
         self, events, event_log, *,
-        initial_state=CandidateState.WAITING_CHARACTERISATION,
+        initial_state=CandidateState.WAITING_QM,
         source_kind="formation_event",
         source_extra=None,
         promote_existing=False,
@@ -151,20 +152,13 @@ class ManagerStore:
                 duplicates += 1
                 if promote_existing:
                     candidate = document["candidates"][candidate_id]
-                    current = coerce_state(candidate["state"])
-                    if (
-                        current == CandidateState.WAITING_CHARACTERISATION
-                        and initial_state == CandidateState.WAITING_QM
-                    ):
-                        candidate["state"] = require_transition(
-                            current, CandidateState.WAITING_QM
-                        ).value
-                        source = candidate.setdefault("source", {})
-                        source["kind"] = str(source_kind)
-                        source["event_id"] = event_id
-                        source["event_log"] = os.path.normpath(str(event_log))
-                        source.update(copy.deepcopy(source_extra))
-                        added += 1
+                    candidate["state"] = coerce_state(candidate["state"]).value
+                    source = candidate.setdefault("source", {})
+                    source["kind"] = str(source_kind)
+                    source["event_id"] = event_id
+                    source["event_log"] = os.path.normpath(str(event_log))
+                    source.update(copy.deepcopy(source_extra))
+                    added += 1
                 continue
 
             source = {
@@ -195,6 +189,29 @@ class ManagerStore:
         if added:
             self.save(document)
         return {"added": added, "duplicates": duplicates}
+
+    def product_ids(self, state=None):
+        """Unique molecule IDs referenced by candidates, optionally in one state."""
+        found = set()
+        for candidate in self.candidates(state):
+            for product in candidate.get("products") or []:
+                if isinstance(product, dict) and product.get("id"):
+                    found.add(str(product["id"]))
+        return sorted(found)
+
+    def candidates_for_product(self, molecule_id, state=None):
+        """Candidates that reference one product molecule."""
+        molecule_id = str(molecule_id)
+        rows = []
+        for candidate in self.candidates(state):
+            product_ids = {
+                str(product.get("id"))
+                for product in candidate.get("products") or []
+                if isinstance(product, dict) and product.get("id")
+            }
+            if molecule_id in product_ids:
+                rows.append(candidate)
+        return rows
 
     def record_qm_result(self, candidate_id, payload, final_state=None):
         """Persist QM provenance and optionally make one valid state transition."""

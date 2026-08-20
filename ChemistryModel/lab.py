@@ -2142,6 +2142,8 @@ class Lab(QtWidgets.QWidget):
         title.setObjectName("sectionTitle")
         library.addWidget(title)
 
+        filter_row = QtWidgets.QHBoxLayout()
+
         self.molecule_search = QtWidgets.QLineEdit()
         self.molecule_search.setPlaceholderText(
             "Search by formula, structure ID, or elements…"
@@ -2149,7 +2151,21 @@ class Lab(QtWidgets.QWidget):
         self.molecule_search.textChanged.connect(
             self.filter_molecule_library
         )
-        library.addWidget(self.molecule_search)
+        filter_row.addWidget(self.molecule_search, 1)
+
+        self.molecule_trust_filter = QtWidgets.QComboBox()
+        self.molecule_trust_filter.addItem("All species", "all")
+        self.molecule_trust_filter.addItem("QM validated", "qm_validated")
+        self.molecule_trust_filter.setToolTip(
+            "Show every stored species, or only species whose molecule "
+            "metadata is marked QM_VALIDATED."
+        )
+        self.molecule_trust_filter.currentIndexChanged.connect(
+            self.filter_molecule_library
+        )
+        filter_row.addWidget(self.molecule_trust_filter)
+
+        library.addLayout(filter_row)
 
         self.molecule_scan_all_button = self.button(
             "Scan recordings", self.on_scan_recordings
@@ -2553,16 +2569,42 @@ class Lab(QtWidgets.QWidget):
         if hasattr(self, "molecule_search"):
             self.filter_molecule_library(self.molecule_search.text())
 
-    def filter_molecule_library(self, text):
+    def filter_molecule_library(self, unused=None):
+        text = (
+            self.molecule_search.text()
+            if hasattr(self, "molecule_search") else ""
+        )
         wanted = "".join(text.lower().split())
+        trust_filter = (
+            self.molecule_trust_filter.currentData()
+            if hasattr(self, "molecule_trust_filter") else "all"
+        )
+
         for row, item in enumerate(self.library_molecules):
             searchable = " ".join((
                 str(item.get("id", "")),
                 str(item.get("formula", "")),
                 " ".join(item.get("elements", []) or []),
             )).lower()
-            match = not wanted or wanted in "".join(searchable.split())
-            self.molecule_library_list.item(row).setHidden(not match)
+            text_match = (
+                not wanted
+                or wanted in "".join(searchable.split())
+            )
+
+            trust_status = str(
+                item.get("trust_status", "")
+            ).upper()
+            trust_match = (
+                trust_filter == "all"
+                or (
+                    trust_filter == "qm_validated"
+                    and trust_status == "QM_VALIDATED"
+                )
+            )
+
+            self.molecule_library_list.item(row).setHidden(
+                not (text_match and trust_match)
+            )
 
     def on_character_test_mode(self, index):
         partner_mode = index == 1
