@@ -536,7 +536,7 @@
       "status": "FIT TARGET - NOT INDEPENDENT"
     }
   ],
-  "git_revision": "ed34f6a1fd589945f92d548b33198fda6526d19f",
+  "git_revision": "ea25d91d9c0932919a4ab980f57fbd5b937fa4cd",
   "golden_validation": {
     "dense_soup_stress": {
       "execution": {
@@ -544,44 +544,44 @@
         "returncode": 0,
         "status": "PASS",
         "stderr_tail": "",
-        "stdout_tail": "    max states solved/call  : 68\n    max topology group      : 9\n\n  H state pressure (group):\n    max component edges    : 6\n    max states             : 13\n    max transitions        : 14\n    max topology group     : 271\n    largest Hamiltonian    : (271, 2, 2)\n    largest Hamiltonian MB : 0.004\n    max H states/call      : 684\n    max topology groups    : 13\n    structure cache entries: 80\n    structure cache CUDA MB: 0.123\n    S=2 eigvalsh chunk size : 512\n    largest original S=2 B : 271\n    chunked S=2 groups     : 0\n    chunked eigvalsh calls : 0\n    largest submitted eig B: 271\n\n  CUDA memory:\n    observed allocated     : 24.3 MB\n    observed reserved      : 1162.0 MB\n    peak allocated         : 94.2 MB\n    peak reserved          : 1162.0 MB\n    allocator retries      : 0\n    allocator OOMs/rejects : 0 / 0\n    final device free      : 5839.0 MB\n    pressure H solve       : (266, 2, 2)  edges 1, states 2, transitions 0\n",
-        "wall_seconds": 234.93374370000674
+        "stdout_tail": "    max states solved/call  : 70\n    max topology group      : 10\n\n  H state pressure (group):\n    max component edges    : 6\n    max states             : 17\n    max transitions        : 18\n    max topology group     : 270\n    largest Hamiltonian    : (270, 2, 2)\n    largest Hamiltonian MB : 0.004\n    max H states/call      : 679\n    max topology groups    : 12\n    structure cache entries: 76\n    structure cache CUDA MB: 0.152\n    S=2 eigvalsh chunk size : 512\n    largest original S=2 B : 270\n    chunked S=2 groups     : 0\n    chunked eigvalsh calls : 0\n    largest submitted eig B: 270\n\n  CUDA memory:\n    observed allocated     : 24.3 MB\n    observed reserved      : 1162.0 MB\n    peak allocated         : 94.2 MB\n    peak reserved          : 1162.0 MB\n    allocator retries      : 0\n    allocator OOMs/rejects : 0 / 0\n    final device free      : 5839.0 MB\n    pressure H solve       : (266, 2, 2)  edges 1, states 2, transitions 0\n",
+        "wall_seconds": 663.1728016000125
       },
       "failures": [],
       "runs": [
         {
-          "end_time_fs": 996.0,
+          "end_time_fs": 1000.0,
           "final_carbon_overvalent": 0,
           "final_nitrogen_overvalent": 0,
-          "final_potential_eV": -1080.5703125,
-          "final_temperature_K": 762.9628295898438,
-          "frames": 292,
-          "maximum_carbon_bond_coordination": 4,
-          "maximum_carbon_radial_coordination": 4.325035501509763,
+          "final_potential_eV": -1056.111572265625,
+          "final_temperature_K": 520.5681762695312,
+          "frames": 288,
+          "maximum_carbon_bond_coordination": 5,
+          "maximum_carbon_radial_coordination": 4.340831292277053,
           "maximum_nitrogen_bond_coordination": 4,
-          "maximum_nitrogen_radial_coordination": 3.469852762079798,
-          "maximum_simultaneous_carbon_overvalent": 0,
+          "maximum_nitrogen_radial_coordination": 3.5217411363039184,
+          "maximum_simultaneous_carbon_overvalent": 1,
           "maximum_simultaneous_nitrogen_overvalent": 1,
-          "minimum_heavy_heavy_distance_A": 0.8764046648388149,
+          "minimum_heavy_heavy_distance_A": 0.8762453140508906,
           "move_cap_events": 0,
           "numerical_failures": 0,
           "seed": 0,
           "stable": true
         },
         {
-          "end_time_fs": 1000.0,
+          "end_time_fs": 996.0,
           "final_carbon_overvalent": 0,
           "final_nitrogen_overvalent": 0,
-          "final_potential_eV": -1092.1192626953125,
-          "final_temperature_K": 691.4745483398438,
-          "frames": 307,
+          "final_potential_eV": -1078.191162109375,
+          "final_temperature_K": 655.5693969726562,
+          "frames": 264,
           "maximum_carbon_bond_coordination": 4,
-          "maximum_carbon_radial_coordination": 4.199677102117852,
+          "maximum_carbon_radial_coordination": 4.180066130401491,
           "maximum_nitrogen_bond_coordination": 3,
           "maximum_nitrogen_radial_coordination": 3.293025681170713,
           "maximum_simultaneous_carbon_overvalent": 0,
           "maximum_simultaneous_nitrogen_overvalent": 0,
-          "minimum_heavy_heavy_distance_A": 0.8953249033184685,
+          "minimum_heavy_heavy_distance_A": 0.8953250820221068,
           "move_cap_events": 0,
           "numerical_failures": 0,
           "seed": 1,
@@ -608,7 +608,7 @@
           "status": "PASS",
           "stderr_tail": "",
           "stdout_tail": "main imports PASS",
-          "wall_seconds": 2.441064300001017
+          "wall_seconds": 2.398540900001535
         },
         {
           "name": "heavy overcoordination guard",
@@ -616,7 +616,7 @@
           "status": "PASS",
           "stderr_tail": "",
           "stdout_tail": "HEAVY OVER-COORDINATION REGRESSION GUARD\n\nbase radial over term : 6.666432739645 eV\n|dE| base/valence    : 0.000000000000e+00 eV\n|dF|max base/valence : 0.000000000000e+00 eV/A\n\nFINAL PASS - heavy valence topology leaves radial over-coordination protection intact.",
-          "wall_seconds": 2.411373499999172
+          "wall_seconds": 2.33153019999736
         },
         {
           "name": "runner physics selection",
@@ -624,7 +624,7 @@
           "status": "PASS",
           "stderr_tail": "",
           "stdout_tail": "RUNNER / LAB OPT-IN PHYSICS SMOKE TEST\n\nreactive selector : BatchedReactiveSimulation\nvalence selector  : OptimisedValenceStateBatchedSimulation\n\nselector mapping       : PASS\ncondition separation   : PASS\nonly physics differs   : PASS\nreactive default/guard : PASS\nrunner wiring          : PASS\nLab wiring             : PASS\n\nFINAL PASS - optimised valence is explicit opt-in for fresh grouped runs; historical reactive physics remains default, and the two physics models cannot silently pool.",
-          "wall_seconds": 2.2754042000015033
+          "wall_seconds": 2.245073500002036
         },
         {
           "name": "heavy valence density matrix",
@@ -632,23 +632,23 @@
           "status": "PASS",
           "stderr_tail": "",
           "stdout_tail": "HEAVY-VALENCE DENSITY-MATRIX VALIDATION\n  temperature       : 0.010000 eV\n  exact probability : 0.500000000000\n  exact force       : 50.000000000000\n  near forces       : 49.999999999950, 49.999999999950\n  far max |new-old| : 2.220e-16\nFINAL PASS",
-          "wall_seconds": 2.0203011999983573
+          "wall_seconds": 1.964233200007584
         },
         {
           "name": "optimised valence integration",
           "returncode": 0,
           "status": "PASS",
           "stderr_tail": "",
-          "stdout_tail": "  max |dEtot|    : 1.776356839400e-15 eV\n  max |dPosition|: 0.000000000000e+00 A\n  max |dVelocity|: 3.469446951954e-18 A/fs\n  max |dForce|   : 3.552713678801e-15 eV/A\n  caps ref/new   : 0/0\n\n5. LIVE H COMPONENT MERGE\n  backend      : index_select\n  counts seen  : (1, 2)\n  transitions  : ((5, 2, 1),)\n  max |dEtot|  : 0.000000000000e+00 eV\n  max |dF|     : 0.000000000000e+00 eV/A\n\n6. EXPLICIT NEIGHBOUR REBUILD\n  backend       : index_select\n  rebuild count : 1 -> 2\n  max |dE|      : 0.000000000000e+00 eV\n  max |dF|      : 7.105427357601e-15 eV/A\n\n7. ACTUAL 8 x 330 MD-STEP THROUGHPUT\n  backend             : index_select\n  reference median    : 30.779 ms\n  optimised median    : 24.184 ms\n  speedup             : 1.273 x\n\n  DEVICE RESULT : PASS\n\n====================================================================================\nFINAL PASS - device-aware gather selection preserves the validated cached-H/batched-heavy physics and chooses the measured fast backend on each device.\nThis is a suitable final performance candidate before wiring it into the normal simulation runner.",
-          "wall_seconds": 61.16605630000413
+          "stdout_tail": "  max |dEtot|    : 1.776356839400e-15 eV\n  max |dPosition|: 0.000000000000e+00 A\n  max |dVelocity|: 3.469446951954e-18 A/fs\n  max |dForce|   : 3.552713678801e-15 eV/A\n  caps ref/new   : 0/0\n\n5. LIVE H COMPONENT MERGE\n  backend      : index_select\n  counts seen  : (1, 2)\n  transitions  : ((5, 2, 1),)\n  max |dEtot|  : 0.000000000000e+00 eV\n  max |dF|     : 0.000000000000e+00 eV/A\n\n6. EXPLICIT NEIGHBOUR REBUILD\n  backend       : index_select\n  rebuild count : 1 -> 2\n  max |dE|      : 0.000000000000e+00 eV\n  max |dF|      : 7.105427357601e-15 eV/A\n\n7. ACTUAL 8 x 330 MD-STEP THROUGHPUT\n  backend             : index_select\n  reference median    : 29.636 ms\n  optimised median    : 17.209 ms\n  speedup             : 1.722 x\n\n  DEVICE RESULT : PASS\n\n====================================================================================\nFINAL PASS - device-aware gather selection preserves the validated cached-H/batched-heavy physics and chooses the measured fast backend on each device.\nThis is a suitable final performance candidate before wiring it into the normal simulation runner.",
+          "wall_seconds": 41.43450709999888
         },
         {
           "name": "batched heavy valence",
           "returncode": 0,
           "status": "PASS",
           "stderr_tail": "",
-          "stdout_tail": "================================================================================\n\n1. 106-GEOMETRY EQUIVALENCE\n  geometries       : 106\n  max |dE|         : 0.000000000000e+00 eV (None)\n  max |dF|         : 2.486899575160e-13 eV/A (water_dense_transfer_0002)\n\n2. 960-ATOM REPEATED-WATER EQUIVALENCE\n  max |dE|         : 0.000000000000e+00 eV\n  max |dF|         : 2.413624855535e-13 eV/A\n  diagnostics      : {'competitive_atom_count': 384, 'topology_group_count': 1, 'largest_topology_group': 384, 'zero_row_count': 0, 'total_states_solved': 1152, 'group_shapes': ((3, 2, 384),), 'largest_candidate_count': 3, 'largest_state_count': 3, 'largest_state_shape': (3, 2, 3), 'centres_over_128': 0, 'centres_over_200': 0}\n\n3. THROUGHPUT\n  8 x 120 atoms (960 total):\n    reference    : 4255.550 ms (median 5161.903, min 2380.863)\n    batched-heavy: 211.396 ms (median 202.461, min 199.591)\n      heavy diagnostics: {'competitive_atom_count': 384, 'topology_group_count': 1, 'largest_topology_group': 384, 'zero_row_count': 0, 'total_states_solved': 1152, 'group_shapes': ((3, 2, 384),), 'largest_candidate_count': 3, 'largest_state_count': 3, 'largest_state_shape': (3, 2, 3), 'centres_over_128': 0, 'centres_over_200': 0}\n    speedup      : 20.131 x\n\n  8 x 330 atoms (2640 total):\n    reference    : 12557.173 ms (median 14015.904, min 6718.225)\n    batched-heavy: 492.311 ms (median 493.244, min 485.747)\n      heavy diagnostics: {'competitive_atom_count': 1056, 'topology_group_count': 1, 'largest_topology_group': 1056, 'zero_row_count': 0, 'total_states_solved': 3168, 'group_shapes': ((3, 2, 1056),), 'largest_candidate_count': 3, 'largest_state_count': 3, 'largest_state_shape': (3, 2, 3), 'centres_over_128': 0, 'centres_over_200': 0}\n    speedup      : 25.507 x\n\n  equivalence : PASS\n\n================================================================================\nFINAL PASS - batched heavy-valence membership reproduces the validated reference within tolerance.\nUse the 8 x 330 timing to decide whether the next target is remaining H topology host-sync or the heavy angle/topology tensor work.",
-          "wall_seconds": 216.8534617999976
+          "stdout_tail": "================================================================================\n\n1. 106-GEOMETRY EQUIVALENCE\n  geometries       : 106\n  max |dE|         : 0.000000000000e+00 eV (None)\n  max |dF|         : 2.486899575160e-13 eV/A (water_dense_transfer_0002)\n\n2. 960-ATOM REPEATED-WATER EQUIVALENCE\n  max |dE|         : 0.000000000000e+00 eV\n  max |dF|         : 2.413624855535e-13 eV/A\n  diagnostics      : {'competitive_atom_count': 384, 'topology_group_count': 1, 'largest_topology_group': 384, 'zero_row_count': 0, 'total_states_solved': 1152, 'group_shapes': ((3, 2, 384),), 'largest_candidate_count': 3, 'largest_state_count': 3, 'largest_state_shape': (3, 2, 3), 'centres_over_128': 0, 'centres_over_200': 0}\n\n3. THROUGHPUT\n  8 x 120 atoms (960 total):\n    reference    : 2646.353 ms (median 2653.872, min 2596.016)\n    batched-heavy: 118.535 ms (median 114.934, min 110.704)\n      heavy diagnostics: {'competitive_atom_count': 384, 'topology_group_count': 1, 'largest_topology_group': 384, 'zero_row_count': 0, 'total_states_solved': 1152, 'group_shapes': ((3, 2, 384),), 'largest_candidate_count': 3, 'largest_state_count': 3, 'largest_state_shape': (3, 2, 3), 'centres_over_128': 0, 'centres_over_200': 0}\n    speedup      : 22.325 x\n\n  8 x 330 atoms (2640 total):\n    reference    : 10406.326 ms (median 7839.566, min 7469.747)\n    batched-heavy: 491.833 ms (median 423.006, min 280.728)\n      heavy diagnostics: {'competitive_atom_count': 1056, 'topology_group_count': 1, 'largest_topology_group': 1056, 'zero_row_count': 0, 'total_states_solved': 3168, 'group_shapes': ((3, 2, 1056),), 'largest_candidate_count': 3, 'largest_state_count': 3, 'largest_state_shape': (3, 2, 3), 'centres_over_128': 0, 'centres_over_200': 0}\n    speedup      : 21.158 x\n\n  equivalence : PASS\n\n================================================================================\nFINAL PASS - batched heavy-valence membership reproduces the validated reference within tolerance.\nUse the 8 x 330 timing to decide whether the next target is remaining H topology host-sync or the heavy angle/topology tensor work.",
+          "wall_seconds": 146.5191261
         },
         {
           "name": "large heavy valence states",
@@ -656,23 +656,23 @@
           "status": "PASS",
           "stderr_tail": "D:\\Projects\\ChemistryModel\\ChemistryModel\\ChemistryModel\\tests\\validate_large_heavy_valence_states.py:109: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.\nConsider using tensor.detach() first. (Triggered internally at C:\\actions-runner\\_work\\pytorch\\pytorch\\torch\\csrc\\autograd\\generated\\python_variable_methods.cpp:823.)\n  matrix_error = float(",
           "stdout_tail": "LARGE HEAVY-VALENCE STATE EXECUTION VALIDATION\n\ncandidate limit : 12\nstate limit     : 512\ncovers C(12,4) : PASS\n\nsmall control   : states=10, transitions=30\nmatrix error    : 0.000e+00\nenergy error    : 0.000e+00\ngradient error  : 0.000e+00\nold/new exact  : PASS\n\nformer crash case, N=10 V=4\nstates          : 210\ntransitions     : 2520\nflat indices    : 5040\nassembled shape : (1, 210, 210)\nsymmetry error  : 0.000e+00\neigh/autograd   : PASS\n\nmaximum carbon case, N=12 V=4\nstates          : 495\ntransitions     : 7920\nflat indices    : 15840\nold basis size  : 14.46 GiB\ncompact indices : 123.8 KiB\n\nFINAL PASS - compact Hamiltonian assembly is equivalent on the control and supports the 210-state production case without the transition-basis memory explosion.",
-          "wall_seconds": 2.7064533999946434
+          "wall_seconds": 3.5224894999992102
         },
         {
           "name": "cached H topology",
           "returncode": 0,
           "status": "PASS",
           "stderr_tail": "",
-          "stdout_tail": "GPU   : NVIDIA GeForce RTX 4060 Ti\n================================================================================\n\n1. 106-GEOMETRY EQUIVALENCE\n  geometries       : 106\n  max |dE|         : 0.000000000000e+00 eV (None)\n  max |dF|         : 7.105427357601e-15 eV/A (water_dense_transfer_0000)\n\n2. 8 x 330 CACHE-HIT EQUIVALENCE\n  max |dE|         : 0.000000000000e+00 eV\n  max |dF|         : 7.105427357601e-15 eV/A\n  diagnostics      : {'component_counts_per_box': (198, 198, 198, 198, 198, 198, 198, 198), 'largest_component_edges': 2, 'component_total': 1584, 'topology_group_count': 2, 'largest_topology_group': 1056, 'candidate_h_pairs': 4752, 'topology_cache_hits': 1, 'topology_cache_misses': 1, 'candidate_rebuild_count': 1}\n\n3. EXPLICIT NEIGHBOUR-REBUILD INVALIDATION\n  rebuild count    : 1 -> 2\n  max |dE|         : 0.000000000000e+00 eV\n  max |dF|         : 7.105427357601e-15 eV/A\n  diagnostics      : {'component_counts_per_box': (198, 198, 198, 198, 198, 198, 198, 198), 'largest_component_edges': 2, 'component_total': 1584, 'topology_group_count': 2, 'largest_topology_group': 1056, 'candidate_h_pairs': 4752, 'topology_cache_hits': 1, 'topology_cache_misses': 2, 'candidate_rebuild_count': 2}\n\n4. 8 x 330 THROUGHPUT\n    reference : 480.958 ms (median 481.947, min 464.855)\n    cached-H  : 42.140 ms (median 41.416, min 39.164)\n      diagnostics: {'component_counts_per_box': (198, 198, 198, 198, 198, 198, 198, 198), 'largest_component_edges': 2, 'component_total': 1584, 'topology_group_count': 2, 'largest_topology_group': 1056, 'candidate_h_pairs': 4752, 'topology_cache_hits': 11, 'topology_cache_misses': 1, 'candidate_rebuild_count': 1}\n    speedup   : 11.413 x\n\n  equivalence : PASS\n\n================================================================================\nFINAL PASS - cached H topology reproduces the validated batched-heavy reference through static, cache-hit, live topology change and neighbour-rebuild cases.\nUse the throughput numbers to decide whether CPU/GPU topology bookkeeping is now small enough to move to the base/autograd path.",
-          "wall_seconds": 21.71928299999854
+          "stdout_tail": "GPU   : NVIDIA GeForce RTX 4060 Ti\n================================================================================\n\n1. 106-GEOMETRY EQUIVALENCE\n  geometries       : 106\n  max |dE|         : 0.000000000000e+00 eV (None)\n  max |dF|         : 7.105427357601e-15 eV/A (water_dense_transfer_0000)\n\n2. 8 x 330 CACHE-HIT EQUIVALENCE\n  max |dE|         : 0.000000000000e+00 eV\n  max |dF|         : 7.105427357601e-15 eV/A\n  diagnostics      : {'component_counts_per_box': (198, 198, 198, 198, 198, 198, 198, 198), 'largest_component_edges': 2, 'component_total': 1584, 'topology_group_count': 2, 'largest_topology_group': 1056, 'candidate_h_pairs': 4752, 'topology_cache_hits': 1, 'topology_cache_misses': 1, 'candidate_rebuild_count': 1}\n\n3. EXPLICIT NEIGHBOUR-REBUILD INVALIDATION\n  rebuild count    : 1 -> 2\n  max |dE|         : 0.000000000000e+00 eV\n  max |dF|         : 7.105427357601e-15 eV/A\n  diagnostics      : {'component_counts_per_box': (198, 198, 198, 198, 198, 198, 198, 198), 'largest_component_edges': 2, 'component_total': 1584, 'topology_group_count': 2, 'largest_topology_group': 1056, 'candidate_h_pairs': 4752, 'topology_cache_hits': 1, 'topology_cache_misses': 2, 'candidate_rebuild_count': 2}\n\n4. 8 x 330 THROUGHPUT\n    reference : 348.159 ms (median 341.956, min 318.302)\n    cached-H  : 34.367 ms (median 34.204, min 31.119)\n      diagnostics: {'component_counts_per_box': (198, 198, 198, 198, 198, 198, 198, 198), 'largest_component_edges': 2, 'component_total': 1584, 'topology_group_count': 2, 'largest_topology_group': 1056, 'candidate_h_pairs': 4752, 'topology_cache_hits': 11, 'topology_cache_misses': 1, 'candidate_rebuild_count': 1}\n    speedup   : 10.131 x\n\n  equivalence : PASS\n\n================================================================================\nFINAL PASS - cached H topology reproduces the validated batched-heavy reference through static, cache-hit, live topology change and neighbour-rebuild cases.\nUse the throughput numbers to decide whether CPU/GPU topology bookkeeping is now small enough to move to the base/autograd path.",
+          "wall_seconds": 17.72263989999192
         },
         {
           "name": "factorised H grouped execution",
           "returncode": 0,
           "status": "PASS",
           "stderr_tail": "",
-          "stdout_tail": "\n2. HEAVY-VALENCE WRAPPER - 106 GEOMETRIES\n  geometries       : 106\n  max |dE|         : 0.000000000000e+00 eV (None)\n  max |dF|         : 0.000000000000e+00 eV/A (None)\n\n3. MULTI-COMPONENT STRESS EQUIVALENCE\n  boxes            : 8\n  H3 components/box: 24\n  max |dE|         : 0.000000000000e+00 eV\n  max |dF|         : 0.000000000000e+00 eV/A\n  grouped diagnostics: {'component_counts_per_box': (24, 24, 24, 24, 24, 24, 24, 24), 'largest_component_edges': 2, 'component_total': 192, 'topology_group_count': 1, 'largest_topology_group': 192}\n\n4. THROUGHPUT\n  8 x formaldehyde transfer:\n    reference factorisable : 88.332 ms/force\n    grouped factorisable   : 28.627 ms/force\n    speedup                : 3.086 x\n    diagnostics            : {'component_counts_per_box': (2, 2, 2, 2, 2, 2, 2, 2), 'largest_component_edges': 2, 'component_total': 16, 'topology_group_count': 2, 'largest_topology_group': 8}\n  8 x multi-H3 stress:\n    reference factorisable : 1356.055 ms/force\n    grouped factorisable   : 81.119 ms/force\n    speedup                : 16.717 x\n    diagnostics            : {'component_counts_per_box': (24, 24, 24, 24, 24, 24, 24, 24), 'largest_component_edges': 2, 'component_total': 192, 'topology_group_count': 1, 'largest_topology_group': 192}\n\nRESULT: PASS\n\n==============================================================================\nFINAL PASS - grouped factorisable H-state reproduces the validated reference within tolerance.\nPerformance numbers above determine whether the next target should be topology discovery / host synchronisation or the heavy-valence membership path.",
-          "wall_seconds": 41.04093200000352
+          "stdout_tail": "\n2. HEAVY-VALENCE WRAPPER - 106 GEOMETRIES\n  geometries       : 106\n  max |dE|         : 0.000000000000e+00 eV (None)\n  max |dF|         : 0.000000000000e+00 eV/A (None)\n\n3. MULTI-COMPONENT STRESS EQUIVALENCE\n  boxes            : 8\n  H3 components/box: 24\n  max |dE|         : 0.000000000000e+00 eV\n  max |dF|         : 0.000000000000e+00 eV/A\n  grouped diagnostics: {'component_counts_per_box': (24, 24, 24, 24, 24, 24, 24, 24), 'largest_component_edges': 2, 'component_total': 192, 'topology_group_count': 1, 'largest_topology_group': 192}\n\n4. THROUGHPUT\n  8 x formaldehyde transfer:\n    reference factorisable : 58.430 ms/force\n    grouped factorisable   : 21.897 ms/force\n    speedup                : 2.668 x\n    diagnostics            : {'component_counts_per_box': (2, 2, 2, 2, 2, 2, 2, 2), 'largest_component_edges': 2, 'component_total': 16, 'topology_group_count': 2, 'largest_topology_group': 8}\n  8 x multi-H3 stress:\n    reference factorisable : 864.794 ms/force\n    grouped factorisable   : 49.037 ms/force\n    speedup                : 17.636 x\n    diagnostics            : {'component_counts_per_box': (24, 24, 24, 24, 24, 24, 24, 24), 'largest_component_edges': 2, 'component_total': 192, 'topology_group_count': 1, 'largest_topology_group': 192}\n\nRESULT: PASS\n\n==============================================================================\nFINAL PASS - grouped factorisable H-state reproduces the validated reference within tolerance.\nPerformance numbers above determine whether the next target should be topology discovery / host synchronisation or the heavy-valence membership path.",
+          "wall_seconds": 30.6059949999908
         },
         {
           "name": "H-state components",
@@ -680,7 +680,7 @@
           "status": "PASS",
           "stderr_tail": "",
           "stdout_tail": "\nDENSE TRANSFER RESIDUALS VS QM\nsystem           old MAE  old RMSE   old max  local MAE local RMSE  local max\nformaldehyde      0.3571    0.3810    0.5670     0.3571     0.3810     0.5670\nh3                0.1912    0.2231    0.4892     0.1912     0.2231     0.4892\nmethane           0.1892    0.2184    0.3374     0.1892     0.2184     0.3374\nwater             1.2633    2.3840    7.7707     1.2633     2.3840     7.7707\n\nMODEL CHANGE AFTER REACTANT ALIGNMENT\nformaldehyde   mean |local-old|=0.000000 eV  max=0.000000 eV\nh3             mean |local-old|=0.000000 eV  max=0.000000 eV\nmethane        mean |local-old|=0.000000 eV  max=0.000000 eV\nwater          mean |local-old|=0.000000 eV  max=0.000000 eV\n\nWORST ADJACENT RESIDUAL STEP\nformaldehyde   old    1.000->1.020 A  dResidual=-0.190866 eV\nformaldehyde   local  1.000->1.020 A  dResidual=-0.190866 eV\nh3             old    1.100->1.120 A  dResidual=+0.061836 eV\nh3             local  1.100->1.120 A  dResidual=+0.061836 eV\nmethane        old    0.980->1.000 A  dResidual=-0.127778 eV\nmethane        local  0.980->1.000 A  dResidual=-0.127778 eV\nwater          old    1.080->1.100 A  dResidual=+1.373622 eV\nwater          local  1.080->1.100 A  dResidual=+1.373622 eV\n\nPRODUCT REFERENCE RELATIVE ENERGIES\nsystem                QM     old H   local H\nformaldehyde     -0.4959   -0.4386   -0.4386\nh3               -0.0000   +0.0000   +0.0000\nmethane          +0.5412   +0.0552   +0.0552\nwater            -0.0000   +0.0000   +0.0000",
-          "wall_seconds": 4.470548000012059
+          "wall_seconds": 4.4545993999927305
         },
         {
           "name": "H-state factorised",
@@ -688,7 +688,7 @@
           "status": "PASS",
           "stderr_tail": "",
           "stdout_tail": "  max |dF| A       : 0.000000000000e+00 eV/A\n  max |dF| B       : 0.000000000000e+00 eV/A\n  diagnostics      : {'component_counts_per_box': (2,), 'largest_component_edges': 2}\n\n  size consistency: PASS\n\n3. COMPONENT MERGE / SPLIT\n  transition       : 1.186303834794 .. 1.186303834794 A\n  microscopic span : 7.471161467265e-10 eV\n  FD dE/dgap       : -1.899858048660e-05 eV/A\n  autograd dE/dgap : -9.246831899290e-06 eV/A\n  |FD-autograd|    : 9.751748587306e-06 eV/A\n\n  microscopic rows:\n    1.186298834794 A  components=1  E=-5.037634138102  dE/dgap=-2.891134e-04\n    1.186301834794 A  components=1  E=-5.037634138717  dE/dgap=-1.211914e-04\n    1.186302834794 A  components=1  E=-5.037634138811  dE/dgap=-6.521880e-05\n    1.186303334794 A  components=1  E=-5.037634138836  dE/dgap=-3.723273e-05\n    1.186303734794 A  components=1  E=-5.037634138847  dE/dgap=-1.484400e-05\n    1.186303834794 A  components=1  E=-5.037634138848  dE/dgap=-9.246832e-06\n    1.186303934794 A  components=2  E=-5.037634138849  dE/dgap=+1.406982e-05\n    1.186304334794 A  components=2  E=-5.037634138849  dE/dgap=-1.776357e-15\n    1.186304834794 A  components=2  E=-5.037634138849  dE/dgap=-1.776357e-15\n    1.186305834794 A  components=2  E=-5.037634138849  dE/dgap=-1.776357e-15\n    1.186308834794 A  components=2  E=-5.037634138849  dE/dgap=-1.776357e-15\n  merge continuity: PASS\n\nFINAL\n  PASS - factorisable H-state preserves the existing microscope, is size-consistent, and is smooth through the tested component merge/split boundary.\n  Next: controlled NVE before any performance optimisation.",
-          "wall_seconds": 5.741924100002507
+          "wall_seconds": 6.006759600015357
         },
         {
           "name": "H-state factorised NVE",
@@ -696,15 +696,15 @@
           "status": "PASS",
           "stderr_tail": "",
           "stdout_tail": "\n2. TWO DISCONNECTED UNEQUAL COMPONENTS\n  components seen   : (2,)\n\n  max |dE|          : 1.861017498e-03 eV\n  RMS dE            : 3.661041244e-04 eV\n  final dE          : +2.557010834e-04 eV\n  capped steps      : 0\n  neighbour rebuilds: 30\n  wrote             : research_data\\qm_residual\\h_state_factorised_nve_disconnected.csv\n  result            : PASS\n\n3. DYNAMIC COMPONENT MERGE\n  bridge initial/min/final : 1.186504000 / 1.180467382 / 1.180467382 A\n  component counts seen    : (1, 2)\n  observed 2->1 merge      : yes\n  transitions:\n    step     5  t=0.005000 fs  2->1  bridge=1.186256444512 A\n\n  max |dE|          : 1.412310890e-08 eV\n  RMS dE            : 8.985921988e-09 eV\n  final dE          : +1.412310890e-08 eV\n  capped steps      : 0\n  neighbour rebuilds: 1\n  wrote             : research_data\\qm_residual\\h_state_factorised_nve_merge.csv\n  result            : PASS\n\nFINAL\n  PASS - factorisable H-state preserves matched single-component dynamics, conserves energy for disconnected components, and crosses a live 2->1 component merge without an NVE pathology.\n  Next: integrate this H-state formulation into the experimental heavy-valence engine, rerun its equivalence/QM/force/NVE suite, then return to performance engineering.",
-          "wall_seconds": 30.021807400000398
+          "wall_seconds": 18.8174083000049
         },
         {
           "name": "index-select gather",
           "returncode": 0,
           "status": "PASS",
           "stderr_tail": "",
-          "stdout_tail": "GPU   : NVIDIA GeForce RTX 4060 Ti\n====================================================================================\n\n1. STATIC EQUIVALENCE\n  positions  106 dE=0.000e+00 dF=3.553e-15 | 2640 dE=0.000e+00 dF=7.105e-15 => PASS\n  scalar     106 dE=0.000e+00 dF=0.000e+00 | 2640 dE=0.000e+00 dF=0.000e+00 => PASS\n  all        106 dE=0.000e+00 dF=3.553e-15 | 2640 dE=0.000e+00 dF=7.105e-15 => PASS\n\n2. THROUGHPUT\n  default    force median=  42.353 ms mean=  42.470 | step median=  31.079 ms mean=  34.712 rebuilds=8\n  positions  force median=  39.101 ms mean=  38.446 | step median=  27.024 ms mean=  30.647 rebuilds=8\n             force speedup=1.083 x  step speedup=1.150 x\n  scalar     force median=  39.555 ms mean=  39.654 | step median=  28.019 ms mean=  31.592 rebuilds=8\n             force speedup=1.071 x  step speedup=1.109 x\n  all        force median=  35.269 ms mean=  35.271 | step median=  24.259 ms mean=  28.048 rebuilds=8\n             force speedup=1.201 x  step speedup=1.281 x\n\n====================================================================================\nBEST VALID CUDA ACTUAL-STEP MODE: all\n====================================================================================\n\n3. MATCHED WATER NVE FOR SELECTED MODE\n  max |dEtot|     : 0.000000000000e+00 eV\n  max |dPosition| : 0.000000000000e+00 A\n  max |dVelocity| : 0.000000000000e+00 A/fs\n  max |dForce|    : 0.000000000000e+00 eV/A\n  caps ref/new    : 0/0\n  NVE equivalence : PASS\n\nFINAL: selected gather mode is a valid execution-only performance candidate.",
-          "wall_seconds": 71.17558150000696
+          "stdout_tail": "GPU   : NVIDIA GeForce RTX 4060 Ti\n====================================================================================\n\n1. STATIC EQUIVALENCE\n  positions  106 dE=0.000e+00 dF=3.553e-15 | 2640 dE=0.000e+00 dF=7.105e-15 => PASS\n  scalar     106 dE=0.000e+00 dF=0.000e+00 | 2640 dE=0.000e+00 dF=0.000e+00 => PASS\n  all        106 dE=0.000e+00 dF=1.776e-15 | 2640 dE=0.000e+00 dF=7.105e-15 => PASS\n\n2. THROUGHPUT\n  default    force median=  36.720 ms mean=  37.816 | step median=  32.896 ms mean=  35.137 rebuilds=8\n  positions  force median=  31.207 ms mean=  30.645 | step median=  26.465 ms mean=  27.534 rebuilds=8\n             force speedup=1.177 x  step speedup=1.243 x\n  scalar     force median=  33.530 ms mean=  33.594 | step median=  27.863 ms mean=  29.218 rebuilds=8\n             force speedup=1.095 x  step speedup=1.181 x\n  all        force median=  26.999 ms mean=  26.494 | step median=  20.323 ms mean=  21.364 rebuilds=8\n             force speedup=1.360 x  step speedup=1.619 x\n\n====================================================================================\nBEST VALID CUDA ACTUAL-STEP MODE: all\n====================================================================================\n\n3. MATCHED WATER NVE FOR SELECTED MODE\n  max |dEtot|     : 0.000000000000e+00 eV\n  max |dPosition| : 0.000000000000e+00 A\n  max |dVelocity| : 0.000000000000e+00 A/fs\n  max |dForce|    : 0.000000000000e+00 eV/A\n  caps ref/new    : 0/0\n  NVE equivalence : PASS\n\nFINAL: selected gather mode is a valid execution-only performance candidate.",
+          "wall_seconds": 58.841692699992564
         },
         {
           "name": "smooth valence NVE",
@@ -712,7 +712,7 @@
           "status": "PASS",
           "stderr_tail": "",
           "stdout_tail": "\nsteps        : 1000\ntemperature  : 100.0 K\nseed         : 913\nthermostat   : off\nfriction     : 0\ndevice       : CPU / float64\n\nwater_intact\n  H-state  dt=0.25 fs  drift=-5.456951e-04 eV  max|drift|=9.281901e-04 eV  span=1.384051e-03 eV  force_jump=5.630204e-01 eV/A  caps=0\n  smooth   dt=0.25 fs  drift=-5.456951e-04 eV  max|drift|=9.281901e-04 eV  span=1.384051e-03 eV  force_jump=5.630204e-01 eV/A  caps=0\n           O-O membership 01=0.00000..0.00000  10=0.00000..0.00000\n\nwater_competition_x1.160\n  H-state  dt=0.25 fs  drift=-2.918817e-03 eV  max|drift|=2.144191e-02 eV  span=2.144191e-02 eV  force_jump=7.613400e+00 eV/A  caps=0\n  smooth   dt=0.25 fs  drift=+4.016670e-03 eV  max|drift|=8.467918e-03 eV  span=1.358574e-02 eV  force_jump=4.774077e+00 eV/A  caps=0\n           O-O membership 01=0.00000..1.00000  10=0.00000..1.00000\n\nperoxide_OO_1.475\n  H-state  dt=0.25 fs  drift=+4.986256e-07 eV  max|drift|=7.035096e-05 eV  span=9.039965e-05 eV  force_jump=1.431425e-01 eV/A  caps=0\n  smooth   dt=0.25 fs  drift=+4.986256e-07 eV  max|drift|=7.035096e-05 eV  span=9.039965e-05 eV  force_jump=1.431425e-01 eV/A  caps=0\n           O-O membership 01=1.00000..1.00000  10=1.00000..1.00000\n\nwrote : research_data\\qm_residual\\smooth_valence_nve.csv\n\nCONTROL COMPARISON\nsystem                         H max drift    smooth max     ratio  H caps  S caps\nwater_intact                  9.281901e-04  9.281901e-04     1.000       0       0\nwater_competition_x1.160      2.144191e-02  8.467918e-03     0.395       0       0\nperoxide_OO_1.475             7.035096e-05  7.035096e-05     1.000       0       0",
-          "wall_seconds": 50.40615389999584
+          "wall_seconds": 38.07066830000258
         },
         {
           "name": "valence-state factorised fixed",
@@ -720,7 +720,7 @@
           "status": "PASS",
           "stderr_tail": "",
           "stdout_tail": "4. H-ONLY SIZE CONSISTENCY REGRESSION\n  known historical bug geometry (two identical H3, spacing 0.900 A):\n    historical valence:\n      E(A+B)-E(A)-E(B) : +2.133317609464e+00 eV\n      max |dF| A/B     : 1.776e-15 / 3.553e-15 eV/A\n    factorisable valence:\n      E(A+B)-E(A)-E(B) : +0.000000000000e+00 eV\n      max |dF| A/B     : 0.000e+00 / 0.000e+00 eV/A\n  unequal disconnected control:\n    spacings            : 0.991676000 / 1.087692480 A\n    factorisable E nonadditivity : +0.000000000000e+00 eV\n    factorisable max |dF| A/B    : 0.000e+00 / 0.000e+00 eV/A\n\n5. LIVE H-COMPONENT MERGE - WRAPPER VS STANDALONE FACTORISABLE H\n  component counts seen : (1, 2)\n  transitions           : ((5, 2, 1),)\n  max |dEtot|           : 0.000000000000e+00 eV\n  max |dPosition|       : 0.000000000000e+00 A\n  max |dVelocity|       : 0.000000000000e+00 A/fs\n  max |dForce|          : 0.000000000000e+00 eV/A\n  caps standalone/wrapped : 0/0\n\nFINAL\n  existing heavy-valence behaviour preserved : PASS\n  candidate H size consistency               : PASS\n  historical size-consistency bug reproduced : PASS\n  live factorisable H merge survives wrapper : PASS\n\n  PASS - the corrected factorisable H-state is integrated under the heavy-valence engine without changing the existing validated heavy-valence behaviour.\n  Next: run the broader valence QM/force/NVE checks if desired, then return to component-batched performance engineering.",
-          "wall_seconds": 28.210089300002437
+          "wall_seconds": 23.561213799985126
         },
         {
           "name": "valence-state promotion",
@@ -728,7 +728,7 @@
           "status": "PASS",
           "stderr_tail": "",
           "stdout_tail": "1. ENERGY EQUIVALENCE \u2014 ALL QM GEOMETRIES\n  geometries            : 106\n  worst geometry        : water_dense_transfer_0004\n  scratch energy        : -13.246494833236 eV\n  module energy         : -13.246494833236 eV\n  max |difference|      : 1.776357e-15 eV\n\n2. FORCE EQUIVALENCE\n  x=1.080 A  dE=+0.000000e+00 eV  max dF=2.895462e-13 eV/A  RMS dF=1.374930e-13 eV/A\n  x=1.160 A  dE=-1.776357e-15 eV  max dF=4.769518e-13 eV/A  RMS dF=2.372194e-13 eV/A\n  x=1.320 A  dE=+0.000000e+00 eV  max dF=1.789680e-13 eV/A  RMS dF=8.753652e-14 eV/A\n  x=1.535 A  dE=+0.000000e+00 eV  max dF=6.938894e-18 eV/A  RMS dF=1.791615e-18 eV/A\n\n3. SHARED-GEOMETRY DYNAMIC EQUIVALENCE\n  trajectory steps      : 250\n  sample interval       : 25 steps\n  criterion             : same geometry -> same energy/force\n  trajectory separation : reported only; not a failure criterion\n  water_intact                 samples= 22  dE_same_max=0.000000e+00 eV  dF_same_max=2.220446e-16 eV/A  final dpos=3.552714e-15 A  caps=0/0\n    worst dE: driver=None step=0  signed=+0.000000e+00 eV\n    worst dF: driver=scratch step=0  RMS=5.733167e-17 eV/A\n  water_competition_x1.160     samples= 22  dE_same_max=0.000000e+00 eV  dF_same_max=7.842615e-13 eV/A  final dpos=2.587756e-05 A  caps=0/0\n    worst dE: driver=None step=0  signed=+0.000000e+00 eV\n    worst dF: driver=scratch step=0  RMS=3.860893e-13 eV/A\n  peroxide_OO_1.475            samples= 22  dE_same_max=0.000000e+00 eV  dF_same_max=2.220446e-16 eV/A  final dpos=5.329071e-15 A  caps=0/0\n    worst dE: driver=None step=0  signed=+0.000000e+00 eV\n    worst dF: driver=scratch step=75  RMS=6.938894e-17 eV/A\n\nPROMOTION RESULT\n  PASS \u2014 promoted module reproduces the corrected scratch physics on static and dynamically visited shared geometries within numerical tolerance.",
-          "wall_seconds": 18.68551340000704
+          "wall_seconds": 21.37114139998448
         },
         {
           "name": "molecule library",
@@ -736,7 +736,7 @@
           "status": "PASS",
           "stderr_tail": "",
           "stdout_tail": "SKIP - no recording with per-frame atom identity history was found under runs/. No molecule data was extracted.",
-          "wall_seconds": 0.1530064999969909
+          "wall_seconds": 0.2011132999905385
         },
         {
           "name": "heavy state pressure diagnostics",
@@ -744,7 +744,7 @@
           "status": "PASS",
           "stderr_tail": "",
           "stdout_tail": "HEAVY-VALENCE STATE-PRESSURE DIAGNOSTICS VALIDATION\n\naccumulated : {'evaluation_count': 2, 'max_candidate_count': 10, 'max_state_count': 210, 'centre_evaluations_over_128': 2, 'centre_evaluations_over_200': 1, 'evaluations_with_over_128': 1, 'evaluations_with_over_200': 1, 'max_topology_group': 7, 'max_total_states_solved': 630, 'max_competitive_atom_count': 8, 'max_state_shape': (10, 4, 210)}\nexpected    : {'evaluation_count': 2, 'max_candidate_count': 10, 'max_state_count': 210, 'centre_evaluations_over_128': 2, 'centre_evaluations_over_200': 1, 'evaluations_with_over_128': 1, 'evaluations_with_over_200': 1, 'max_topology_group': 7, 'max_total_states_solved': 630, 'max_competitive_atom_count': 8, 'max_state_shape': (10, 4, 210)}\n\naccumulator semantics : PASS\nlive current         : {'competitive_atom_count': 1, 'topology_group_count': 1, 'largest_topology_group': 1, 'zero_row_count': 0, 'total_states_solved': 5, 'group_shapes': ((5, 4, 1),), 'largest_candidate_count': 5, 'largest_state_count': 5, 'largest_state_shape': (5, 4, 5), 'centres_over_128': 0, 'centres_over_200': 0}\nlive cumulative pre  : {'evaluation_count': 1, 'max_candidate_count': 5, 'max_state_count': 5, 'centre_evaluations_over_128': 0, 'centre_evaluations_over_200': 0, 'evaluations_with_over_128': 0, 'evaluations_with_over_200': 0, 'max_topology_group': 1, 'max_total_states_solved': 5, 'max_competitive_atom_count': 1, 'max_state_shape': (5, 4, 5)}\nlive cumulative post : {'evaluation_count': 2, 'max_candidate_count': 5, 'max_state_count': 5, 'centre_evaluations_over_128': 0, 'centre_evaluations_over_200': 0, 'evaluations_with_over_128': 0, 'evaluations_with_over_200': 0, 'max_topology_group': 1, 'max_total_states_solved': 5, 'max_competitive_atom_count': 1, 'max_state_shape': (5, 4, 5)}\n\nlive-counter wiring   : PASS\nrunner persistence    : PASS\n\nFINAL PASS - state-pressure diagnostics accumulate correctly and are persisted/reported without changing the solver.",
-          "wall_seconds": 2.454291399990325
+          "wall_seconds": 2.9943428999977186
         },
         {
           "name": "smooth valence force probe",
@@ -752,15 +752,15 @@
           "status": "PASS",
           "stderr_tail": "",
           "stdout_tail": "DIFFERENTIABLE SMOOTH-VALENCE FORCE MICROSCOPE\n\nengine modification : none\ndevice              : CPU / float64\nfinite diff step    : 1.0e-05 A\n\nAUTOGRAD VS CENTRAL FINITE DIFFERENCE\n   x / A        E / eV      max |F|   max abs err      RMS err     max rel\n   1.080    -10.251368    49.093089  2.608066e-08 9.695571e-09   5.312e-10\n   1.160    -13.246495    23.283258  2.441885e-08 9.164330e-09   1.049e-09\n   1.320    -14.666858     2.698992  1.209056e-08 4.535959e-09   4.480e-09\n   1.535    -15.039012     4.014217  4.918319e-09 2.601581e-09   1.225e-09\n\nFORCE CONTINUITY \u2014 STATE COMPETITION REGION\nwindow              : 1.150 -> 1.170 A in 0.0005 A steps\nworst max-component force jump : 1.1500->1.1505 A  1.590658e-01 eV/A\nworst energy step             : 1.1500->1.1505 A  -1.378943e-02 eV\n\nFORCE CONTINUITY \u2014 O-H CUTOFF REGION\nwindow              : 1.532 -> 1.540 A in 0.0005 A steps\nworst max-component force jump : 1.5320->1.5325 A  1.900358e-02 eV/A\nworst energy step             : 1.5320->1.5325 A  -7.044542e-05 eV",
-          "wall_seconds": 5.447179099995992
+          "wall_seconds": 5.773243899981026
         },
         {
           "name": "pytest suite",
           "returncode": 0,
           "status": "PASS",
           "stderr_tail": "",
-          "stdout_tail": "........................................................................ [ 27%]\n........................................................................ [ 55%]\n...........s............................................................ [ 83%]\n............................................                             [100%]\n============================== warnings summary ===============================\n.venv\\Lib\\site-packages\\_pytest\\cacheprovider.py:469\n  D:\\Projects\\ChemistryModel\\ChemistryModel\\ChemistryModel\\.venv\\Lib\\site-packages\\_pytest\\cacheprovider.py:469: PytestCacheWarning: could not create cache path D:\\Projects\\ChemistryModel\\ChemistryModel\\ChemistryModel\\.pytest_cache\\v\\cache\\nodeids: [WinError 5] Access is denied: 'D:\\\\Projects\\\\ChemistryModel\\\\ChemistryModel\\\\ChemistryModel\\\\.pytest_cache\\\\v\\\\cache'\n    config.cache.set(\"cache/nodeids\", sorted(self.cached_nodeids))\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n259 passed, 1 skipped, 1 warning in 219.79s (0:03:39)",
-          "wall_seconds": 221.33225810001022
+          "stdout_tail": "........................................................................ [ 24%]\n........................................................................ [ 49%]\n............................................s........................... [ 73%]\n........................................................................ [ 98%]\n.....                                                                    [100%]\n292 passed, 1 skipped in 210.95s (0:03:30)",
+          "wall_seconds": 212.2597894000064
         }
       ],
       "status": "PASS"
@@ -1254,10 +1254,10 @@
   "performance": {
     "device": "cpu",
     "gpu_memory": "not measured in quick local probe",
-    "median_seconds": 0.23124470000038855,
+    "median_seconds": 0.38495499998680316,
     "status": "GOOD",
     "steps": 100,
-    "steps_per_second": 432.4423435427146
+    "steps_per_second": 259.77062254920224
   },
   "potential_curves": [
     {
@@ -1405,7 +1405,7 @@
       "scan_kind": "relaxed",
       "status": "WEAK",
       "system": "formaldehyde",
-      "wall_seconds": 24.021340800012695
+      "wall_seconds": 15.24995170001057
     },
     {
       "absolute_error_eV": 0.3639999999987974,
@@ -1431,7 +1431,7 @@
       "scan_kind": "relaxed",
       "status": "WEAK",
       "system": "water",
-      "wall_seconds": 40.85964779999631
+      "wall_seconds": 25.71017569999094
     },
     {
       "absolute_error_eV": 0.47501986436489874,
@@ -1457,7 +1457,7 @@
       "scan_kind": "relaxed",
       "status": "WEAK",
       "system": "methane",
-      "wall_seconds": 25.158373199999915
+      "wall_seconds": 19.34982449997915
     },
     {
       "caution": null,
@@ -1477,7 +1477,7 @@
       "scan_kind": "relaxed",
       "status": "INSUFFICIENT REFERENCE DATA",
       "system": "ammonia",
-      "wall_seconds": 23.423929500000668
+      "wall_seconds": 18.24440460000187
     }
   ],
   "rules": {
@@ -1602,7 +1602,7 @@
     "oxygen": "[validation] oxygen radicals",
     "stable": "[validation] stable small molecules"
   },
-  "wall_seconds": 1207.1430873000063,
+  "wall_seconds": 1449.0176838999905,
   "whole_model_reaction_energies": [
     {
       "absolute_error": 0.05852702166866078,
