@@ -1,0 +1,271 @@
+{
+  "scope": "research only; unified radial and production are frozen",
+  "qm_microscopes": {
+    "evaluated_geometries": 106,
+    "systems": {
+      "formaldehyde": {
+        "production": {
+          "count": 23,
+          "mae_eV": 0.35709000934911234,
+          "rmse_eV": 0.3810323417497435,
+          "max_absolute_eV": 0.5670150737692357
+        },
+        "unified_radial": {
+          "count": 23,
+          "mae_eV": 0.3570900093491112,
+          "rmse_eV": 0.38103234174974226,
+          "max_absolute_eV": 0.5670150737692339
+        },
+        "state_conditioned_p2": {
+          "count": 23,
+          "mae_eV": 0.3529525229209484,
+          "rmse_eV": 0.3764293463292889,
+          "max_absolute_eV": 0.5737896966217448
+        }
+      },
+      "h3": {
+        "production": {
+          "count": 23,
+          "mae_eV": 0.19116384856103172,
+          "rmse_eV": 0.22311272644090677,
+          "max_absolute_eV": 0.4891678623570548
+        },
+        "unified_radial": {
+          "count": 23,
+          "mae_eV": 0.1911638485610316,
+          "rmse_eV": 0.22311272644090674,
+          "max_absolute_eV": 0.4891678623570548
+        },
+        "state_conditioned_p2": {
+          "count": 23,
+          "mae_eV": 0.1911638485610316,
+          "rmse_eV": 0.22311272644090674,
+          "max_absolute_eV": 0.4891678623570548
+        }
+      },
+      "methane": {
+        "production": {
+          "count": 23,
+          "mae_eV": 0.18921421438540567,
+          "rmse_eV": 0.21841365935363474,
+          "max_absolute_eV": 0.3374000357093294
+        },
+        "unified_radial": {
+          "count": 23,
+          "mae_eV": 0.1892142143854055,
+          "rmse_eV": 0.21841365935363433,
+          "max_absolute_eV": 0.33740003570933297
+        },
+        "state_conditioned_p2": {
+          "count": 23,
+          "mae_eV": 0.1892142143854055,
+          "rmse_eV": 0.21841365935363433,
+          "max_absolute_eV": 0.33740003570933297
+        }
+      },
+      "water": {
+        "production": {
+          "count": 29,
+          "mae_eV": 0.5496156151903143,
+          "rmse_eV": 0.9866747335643252,
+          "max_absolute_eV": 3.5678135717391513
+        },
+        "unified_radial": {
+          "count": 29,
+          "mae_eV": 0.2021823876875964,
+          "rmse_eV": 0.21362925177411668,
+          "max_absolute_eV": 0.3265392526567279
+        },
+        "state_conditioned_p2": {
+          "count": 29,
+          "mae_eV": 0.20654618406905217,
+          "rmse_eV": 0.2160056552155988,
+          "max_absolute_eV": 0.3265392526567279
+        }
+      }
+    },
+    "all_dense": {
+      "production": {
+        "count": 98,
+        "mae_eV": 0.33572059697261997,
+        "rmse_eV": 0.5873989836129682,
+        "max_absolute_eV": 3.5678135717391513
+      },
+      "unified_radial": {
+        "count": 98,
+        "mae_eV": 0.23290872352793784,
+        "rmse_eV": 0.2654392558297924,
+        "max_absolute_eV": 0.5670150737692339
+      },
+      "state_conditioned_p2": {
+        "count": 98,
+        "mae_eV": 0.23322900829543244,
+        "rmse_eV": 0.26446520574894106,
+        "max_absolute_eV": 0.5737896966217448
+      }
+    },
+    "directional_factor_range": {
+      "minimum": 0.9866996774914808,
+      "maximum": 1.0171272125689206,
+      "count": 81
+    }
+  },
+  "molecule_preservation": [
+    {
+      "molecule": "h3",
+      "energy_change_from_radial_eV": 0.0,
+      "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+    },
+    {
+      "molecule": "methane",
+      "energy_change_from_radial_eV": 0.0,
+      "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+    },
+    {
+      "molecule": "formaldehyde",
+      "energy_change_from_radial_eV": 0.0,
+      "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+    },
+    {
+      "molecule": "water",
+      "energy_change_from_radial_eV": 0.0,
+      "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+    },
+    {
+      "molecule": "ethane",
+      "energy_change_from_radial_eV": 0.0,
+      "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+    },
+    {
+      "molecule": "methanol",
+      "energy_change_from_radial_eV": 0.0,
+      "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+    },
+    {
+      "molecule": "hydroxylamine",
+      "energy_change_from_radial_eV": 0.0,
+      "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+    },
+    {
+      "molecule": "hydrogen_peroxide",
+      "energy_change_from_radial_eV": 0.0,
+      "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+    },
+    {
+      "molecule": "h2",
+      "energy_change_from_radial_eV": 0.0,
+      "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+    },
+    {
+      "molecule": "ammonia",
+      "energy_change_from_radial_eV": 0.0,
+      "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+    }
+  ],
+  "force_and_symmetry": {
+    "autograd_force_eV_per_angstrom": 1.322277844346033,
+    "finite_difference_force_eV_per_angstrom": 1.322277844817421,
+    "force_difference_eV_per_angstrom": -4.713880397133607e-10,
+    "permuted_energy_difference_eV": -5.329070518200751e-15,
+    "permuted_force_max_difference_eV_per_angstrom": 1.068901411827028e-09
+  },
+  "cutoff_continuity": {
+    "O_H_outer_cutoff_angstrom": 1.536,
+    "samples": [
+      {
+        "distance_angstrom": 1.5359,
+        "energy_eV": -15.387885367998452,
+        "moving_oxygen_force_x_eV_per_angstrom": 0.0018306145117570867
+      },
+      {
+        "distance_angstrom": 1.536,
+        "energy_eV": -15.387885459509237,
+        "moving_oxygen_force_x_eV_per_angstrom": -2.7940218578025496e-13
+      },
+      {
+        "distance_angstrom": 1.5361,
+        "energy_eV": -15.387885459509237,
+        "moving_oxygen_force_x_eV_per_angstrom": -0.0
+      }
+    ],
+    "energy_span_eV": 9.151078472768859e-08,
+    "maximum_absolute_force_eV_per_angstrom": 0.0018306145117570867
+  },
+  "nve": {
+    "water_transfer": {
+      "unified_radial": {
+        "max_absolute_drift_eV": 0.015404863721430573,
+        "rms_drift_eV": 0.010486928733752803,
+        "final_drift_eV": 0.011649857669429053,
+        "move_caps": 0,
+        "maximum_force_component_eV_per_angstrom": 8.362888332834263,
+        "maximum_force_step_change_eV_per_angstrom": 2.0247334143900324,
+        "final_minimum_distance_angstrom": 0.9716119240289525,
+        "status": "pass"
+      },
+      "state_conditioned_p2": {
+        "max_absolute_drift_eV": 0.015514493393936846,
+        "rms_drift_eV": 0.009721044161897311,
+        "final_drift_eV": 0.009411981203948372,
+        "move_caps": 0,
+        "maximum_force_component_eV_per_angstrom": 9.490085465680357,
+        "maximum_force_step_change_eV_per_angstrom": 2.082142735705686,
+        "final_minimum_distance_angstrom": 0.922721628531122,
+        "status": "pass"
+      }
+    },
+    "grambow_crowded_reactant": {
+      "unified_radial": {
+        "max_absolute_drift_eV": 0.00012165082063830823,
+        "rms_drift_eV": 4.3839591467686065e-05,
+        "final_drift_eV": 2.320010078449286e-05,
+        "move_caps": 0,
+        "maximum_force_component_eV_per_angstrom": 3.3265039389179067,
+        "maximum_force_step_change_eV_per_angstrom": 0.2994516657113131,
+        "final_minimum_distance_angstrom": 1.0126360618429222,
+        "status": "pass"
+      },
+      "state_conditioned_p2": {
+        "max_absolute_drift_eV": 0.00012165082063830823,
+        "rms_drift_eV": 4.3839591467686065e-05,
+        "final_drift_eV": 2.320010078449286e-05,
+        "move_caps": 0,
+        "maximum_force_component_eV_per_angstrom": 3.3265039389179067,
+        "maximum_force_step_change_eV_per_angstrom": 0.2994516657113131,
+        "final_minimum_distance_angstrom": 1.0126360618429222,
+        "status": "pass"
+      }
+    },
+    "symmetric_preference_exchange": {
+      "unified_radial": {
+        "max_absolute_drift_eV": 1.5284349252908669e-06,
+        "rms_drift_eV": 8.914728141779793e-07,
+        "final_drift_eV": 1.4669976060588397e-06,
+        "move_caps": 0,
+        "maximum_force_component_eV_per_angstrom": 6.302103905213287,
+        "maximum_force_step_change_eV_per_angstrom": 0.016017794497119375,
+        "final_minimum_distance_angstrom": 1.6007386916696287,
+        "status": "pass"
+      },
+      "state_conditioned_p2": {
+        "max_absolute_drift_eV": 1.5284349252908669e-06,
+        "rms_drift_eV": 8.914728141779793e-07,
+        "final_drift_eV": 1.4669976060588397e-06,
+        "move_caps": 0,
+        "maximum_force_component_eV_per_angstrom": 6.302103905213287,
+        "maximum_force_step_change_eV_per_angstrom": 0.016017794497119375,
+        "final_minimum_distance_angstrom": 1.6007386916696287,
+        "status": "pass"
+      }
+    }
+  },
+  "gates": {
+    "water_rmse_at_most_radial": false,
+    "finite_difference_force": true,
+    "permutation_symmetry": true,
+    "cutoff_continuity": true,
+    "molecules_preserved": true,
+    "nve_finite_zero_caps": true,
+    "nve_drift_below_0_05_eV": true
+  }
+}

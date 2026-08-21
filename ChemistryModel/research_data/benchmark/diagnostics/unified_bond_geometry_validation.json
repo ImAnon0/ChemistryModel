@@ -1,0 +1,706 @@
+{
+  "scope": "research only; no production physics modified",
+  "models": [
+    "production",
+    "unified_radial",
+    "post_weighted",
+    "variational_weighted",
+    "electron_domain",
+    "joint_local_state"
+  ],
+  "qm_microscopes": {
+    "evaluated_geometries": 106,
+    "systems": {
+      "formaldehyde": {
+        "production": {
+          "count": 23,
+          "mae_eV": 0.35709000934911234,
+          "rmse_eV": 0.3810323417497435,
+          "max_absolute_eV": 0.5670150737692357
+        },
+        "unified_radial": {
+          "count": 23,
+          "mae_eV": 0.3570900093491112,
+          "rmse_eV": 0.38103234174974226,
+          "max_absolute_eV": 0.5670150737692339
+        },
+        "post_weighted": {
+          "count": 23,
+          "mae_eV": 0.30072836505717965,
+          "rmse_eV": 0.3330243457026807,
+          "max_absolute_eV": 0.5741536566304575
+        },
+        "variational_weighted": {
+          "count": 23,
+          "mae_eV": 0.3009354070292787,
+          "rmse_eV": 0.3329494768322088,
+          "max_absolute_eV": 0.5736738435024389
+        },
+        "electron_domain": {
+          "count": 23,
+          "mae_eV": 0.3581302970385251,
+          "rmse_eV": 0.3823716552991392,
+          "max_absolute_eV": 0.5654292702675807
+        },
+        "joint_local_state": {
+          "count": 23,
+          "mae_eV": 0.3012662189295835,
+          "rmse_eV": 0.3369608195510765,
+          "max_absolute_eV": 0.5921419895523936
+        }
+      },
+      "h3": {
+        "production": {
+          "count": 23,
+          "mae_eV": 0.19116384856103172,
+          "rmse_eV": 0.22311272644090677,
+          "max_absolute_eV": 0.4891678623570548
+        },
+        "unified_radial": {
+          "count": 23,
+          "mae_eV": 0.1911638485610316,
+          "rmse_eV": 0.22311272644090674,
+          "max_absolute_eV": 0.4891678623570548
+        },
+        "post_weighted": {
+          "count": 23,
+          "mae_eV": 0.1911638485610316,
+          "rmse_eV": 0.22311272644090674,
+          "max_absolute_eV": 0.4891678623570548
+        },
+        "variational_weighted": {
+          "count": 23,
+          "mae_eV": 0.19116384856137913,
+          "rmse_eV": 0.22311272644126182,
+          "max_absolute_eV": 0.4891678623575557
+        },
+        "electron_domain": {
+          "count": 23,
+          "mae_eV": 0.19116384856137913,
+          "rmse_eV": 0.22311272644126182,
+          "max_absolute_eV": 0.4891678623575557
+        },
+        "joint_local_state": {
+          "count": 23,
+          "mae_eV": 0.19116384856103144,
+          "rmse_eV": 0.22311272644090657,
+          "max_absolute_eV": 0.4891678623570548
+        }
+      },
+      "methane": {
+        "production": {
+          "count": 23,
+          "mae_eV": 0.18921421438540567,
+          "rmse_eV": 0.21841365935363474,
+          "max_absolute_eV": 0.3374000357093294
+        },
+        "unified_radial": {
+          "count": 23,
+          "mae_eV": 0.1892142143854055,
+          "rmse_eV": 0.21841365935363433,
+          "max_absolute_eV": 0.33740003570933297
+        },
+        "post_weighted": {
+          "count": 23,
+          "mae_eV": 0.18565350230917788,
+          "rmse_eV": 0.2136251504278926,
+          "max_absolute_eV": 0.32793518883422124
+        },
+        "variational_weighted": {
+          "count": 23,
+          "mae_eV": 0.18565432091320072,
+          "rmse_eV": 0.2136375237402075,
+          "max_absolute_eV": 0.3279706070870354
+        },
+        "electron_domain": {
+          "count": 23,
+          "mae_eV": 0.1888544265302952,
+          "rmse_eV": 0.2179406615518835,
+          "max_absolute_eV": 0.33648327793210697
+        },
+        "joint_local_state": {
+          "count": 23,
+          "mae_eV": 0.18475076398692697,
+          "rmse_eV": 0.2124389602336648,
+          "max_absolute_eV": 0.32440086800312073
+        }
+      },
+      "water": {
+        "production": {
+          "count": 29,
+          "mae_eV": 0.5496156151903143,
+          "rmse_eV": 0.9866747335643252,
+          "max_absolute_eV": 3.5678135717391513
+        },
+        "unified_radial": {
+          "count": 29,
+          "mae_eV": 0.2021823876875964,
+          "rmse_eV": 0.21362925177411668,
+          "max_absolute_eV": 0.3265392526567279
+        },
+        "post_weighted": {
+          "count": 29,
+          "mae_eV": 0.3439089686724834,
+          "rmse_eV": 0.3828790953125307,
+          "max_absolute_eV": 0.7697578006215657
+        },
+        "variational_weighted": {
+          "count": 29,
+          "mae_eV": 0.30769236382816245,
+          "rmse_eV": 0.32915832444850346,
+          "max_absolute_eV": 0.5561905913750849
+        },
+        "electron_domain": {
+          "count": 29,
+          "mae_eV": 0.3224736544490293,
+          "rmse_eV": 0.3420182236241829,
+          "max_absolute_eV": 0.5615119842804397
+        },
+        "joint_local_state": {
+          "count": 29,
+          "mae_eV": 0.3365534632601703,
+          "rmse_eV": 0.35345113779376147,
+          "max_absolute_eV": 0.5652470829919309
+        }
+      }
+    },
+    "all_dense": {
+      "production": {
+        "count": 98,
+        "mae_eV": 0.33572059697261997,
+        "rmse_eV": 0.5873989836129682,
+        "max_absolute_eV": 3.5678135717391513
+      },
+      "unified_radial": {
+        "count": 98,
+        "mae_eV": 0.23290872352793784,
+        "rmse_eV": 0.2654392558297924,
+        "max_absolute_eV": 0.5670150737692339
+      },
+      "post_weighted": {
+        "count": 98,
+        "mae_eV": 0.26078481181461194,
+        "rmse_eV": 0.30298953374847143,
+        "max_absolute_eV": 0.7697578006215657
+      },
+      "variational_weighted": {
+        "count": 98,
+        "mae_eV": 0.25011643684291285,
+        "rmse_eV": 0.2836775703590495,
+        "max_absolute_eV": 0.5736738435024389
+      },
+      "electron_domain": {
+        "count": 98,
+        "mae_eV": 0.26866482793894325,
+        "rmse_eV": 0.3029191997139041,
+        "max_absolute_eV": 0.5654292702675807
+      },
+      "joint_local_state": {
+        "count": 98,
+        "mae_eV": 0.258522546515596,
+        "rmse_eV": 0.2930714193358163,
+        "max_absolute_eV": 0.5921419895523936
+      }
+    }
+  },
+  "molecule_invariance": {
+    "h3": {
+      "post_weighted": {
+        "energy_change_from_radial_eV": 0.0,
+        "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+      },
+      "variational_weighted": {
+        "energy_change_from_radial_eV": 1.1006306976923952e-11,
+        "maximum_force_change_from_radial_eV_per_angstrom": 8.842704346534447e-12
+      },
+      "electron_domain": {
+        "energy_change_from_radial_eV": 1.1006306976923952e-11,
+        "maximum_force_change_from_radial_eV_per_angstrom": 8.842704346534447e-12
+      },
+      "joint_local_state": {
+        "energy_change_from_radial_eV": 0.0,
+        "maximum_force_change_from_radial_eV_per_angstrom": 3.552713678800501e-15
+      }
+    },
+    "methane": {
+      "post_weighted": {
+        "energy_change_from_radial_eV": 0.0,
+        "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+      },
+      "variational_weighted": {
+        "energy_change_from_radial_eV": 3.603517484407348e-11,
+        "maximum_force_change_from_radial_eV_per_angstrom": 9.361511565941782e-12
+      },
+      "electron_domain": {
+        "energy_change_from_radial_eV": 0.010986122922719943,
+        "maximum_force_change_from_radial_eV_per_angstrom": 9.361511565941782e-12
+      },
+      "joint_local_state": {
+        "energy_change_from_radial_eV": -3.552713678800501e-15,
+        "maximum_force_change_from_radial_eV_per_angstrom": 1.3877787807814457e-17
+      }
+    },
+    "formaldehyde": {
+      "post_weighted": {
+        "energy_change_from_radial_eV": 0.0,
+        "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+      },
+      "variational_weighted": {
+        "energy_change_from_radial_eV": 3.559819106158102e-11,
+        "maximum_force_change_from_radial_eV_per_angstrom": 4.668976316679618e-11
+      },
+      "electron_domain": {
+        "energy_change_from_radial_eV": 0.01098612041604241,
+        "maximum_force_change_from_radial_eV_per_angstrom": 4.668976316679618e-11
+      },
+      "joint_local_state": {
+        "energy_change_from_radial_eV": 0.0,
+        "maximum_force_change_from_radial_eV_per_angstrom": 5.551115123125783e-17
+      }
+    },
+    "water": {
+      "post_weighted": {
+        "energy_change_from_radial_eV": 0.0,
+        "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+      },
+      "variational_weighted": {
+        "energy_change_from_radial_eV": 2.0753176954713126e-11,
+        "maximum_force_change_from_radial_eV_per_angstrom": 2.262368070660159e-11
+      },
+      "electron_domain": {
+        "energy_change_from_radial_eV": 0.010857780447031118,
+        "maximum_force_change_from_radial_eV_per_angstrom": 0.00796200034920208
+      },
+      "joint_local_state": {
+        "energy_change_from_radial_eV": -1.7763568394002505e-15,
+        "maximum_force_change_from_radial_eV_per_angstrom": 2.7755575615628914e-17
+      }
+    },
+    "ethane": {
+      "post_weighted": {
+        "energy_change_from_radial_eV": 0.0,
+        "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+      },
+      "variational_weighted": {
+        "energy_change_from_radial_eV": 5.5710103197270655e-11,
+        "maximum_force_change_from_radial_eV_per_angstrom": 1.7015222564253918e-11
+      },
+      "electron_domain": {
+        "energy_change_from_radial_eV": 0.021972245832412085,
+        "maximum_force_change_from_radial_eV_per_angstrom": 1.801891968966629e-11
+      },
+      "joint_local_state": {
+        "energy_change_from_radial_eV": -1.0658141036401503e-14,
+        "maximum_force_change_from_radial_eV_per_angstrom": 5.551115123125783e-17
+      }
+    },
+    "methanol": {
+      "post_weighted": {
+        "energy_change_from_radial_eV": 0.0,
+        "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+      },
+      "variational_weighted": {
+        "energy_change_from_radial_eV": 3.416289473534562e-11,
+        "maximum_force_change_from_radial_eV_per_angstrom": 3.109465462891592e-11
+      },
+      "electron_domain": {
+        "energy_change_from_radial_eV": 0.017928341246374657,
+        "maximum_force_change_from_radial_eV_per_angstrom": 0.16522955849532936
+      },
+      "joint_local_state": {
+        "energy_change_from_radial_eV": 0.0,
+        "maximum_force_change_from_radial_eV_per_angstrom": 2.7755575615628914e-17
+      }
+    },
+    "hydroxylamine": {
+      "post_weighted": {
+        "energy_change_from_radial_eV": 3.6344260934129125e-12,
+        "maximum_force_change_from_radial_eV_per_angstrom": 3.070445508956965e-09
+      },
+      "variational_weighted": {
+        "energy_change_from_radial_eV": 2.4350299554498633e-11,
+        "maximum_force_change_from_radial_eV_per_angstrom": 1.7514706629473409e-09
+      },
+      "electron_domain": {
+        "energy_change_from_radial_eV": 0.021962674938436066,
+        "maximum_force_change_from_radial_eV_per_angstrom": 0.0004657497641580022
+      },
+      "joint_local_state": {
+        "energy_change_from_radial_eV": 1.5489831639570184e-12,
+        "maximum_force_change_from_radial_eV_per_angstrom": 1.729391616023257e-09
+      }
+    },
+    "hydrogen_peroxide": {
+      "post_weighted": {
+        "energy_change_from_radial_eV": -2.922160291518594e-10,
+        "maximum_force_change_from_radial_eV_per_angstrom": 2.4792460040501396e-07
+      },
+      "variational_weighted": {
+        "energy_change_from_radial_eV": 4.784368456967059e-10,
+        "maximum_force_change_from_radial_eV_per_angstrom": 6.45626673234645e-08
+      },
+      "electron_domain": {
+        "energy_change_from_radial_eV": 0.021972149429018373,
+        "maximum_force_change_from_radial_eV_per_angstrom": 1.8088448323350104e-06
+      },
+      "joint_local_state": {
+        "energy_change_from_radial_eV": 4.311289103497984e-10,
+        "maximum_force_change_from_radial_eV_per_angstrom": 5.8551080650559584e-08
+      }
+    },
+    "h2": {
+      "post_weighted": {
+        "energy_change_from_radial_eV": 0.0,
+        "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+      },
+      "variational_weighted": {
+        "energy_change_from_radial_eV": 9.052314453583676e-12,
+        "maximum_force_change_from_radial_eV_per_angstrom": 1.804422583573384e-11
+      },
+      "electron_domain": {
+        "energy_change_from_radial_eV": 9.052314453583676e-12,
+        "maximum_force_change_from_radial_eV_per_angstrom": 1.804422583573384e-11
+      },
+      "joint_local_state": {
+        "energy_change_from_radial_eV": 0.0,
+        "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+      }
+    },
+    "ammonia": {
+      "post_weighted": {
+        "energy_change_from_radial_eV": 0.0,
+        "maximum_force_change_from_radial_eV_per_angstrom": 0.0
+      },
+      "variational_weighted": {
+        "energy_change_from_radial_eV": 2.743938409821567e-11,
+        "maximum_force_change_from_radial_eV_per_angstrom": 3.781774893241163e-11
+      },
+      "electron_domain": {
+        "energy_change_from_radial_eV": 0.010986122913417162,
+        "maximum_force_change_from_radial_eV_per_angstrom": 4.027489453051203e-11
+      },
+      "joint_local_state": {
+        "energy_change_from_radial_eV": 1.7763568394002505e-15,
+        "maximum_force_change_from_radial_eV_per_angstrom": 1.1102230246251565e-16
+      }
+    }
+  },
+  "force_and_permutation": {
+    "production": {
+      "autograd_force_eV_per_angstrom": 1.3222778443460053,
+      "finite_difference_force_eV_per_angstrom": 1.322277844817421,
+      "force_difference_eV_per_angstrom": -4.714157952889764e-10,
+      "permuted_energy_difference_eV": 0.0,
+      "permuted_force_max_difference_eV_per_angstrom": 9.485745522397337e-13
+    },
+    "unified_radial": {
+      "autograd_force_eV_per_angstrom": 1.3222778443460053,
+      "finite_difference_force_eV_per_angstrom": 1.322277844817421,
+      "force_difference_eV_per_angstrom": -4.714157952889764e-10,
+      "permuted_energy_difference_eV": 3.552713678800501e-15,
+      "permuted_force_max_difference_eV_per_angstrom": 9.512390874988341e-13
+    },
+    "post_weighted": {
+      "autograd_force_eV_per_angstrom": 0.7271624109723777,
+      "finite_difference_force_eV_per_angstrom": 0.7271624115290364,
+      "force_difference_eV_per_angstrom": -5.566587191196959e-10,
+      "permuted_energy_difference_eV": 5.329070518200751e-15,
+      "permuted_force_max_difference_eV_per_angstrom": 3.552713678800501e-15
+    },
+    "variational_weighted": {
+      "autograd_force_eV_per_angstrom": 0.4183125976823773,
+      "finite_difference_force_eV_per_angstrom": 0.4183121958156732,
+      "force_difference_eV_per_angstrom": 4.018667040806001e-07,
+      "permuted_energy_difference_eV": 2.312816604899126e-12,
+      "permuted_force_max_difference_eV_per_angstrom": 2.6989370436325544e-06
+    },
+    "electron_domain": {
+      "autograd_force_eV_per_angstrom": 0.3794754953630531,
+      "finite_difference_force_eV_per_angstrom": 0.37947577000707605,
+      "force_difference_eV_per_angstrom": -2.746440229683955e-07,
+      "permuted_energy_difference_eV": -1.0444978215673473e-12,
+      "permuted_force_max_difference_eV_per_angstrom": 6.975615233884014e-06
+    },
+    "joint_local_state": {
+      "autograd_force_eV_per_angstrom": 0.5126479280745772,
+      "finite_difference_force_eV_per_angstrom": 0.5126479227790526,
+      "force_difference_eV_per_angstrom": 5.29552457440019e-09,
+      "permuted_energy_difference_eV": 5.53157519789238e-12,
+      "permuted_force_max_difference_eV_per_angstrom": 9.426052827166131e-08
+    }
+  },
+  "cutoff_continuity": {
+    "O_H_outer_cutoff_angstrom": 1.536,
+    "models": {
+      "production": {
+        "samples": [
+          {
+            "distance_angstrom": 1.5359,
+            "energy_eV": -5.1569339639626595,
+            "moving_atom_radial_force_eV_per_angstrom": -0.0069477671024774845
+          },
+          {
+            "distance_angstrom": 1.536,
+            "energy_eV": -5.156933616624347,
+            "moving_atom_radial_force_eV_per_angstrom": -4.0400997240187864e-11
+          },
+          {
+            "distance_angstrom": 1.5361,
+            "energy_eV": -5.156933616624347,
+            "moving_atom_radial_force_eV_per_angstrom": 0.0
+          }
+        ],
+        "energy_span_eV": 3.473383127783336e-07,
+        "maximum_absolute_force_eV_per_angstrom": 0.0069477671024774845
+      },
+      "unified_radial": {
+        "samples": [
+          {
+            "distance_angstrom": 1.5359,
+            "energy_eV": -5.1570029580430345,
+            "moving_atom_radial_force_eV_per_angstrom": -0.0005446300024458048
+          },
+          {
+            "distance_angstrom": 1.536,
+            "energy_eV": -5.156933616624347,
+            "moving_atom_radial_force_eV_per_angstrom": -4.0400997240187864e-11
+          },
+          {
+            "distance_angstrom": 1.5361,
+            "energy_eV": -5.156933616624347,
+            "moving_atom_radial_force_eV_per_angstrom": 0.0
+          }
+        ],
+        "energy_span_eV": 6.93414186878627e-05,
+        "maximum_absolute_force_eV_per_angstrom": 0.0005446300024458048
+      },
+      "post_weighted": {
+        "samples": [
+          {
+            "distance_angstrom": 1.5359,
+            "energy_eV": -5.157003059445159,
+            "moving_atom_radial_force_eV_per_angstrom": -0.0025661374467040106
+          },
+          {
+            "distance_angstrom": 1.536,
+            "energy_eV": -5.156933616624347,
+            "moving_atom_radial_force_eV_per_angstrom": -4.0400997240187864e-11
+          },
+          {
+            "distance_angstrom": 1.5361,
+            "energy_eV": -5.156933616624347,
+            "moving_atom_radial_force_eV_per_angstrom": 0.0
+          }
+        ],
+        "energy_span_eV": 6.944282081189357e-05,
+        "maximum_absolute_force_eV_per_angstrom": 0.0025661374467040106
+      },
+      "variational_weighted": {
+        "samples": [
+          {
+            "distance_angstrom": 1.5359,
+            "energy_eV": -5.156933745232483,
+            "moving_atom_radial_force_eV_per_angstrom": -0.0025726722024803387
+          },
+          {
+            "distance_angstrom": 1.536,
+            "energy_eV": -5.156933616614033,
+            "moving_atom_radial_force_eV_per_angstrom": -6.407319955963404e-11
+          },
+          {
+            "distance_angstrom": 1.5361,
+            "energy_eV": -5.156933616614033,
+            "moving_atom_radial_force_eV_per_angstrom": 0.0
+          }
+        ],
+        "energy_span_eV": 1.286184501125831e-07,
+        "maximum_absolute_force_eV_per_angstrom": 0.0025726722024803387
+      },
+      "electron_domain": {
+        "samples": [
+          {
+            "distance_angstrom": 1.5359,
+            "energy_eV": -5.156933591209035,
+            "moving_atom_radial_force_eV_per_angstrom": 0.0005077495100206156
+          },
+          {
+            "distance_angstrom": 1.536,
+            "energy_eV": -5.156933616614033,
+            "moving_atom_radial_force_eV_per_angstrom": -6.407319955963404e-11
+          },
+          {
+            "distance_angstrom": 1.5361,
+            "energy_eV": -5.156933616614033,
+            "moving_atom_radial_force_eV_per_angstrom": 0.0
+          }
+        ],
+        "energy_span_eV": 2.5404998105216237e-08,
+        "maximum_absolute_force_eV_per_angstrom": 0.0005077495100206156
+      },
+      "joint_local_state": {
+        "samples": [
+          {
+            "distance_angstrom": 1.5359,
+            "energy_eV": -5.157003059445159,
+            "moving_atom_radial_force_eV_per_angstrom": -0.002572672276122886
+          },
+          {
+            "distance_angstrom": 1.536,
+            "energy_eV": -5.156933616624347,
+            "moving_atom_radial_force_eV_per_angstrom": -6.407319955963404e-11
+          },
+          {
+            "distance_angstrom": 1.5361,
+            "energy_eV": -5.156933616624347,
+            "moving_atom_radial_force_eV_per_angstrom": 0.0
+          }
+        ],
+        "energy_span_eV": 6.944282081189357e-05,
+        "maximum_absolute_force_eV_per_angstrom": 0.002572672276122886
+      }
+    }
+  },
+  "gates": {
+    "post_weighted": {
+      "finite_difference_force": true,
+      "permutation_symmetry": true,
+      "cutoff_continuity": true,
+      "accepted_molecule_invariance": true,
+      "water_not_worse_than_radial": false,
+      "passes_static_and_qm_gates": false,
+      "water_nve_drift_below_0_05_and_no_caps": false,
+      "passes_all_evaluated_gates": false
+    },
+    "variational_weighted": {
+      "finite_difference_force": true,
+      "permutation_symmetry": true,
+      "cutoff_continuity": true,
+      "accepted_molecule_invariance": true,
+      "water_not_worse_than_radial": false,
+      "passes_static_and_qm_gates": false,
+      "water_nve_drift_below_0_05_and_no_caps": true,
+      "passes_all_evaluated_gates": false
+    },
+    "electron_domain": {
+      "finite_difference_force": true,
+      "permutation_symmetry": true,
+      "cutoff_continuity": true,
+      "accepted_molecule_invariance": false,
+      "water_not_worse_than_radial": false,
+      "passes_static_and_qm_gates": false,
+      "water_nve_drift_below_0_05_and_no_caps": true,
+      "passes_all_evaluated_gates": false
+    },
+    "joint_local_state": {
+      "finite_difference_force": true,
+      "permutation_symmetry": true,
+      "cutoff_continuity": true,
+      "accepted_molecule_invariance": true,
+      "water_not_worse_than_radial": false,
+      "passes_static_and_qm_gates": false,
+      "water_nve_drift_below_0_05_and_no_caps": true,
+      "passes_all_evaluated_gates": false
+    }
+  },
+  "frozen_grambow_context": {
+    "production": {
+      "barrier_mae_eV": 4.52,
+      "barrier_rmse_eV": 6.483,
+      "barrier_sign_agreement_percent": 87.0,
+      "reaction_mae_eV": 4.406,
+      "reaction_rmse_eV": 7.069
+    },
+    "unified_radial": {
+      "barrier_mae_eV": 1.475,
+      "barrier_rmse_eV": 1.858,
+      "barrier_sign_agreement_percent": 99.5,
+      "reaction_mae_eV": 2.233,
+      "reaction_rmse_eV": 2.872
+    },
+    "candidate_metrics": "not evaluated because the water QM gate failed"
+  },
+  "joint_state_scaling": {
+    "formula": "product over incident edges of (maximum_order + 1)",
+    "binary_H_contacts": {
+      "2": 4,
+      "3": 8,
+      "4": 16,
+      "5": 32,
+      "6": 64,
+      "7": 128,
+      "8": 256
+    },
+    "order_0_to_3_heavy_contacts": {
+      "2": 16,
+      "3": 64,
+      "4": 256,
+      "5": 1024,
+      "6": 4096,
+      "7": 16384,
+      "8": 65536
+    },
+    "prototype_state_limit": 20000
+  },
+  "dynamics_validation": {
+    "case": "matched water transfer",
+    "steps": 250,
+    "time_step_fs": 0.25,
+    "models": {
+      "unified_radial": {
+        "max_absolute_drift_eV": 0.015404863721430573,
+        "rms_drift_eV": 0.010486928733752803,
+        "final_drift_eV": 0.011649857669429053,
+        "move_caps": 0,
+        "maximum_force_component_eV_per_angstrom": 8.362888332834263,
+        "maximum_force_step_change_eV_per_angstrom": 2.0247334143900324,
+        "final_minimum_distance_angstrom": 0.9716119240289525,
+        "status": "pass"
+      },
+      "post_weighted": {
+        "max_absolute_drift_eV": 0.5940297872165772,
+        "rms_drift_eV": 0.58779553078732,
+        "final_drift_eV": 0.5928850700678883,
+        "move_caps": 0,
+        "maximum_force_component_eV_per_angstrom": 30.246309966428093,
+        "maximum_force_step_change_eV_per_angstrom": 5.510799427183862,
+        "final_minimum_distance_angstrom": 0.8820364326539892,
+        "status": "fail_gate"
+      },
+      "variational_weighted": {
+        "max_absolute_drift_eV": 0.013097603036356986,
+        "rms_drift_eV": 0.009173377953488089,
+        "final_drift_eV": 0.010061487734345675,
+        "move_caps": 0,
+        "maximum_force_component_eV_per_angstrom": 6.115750365438782,
+        "maximum_force_step_change_eV_per_angstrom": 1.1813648650317834,
+        "final_minimum_distance_angstrom": 0.9554854696556844,
+        "status": "pass"
+      },
+      "electron_domain": {
+        "max_absolute_drift_eV": 0.011343779353834904,
+        "rms_drift_eV": 0.009787442599977903,
+        "final_drift_eV": 0.010044393768321669,
+        "move_caps": 0,
+        "maximum_force_component_eV_per_angstrom": 5.489478539033062,
+        "maximum_force_step_change_eV_per_angstrom": 0.90088986590575,
+        "final_minimum_distance_angstrom": 0.9482341320677465,
+        "status": "pass"
+      },
+      "joint_local_state": {
+        "max_absolute_drift_eV": 0.011665800391106984,
+        "rms_drift_eV": 0.0095419742363798,
+        "final_drift_eV": 0.010007461690488384,
+        "move_caps": 0,
+        "maximum_force_component_eV_per_angstrom": 5.2370727747010815,
+        "maximum_force_step_change_eV_per_angstrom": 1.001164896810332,
+        "final_minimum_distance_angstrom": 0.9558363634162077,
+        "status": "pass"
+      }
+    },
+    "crowded_joint_state_case": "not run: local joint state count is exponential and the static water gate already failed"
+  },
+  "downstream_validation": {
+    "nve": "matched water-transfer NVE run; no candidate promoted",
+    "grambow": "not run: every candidate failed the water QM gate"
+  }
+}
