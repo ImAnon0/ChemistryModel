@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+import torch
+
 
 class NullEnergyTerm:
-    """Explicit zero contribution extension."""
+    """Explicit zero contribution extension.
+
+    The extension boundary receives the current energy tensor and must
+    return a contribution with identical device/dtype semantics.
+    """
 
     name = "null"
 
     def energy(self, context, current_energy):
-        return current_energy * 0.0
+        return torch.zeros_like(current_energy)

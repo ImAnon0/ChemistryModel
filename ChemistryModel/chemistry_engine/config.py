@@ -37,7 +37,9 @@ def public_parameter_payload(module) -> dict:
 
 def parameter_identity(parameters) -> tuple[str, str]:
     encoded = json.dumps(
-        _normalise_parameter(parameters), sort_keys=True, separators=(",", ":"),
+        _normalise_parameter(parameters),
+        sort_keys=True,
+        separators=(",", ":"),
         allow_nan=False,
     )
     return encoded, hashlib.sha256(encoded.encode("utf-8")).hexdigest()
@@ -63,6 +65,7 @@ class PhysicsSpec:
     capacity: CapacitySpec
     geometry: GeometrySpec
     enabled_terms: tuple[str, ...]
+    enabled_extensions: tuple[str, ...] = ()
 
     @classmethod
     def unified_radial_v1(
@@ -92,6 +95,7 @@ class PhysicsSpec:
                 "unified_capacity_correction",
                 "established_geometry_correction",
             ),
+            enabled_extensions=(),
         )
 
 

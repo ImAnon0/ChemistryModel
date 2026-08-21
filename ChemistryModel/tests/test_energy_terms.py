@@ -18,12 +18,13 @@ def test_null_energy_term_is_exactly_zero():
         [case],
         device="cpu",
         dtype=torch.float64,
+        box_size=40.0,
     )
 
     term = NullEnergyTerm()
 
     contribution = term.energy(
-        simulation._last_chemistry_context,
+        simulation._last_chemistry_result,
         simulation._potential_energy,
     )
 
