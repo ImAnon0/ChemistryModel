@@ -522,7 +522,35 @@ def grouped_simulation_class(options):
         )
         return OptimisedValenceStateBatchedSimulation
 
+    if physics == "unified-radial":
+        from research.unified_bond_capacity import (
+            UnifiedBondCapacityEnergyPrototype,
+        )
+        return UnifiedBondCapacityEnergyPrototype
+
     raise ValueError(f"unknown physics engine: {physics!r}")
+
+
+def simulation_physics_provenance(simulation):
+    """Return auditable identity for the concrete selected implementation."""
+    from physics_provenance import physics_source_identity
+
+    identity = physics_source_identity(type(simulation))
+    provenance = {
+        "physics_model_id": getattr(simulation, "model_id", None),
+        "physics_source_algorithm": identity["algorithm"],
+        "physics_source_sha256": identity["sha256"],
+        "physics_source_files": identity["files"],
+    }
+    spec = getattr(simulation, "chemistry_physics_spec", None)
+    if spec is not None:
+        provenance.update({
+            "physics_parameter_sha256": spec.parameter_sha256,
+            "physics_enabled_terms": list(spec.enabled_terms),
+            "physics_capacity_solver": spec.capacity.solver,
+            "physics_geometry_convention": spec.geometry.convention,
+        })
+    return provenance
 
 
 def run_group(mixture, seeds, options, progress=None, folder=None):
@@ -893,6 +921,7 @@ def summarise_run(recorder, simulation, seed, seconds, strikes,
         "physics_model_revision": getattr(
             simulation, "physics_model_revision", 0
         ),
+        **simulation_physics_provenance(simulation),
         "heavy_valence_group_diagnostics": dict(
             getattr(
                 simulation,
@@ -1883,8 +1912,11 @@ def folder_name(options):
 
     safe = options.mixture.strip().replace("+", "plus")
 
-    if getattr(options, "physics", "reactive") != "reactive":
+    selected_physics = getattr(options, "physics", "reactive")
+    if selected_physics == "optimised-valence":
         safe += "_optimised_valence"
+    elif selected_physics == "unified-radial":
+        safe += "_unified_radial_v1"
     safe = "-".join(safe.replace("_", " ").split())
 
     parts = [
@@ -2365,12 +2397,13 @@ def main():
     )
     parser.add_argument(
         "--physics",
-        choices=("reactive", "optimised-valence"),
+        choices=("reactive", "optimised-valence", "unified-radial"),
         default="reactive",
         help=(
             "physics engine. reactive preserves the historical default; "
             "optimised-valence enables the validated factorisable "
-            "H-state/heavy-valence engine for fresh grouped runs"
+            "H-state/heavy-valence engine; unified-radial selects the frozen "
+            "scientific reference for fresh grouped runs"
         ),
     )
     parser.add_argument(
@@ -2432,20 +2465,20 @@ def main():
 
 
     if (
-        options.physics == "optimised-valence"
+        options.physics in ("optimised-valence", "unified-radial")
         and options.continue_from
     ):
         raise SystemExit(
-            "--physics optimised-valence is not wired to continuation yet. "
+            f"--physics {options.physics} is not wired to continuation yet. "
             "Use it for a fresh grouped run."
         )
 
     if (
-        options.physics == "optimised-valence"
+        options.physics in ("optimised-valence", "unified-radial")
         and options.group <= 1
     ):
         raise SystemExit(
-            "--physics optimised-valence currently requires --group 2 "
+            f"--physics {options.physics} currently requires --group 2 "
             "or greater. The historical single-box path is unchanged."
         )
 
@@ -2748,6 +2781,7 @@ def run_all(planned, mixture, options, index, index_path, progress):
             "physics_model_revision": getattr(
                 simulation, "physics_model_revision", 0
             ),
+            **simulation_physics_provenance(simulation),
             "number": 0,
             "file": name,
             "mixture": options.mixture,

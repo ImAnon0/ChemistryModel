@@ -15,6 +15,14 @@ from scipy.optimize import minimize
 
 import reactive as R
 from batched_torch import BatchedReactiveSimulation
+from chemistry_engine.backends.torch_backend import (
+    execution_config,
+    interaction_context,
+)
+from chemistry_engine.config import PhysicsSpec, public_parameter_payload
+from chemistry_engine.registry import build as build_chemistry_engine
+import chemistry_engine.unified_radial  # noqa: F401 - registers model builder
+from chemistry_engine.results import EnergyResult
 from h_state_factorised_torch import _all_valid_states
 from h_state_torch import (
     _contact_overlap,
@@ -85,18 +93,46 @@ class UnifiedBondCapacityEnergyPrototype(OptimisedValenceStateBatchedSimulation)
 
     physics_model_name = "research_unified_bond_capacity_energy_v0"
     physics_model_revision = 0
+    model_id = "unified_radial_v1"
     research_only = True
 
     _heavy_edges = SharedBondStateHamiltonianPrototype._heavy_edges
     _edge_surface = SharedBondStateHamiltonianPrototype._edge_surface
+
+    @classmethod
+    def make_physics_spec(
+        cls,
+        capacity_temperature=0.01,
+        h_regularisation_temperature=1e-4,
+    ):
+        parameter_payload = {
+            "reactive": public_parameter_payload(R),
+            "unified_capacity_temperature": float(capacity_temperature),
+            "unified_h_regularisation_temperature": float(
+                h_regularisation_temperature
+            ),
+        }
+        return PhysicsSpec.unified_radial_v1(
+            parameter_payload,
+            capacity_temperature=capacity_temperature,
+            h_regularisation_temperature=h_regularisation_temperature,
+        )
+
+    @classmethod
+    def default_physics_spec(cls):
+        return cls.make_physics_spec()
 
     def __init__(
         self,
         *args,
         unified_capacity_temperature=0.01,
         unified_h_regularisation_temperature=1e-4,
+        capture_equivalence_state=False,
+        use_canonical_engine=True,
         **kwargs,
     ):
+        self.capture_equivalence_state = bool(capture_equivalence_state)
+        self.use_canonical_engine = bool(use_canonical_engine)
         self.unified_capacity_temperature = float(unified_capacity_temperature)
         if self.unified_capacity_temperature <= 0.0:
             raise ValueError("unified_capacity_temperature must be positive")
@@ -110,9 +146,30 @@ class UnifiedBondCapacityEnergyPrototype(OptimisedValenceStateBatchedSimulation)
         self._unified_membership = None
         self._unified_diagnostics = None
         self._unified_lambda_cache = {}
+        self.chemistry_physics_spec = self.make_physics_spec(
+            capacity_temperature=self.unified_capacity_temperature,
+            h_regularisation_temperature=(
+                self.unified_h_regularisation_temperature
+            ),
+        )
+        self.chemistry_engine = build_chemistry_engine(
+            self.model_id, self, self.chemistry_physics_spec
+        )
         super().__init__(*args, **kwargs)
+        self.chemistry_execution_config = execution_config(self)
 
     def energy_per_atom(self, positions):
+        if not self.use_canonical_engine:
+            return self._legacy_unified_radial_energy_per_atom(positions)
+        context = interaction_context(self, positions)
+        result = self.chemistry_engine.energy(context)
+        self._last_chemistry_result = result
+        self._capture_equivalence_result(result)
+        return result.per_atom
+
+    def _legacy_unified_radial_energy_per_atom(self, positions):
+        """Frozen pre-extraction composition retained for direct comparison."""
+
         # Evaluate the base exactly once, retaining its live intermediates.
         base = BatchedReactiveSimulation.energy_per_atom(self, positions)
         try:
@@ -122,7 +179,36 @@ class UnifiedBondCapacityEnergyPrototype(OptimisedValenceStateBatchedSimulation)
             topology_correction = self._valence_topology_correction(positions)
         finally:
             self._reactive_intermediates = None
-        return base + capacity_correction + topology_correction
+        total = base + capacity_correction + topology_correction
+        result = EnergyResult(
+            per_atom=total,
+            components={
+                "base": base,
+                "base_bond": self._profile_energy_parts["bond"],
+                "base_overcoordination": self._profile_energy_parts["over"],
+                "base_angle": self._profile_energy_parts["angle"],
+                "capacity_correction": capacity_correction,
+                "topology_correction": topology_correction,
+                "total": total,
+            },
+            state={
+                "membership": self._unified_membership,
+                "diagnostics": self._unified_diagnostics,
+            },
+        )
+        self._last_chemistry_result = result
+        self._capture_equivalence_result(result)
+        return total
+
+    def _capture_equivalence_result(self, result):
+        if self.capture_equivalence_state:
+            self._unified_equivalence_energy_parts = {
+                name: value.detach()
+                for name, value in result.components.items()
+            }
+            self._unified_equivalence_membership = (
+                result.state["membership"].detach()
+            )
 
     def _h_factor(self, edge_atoms, edge_rows, edge_slots, values, heavy_index):
         taper = values["taper"]
@@ -511,6 +597,20 @@ class UnifiedBondCapacityEnergyPrototype(OptimisedValenceStateBatchedSimulation)
                 "base_pair_eV": float(base_pair.detach().cpu()),
                 "removed_over_eV": float(original_over[start:stop].sum().detach().cpu()),
                 "heavy_bond_orders": heavy_bond_orders,
+                **({
+                    "h_state_probabilities": [
+                        probability.detach().cpu().tolist()
+                        for probability in h_probability
+                    ],
+                    "h_state_bases": [
+                        [list(state) for state in factor.states]
+                        for factor in h_factors
+                    ],
+                    "heavy_state_probabilities": [
+                        probability.detach().cpu().tolist()
+                        for probability in hh_probability
+                    ],
+                } if self.capture_equivalence_state else {}),
             })
 
         self._unified_membership = membership
@@ -520,6 +620,14 @@ class UnifiedBondCapacityEnergyPrototype(OptimisedValenceStateBatchedSimulation)
             "topology_source": "established_heavy_valence",
         }
         return correction
+
+
+class LegacyUnifiedRadialReference(UnifiedBondCapacityEnergyPrototype):
+    """Compatibility adapter executing the pre-Stage-2B composition path."""
+
+    def __init__(self, *args, **kwargs):
+        kwargs["use_canonical_engine"] = False
+        super().__init__(*args, **kwargs)
 
 
 class UnifiedBondCapacityTopologyPrototype(UnifiedBondCapacityEnergyPrototype):

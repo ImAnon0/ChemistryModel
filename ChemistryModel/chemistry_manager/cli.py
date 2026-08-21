@@ -89,7 +89,10 @@ def build_parser():
     produce.add_argument("--device", default=None)
     produce.add_argument(
         "--physics",
-        choices=("optimised-valence", "standard", "high_fidelity"),
+        choices=(
+            "optimised-valence", "standard", "high_fidelity",
+            "unified-radial",
+        ),
         default="optimised-valence",
         help=(
             "teacher physics (default: current validated Optimised-Valence "
@@ -126,7 +129,10 @@ def build_parser():
     autonomous.add_argument("--device", default=None)
     autonomous.add_argument(
         "--physics",
-        choices=("optimised-valence", "standard", "high_fidelity"),
+        choices=(
+            "optimised-valence", "standard", "high_fidelity",
+            "unified-radial",
+        ),
         default=None,
     )
     autonomous.add_argument("--ordinary-frame-fs", type=float, default=None)

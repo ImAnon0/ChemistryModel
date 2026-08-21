@@ -157,6 +157,7 @@ GOLDEN_QUICK_CHECKS = (
 )
 
 GOLDEN_STANDARD_EXTRA = (
+    ("unified radial baseline equivalence", "validate_unified_radial_equivalence.py"),
     ("optimised valence integration", "validate_optimised_valence_integration.py"),
     ("batched heavy valence", "validate_batched_heavy_valence.py"),
     ("large heavy valence states", "validate_large_heavy_valence_states.py"),
@@ -314,11 +315,21 @@ def golden_regressions(mode):
     if mode == "full":
         label = "pytest suite"
         _progress_start(total, total, label)
-        result = _run_command_check(
-            label,
-            [sys.executable, "-m", "pytest", "-q"],
-            timeout_seconds=1800,
-        )
+        # Windows can deny cleanup/traversal of the system pytest temp root.
+        # Keep the regression sandbox inside the project, as the standalone
+        # release command does, without changing any test or physics path.
+        with tempfile.TemporaryDirectory(
+            prefix=".pytest_validation_", dir=PROJECT_ROOT
+        ) as pytest_temporary:
+            result = _run_command_check(
+                label,
+                [
+                    sys.executable, "-m", "pytest", "-q",
+                    "-p", "no:cacheprovider",
+                    "--basetemp", pytest_temporary,
+                ],
+                timeout_seconds=1800,
+            )
         rows.append(result)
         _progress_finish(result)
 

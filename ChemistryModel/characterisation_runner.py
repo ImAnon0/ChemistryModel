@@ -98,6 +98,11 @@ def simulation_class_for_physics(physics):
             OptimisedValenceStateBatchedSimulation,
         )
         return OptimisedValenceStateBatchedSimulation
+    if mode == "unified-radial":
+        from research.unified_bond_capacity import (
+            UnifiedBondCapacityEnergyPrototype,
+        )
+        return UnifiedBondCapacityEnergyPrototype
     raise ValueError(f"unknown characterisation physics: {physics!r}")
 
 
@@ -105,18 +110,36 @@ def physics_metadata(physics, simulation=None):
     """Return provenance from the class that will (or did) run the physics."""
     mode = str(physics)
     source = simulation if simulation is not None else simulation_class_for_physics(mode)
+    from physics_provenance import physics_source_identity
+    source_class = source if isinstance(source, type) else type(source)
+    identity = physics_source_identity(source_class)
+    spec = getattr(source, "chemistry_physics_spec", None)
+    if spec is None and hasattr(source_class, "default_physics_spec"):
+        spec = source_class.default_physics_spec()
     fallback_model = {
         "standard": STANDARD_PHYSICS_MODEL,
         "high_fidelity": HIGH_FIDELITY_PHYSICS_MODEL,
     }.get(mode, mode)
-    return {
+    metadata = {
         "physics_mode": mode,
+        "physics_model_id": getattr(source, "model_id", None),
         "physics_model": getattr(source, "physics_model_name", fallback_model),
         "physics_model_revision": getattr(source, "physics_model_revision", None),
         "physics_parameters": (
             high_fidelity_parameters() if mode == "high_fidelity" else {}
         ),
+        "physics_source_algorithm": identity["algorithm"],
+        "physics_source_sha256": identity["sha256"],
+        "physics_source_files": identity["files"],
     }
+    if spec is not None:
+        metadata.update({
+            "physics_parameter_sha256": spec.parameter_sha256,
+            "physics_enabled_terms": list(spec.enabled_terms),
+            "physics_capacity_solver": spec.capacity.solver,
+            "physics_geometry_convention": spec.geometry.convention,
+        })
+    return metadata
 
 
 def heartbeat_path(folder):
@@ -2554,12 +2577,13 @@ def main():
     parser.add_argument(
         "--physics",
         default="standard",
-        choices=["standard", "high_fidelity", "optimised-valence"],
+        choices=["standard", "high_fidelity", "optimised-valence", "unified-radial"],
         help=(
             "Atomistic physics used for this controlled test. high_fidelity "
             "is the older competitive H-transfer model; optimised-valence "
             "selects the current factorised/cached H-state and batched "
-            "heavy-valence production model."
+            "heavy-valence production model; unified-radial selects the "
+            "frozen scientific reference."
         ),
     )
     parser.add_argument("--partner", default=None)
@@ -2765,9 +2789,13 @@ def main():
                 f"high fidelity ({HIGH_FIDELITY_PHYSICS_MODEL})"
                 if str(options.physics) == "high_fidelity"
                 else (
-                    f"optimised valence ({physics_metadata(options.physics)['physics_model']})"
-                    if str(options.physics) == "optimised-valence"
-                    else f"standard ({STANDARD_PHYSICS_MODEL})"
+                    f"unified radial ({physics_metadata(options.physics)['physics_model']})"
+                    if str(options.physics) == "unified-radial"
+                    else (
+                        f"optimised valence ({physics_metadata(options.physics)['physics_model']})"
+                        if str(options.physics) == "optimised-valence"
+                        else f"standard ({STANDARD_PHYSICS_MODEL})"
+                    )
                 )
             )
         )

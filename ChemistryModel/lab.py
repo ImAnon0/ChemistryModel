@@ -980,10 +980,14 @@ class Lab(QtWidgets.QWidget):
             "Optimised valence state (experimental)",
             "optimised-valence",
         )
+        self.physics_box.addItem(
+            "Unified radial v1 (scientific reference)",
+            "unified-radial",
+        )
         self.physics_box.setToolTip(
             "Uses the validated factorisable H-state and heavy-valence "
-            "engine. This is opt-in; the historical reactive engine remains "
-            "the default."
+            "engine. Unified radial v1 is the frozen scientific reference. "
+            "Both are opt-in; the historical reactive engine remains the default."
         )
         self.physics_box.currentIndexChanged.connect(
             self.on_physics_changed
@@ -1112,7 +1116,9 @@ class Lab(QtWidgets.QWidget):
         self.mixture_box.blockSignals(False)
 
     def on_physics_changed(self):
-        if self.physics_box.currentData() == "optimised-valence":
+        if self.physics_box.currentData() in (
+            "optimised-valence", "unified-radial"
+        ):
             self.grouped.setChecked(True)
 
         self.refresh_existing()
@@ -1898,11 +1904,14 @@ class Lab(QtWidgets.QWidget):
         self.character_physics.addItem(
             "high fidelity (experimental)", "high_fidelity"
         )
+        self.character_physics.addItem(
+            "unified radial v1 (scientific reference)", "unified-radial"
+        )
         self.character_physics.setToolTip(
             "Characterisation only. Standard uses the same reactive potential "
             "as discovery. High fidelity adds experimental competitive "
-            "valence-state mixing for transferring hydrogen; normal soup runs "
-            "are not changed."
+            "valence-state mixing for transferring hydrogen. Unified radial "
+            "v1 selects the frozen scientific reference; defaults are unchanged."
         )
         form.addRow("physics", self.character_physics)
 
@@ -2623,12 +2632,10 @@ class Lab(QtWidgets.QWidget):
                                impact_target="com", physics_mode="standard",
                                sampling_mode="random_orientation",
                                target_atom=None):
-        physics_suffix = (
-            (
-                f"_hf_htransfer_v{HF_MODEL_REVISION}"
-                if str(physics_mode) == "high_fidelity" else ""
-            )
-        )
+        physics_suffix = {
+            "high_fidelity": f"_hf_htransfer_v{HF_MODEL_REVISION}",
+            "unified-radial": "_unified_radial_v1",
+        }.get(str(physics_mode), "")
 
         if test == "with_partner":
             safe_partner = str(partner_id or "unknown").replace(":", "-")

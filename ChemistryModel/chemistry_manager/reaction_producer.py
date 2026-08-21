@@ -54,18 +54,6 @@ def _replace_with_retry(source, destination):
                 raise
             time.sleep(_ATOMIC_REPLACE_RETRY_DELAYS_S[attempt])
 ELEMENTAL_REACTANTS = ("atom:H", "atom:C", "atom:N", "atom:O")
-PHYSICS_FILES = (
-    "reactive.py", "reactive_torch.py", "batched_torch.py",
-    "high_fidelity_torch.py", "characterisation_runner.py",
-    "h_state_reference.py", "h_state_torch.py",
-    "h_state_component_torch.py", "h_state_factorised_torch.py",
-    "h_state_factorised_batched_torch.py", "valence_state_torch.py",
-    "valence_state_factorised_torch.py",
-    "valence_state_factorised_batched_torch.py",
-    "valence_state_batched_membership_torch.py",
-    "valence_state_cached_h_topology_torch.py",
-    "valence_state_optimised_torch.py", "heavy_valence_density.py",
-)
 SPEED_RANGES = {
     "balanced": {
         "low": (0.5, 0.9), "moderate": (1.2, 2.0), "high": (2.2, 3.2),
@@ -213,16 +201,14 @@ def git_revision():
         return "unknown"
 
 
-def physics_source_fingerprint(root=None):
-    root = Path(root or Path(__file__).resolve().parents[1])
-    digest = hashlib.sha256()
-    for name in PHYSICS_FILES:
-        path = root / name
-        if not path.is_file():
-            continue
-        digest.update(name.encode("utf-8"))
-        digest.update(path.read_bytes())
-    return digest.hexdigest()
+def physics_source_fingerprint(root=None, physics="optimised-valence"):
+    """Fingerprint the selected class's effective local source closure."""
+    from physics_provenance import physics_source_identity
+
+    simulation_class = characterisation.simulation_class_for_physics(physics)
+    return physics_source_identity(
+        simulation_class, project_root=root
+    )["sha256"]
 
 
 def _load_reactant(reactant_id, molecule_root):
@@ -2338,7 +2324,9 @@ def run_production(
     wild_probability = float(wild_probability)
     if not 0.0 <= wild_probability <= 1.0:
         raise ValueError("wild exploration probability must be between 0 and 1")
-    if str(physics) not in ("standard", "high_fidelity", "optimised-valence"):
+    if str(physics) not in (
+        "standard", "high_fidelity", "optimised-valence", "unified-radial"
+    ):
         raise ValueError(f"unsupported characterisation physics: {physics}")
 
     used_master_seed = (
@@ -2352,8 +2340,8 @@ def run_production(
     root.mkdir(parents=True, exist_ok=True)
 
     revision = git_revision()
-    source_hash = physics_source_fingerprint()
     teacher_physics = characterisation.physics_metadata(physics)
+    source_hash = teacher_physics["physics_source_sha256"]
 
     if device is None:
         import torch
@@ -2406,9 +2394,22 @@ def run_production(
         "profile": profile,
         "physics": physics,
         "physics_model": teacher_physics["physics_model"],
+        "physics_model_id": teacher_physics["physics_model_id"],
         "physics_model_revision": teacher_physics["physics_model_revision"],
         "physics_parameters": teacher_physics["physics_parameters"],
+        "physics_source_algorithm": teacher_physics["physics_source_algorithm"],
         "physics_source_sha256": source_hash,
+        "physics_source_files": teacher_physics["physics_source_files"],
+        "physics_parameter_sha256": teacher_physics.get(
+            "physics_parameter_sha256"
+        ),
+        "physics_enabled_terms": teacher_physics.get("physics_enabled_terms"),
+        "physics_capacity_solver": teacher_physics.get(
+            "physics_capacity_solver"
+        ),
+        "physics_geometry_convention": teacher_physics.get(
+            "physics_geometry_convention"
+        ),
         "device": resolved_device,
         "ordinary_interval_fs": float(ordinary_interval_fs),
         "event_window_fs": float(event_window_fs),
@@ -2597,7 +2598,17 @@ def run_production(
                 "shard": shard_relative,
                 "teacher_frames": len(frames),
                 "chemistrymodel_git_revision": revision,
+                "physics_model_id": getattr(
+                    simulation, "model_id", teacher_physics["physics_model_id"]
+                ),
                 "physics_source_sha256": source_hash,
+                "physics_source_algorithm": teacher_physics[
+                    "physics_source_algorithm"
+                ],
+                "physics_source_files": teacher_physics["physics_source_files"],
+                "physics_parameter_sha256": teacher_physics.get(
+                    "physics_parameter_sha256"
+                ),
                 "physics_model": getattr(
                     simulation, "physics_model_name", entry["physics_model"]
                 ),

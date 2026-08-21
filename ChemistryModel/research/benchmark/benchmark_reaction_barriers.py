@@ -32,12 +32,10 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
-import inspect
 import json
 import math
 import platform
 import subprocess
-import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -45,6 +43,7 @@ from pathlib import Path
 import torch
 
 import reactive as R
+from physics_provenance import physics_source_identity
 from batched_torch import BatchedReactiveSimulation
 from reactive_torch import ReactiveSimulation
 
@@ -68,6 +67,9 @@ def _normalised_physics_name(physics):
         "high-fidelity": "high-fidelity",
         "optimised_valence": "optimised-valence",
         "optimised-valence": "optimised-valence",
+        "unified_radial": "unified-radial",
+        "unified-radial": "unified-radial",
+        "unified_radial_v1": "unified-radial",
     }
     try:
         return aliases[physics]
@@ -92,11 +94,18 @@ def resolve_physics(physics=None, topology="current"):
         simulation_class = HighFidelityBatchedReactiveSimulation
         h_state_active = False
         high_fidelity_active = True
-    else:
+    elif name == "optimised-valence":
         from valence_state_optimised_torch import (
             OptimisedValenceStateBatchedSimulation,
         )
         simulation_class = OptimisedValenceStateBatchedSimulation
+        h_state_active = True
+        high_fidelity_active = False
+    else:
+        from research.unified_bond_capacity import (
+            UnifiedBondCapacityEnergyPrototype,
+        )
+        simulation_class = UnifiedBondCapacityEnergyPrototype
         h_state_active = True
         high_fidelity_active = False
 
@@ -148,30 +157,6 @@ def _git_revision():
         return "unknown"
 
 
-def _source_fingerprint(simulation_class):
-    paths = {Path(__file__).resolve()}
-    for cls in simulation_class.__mro__:
-        module = sys.modules.get(cls.__module__)
-        try:
-            path = inspect.getsourcefile(module) if module is not None else None
-        except TypeError:
-            path = None
-        if path:
-            paths.add(Path(path).resolve())
-    reactive_path = Path(R.__file__).resolve()
-    paths.add(reactive_path)
-
-    digest = hashlib.sha256()
-    files = []
-    for path in sorted(paths, key=str):
-        if not path.is_file():
-            continue
-        digest.update(str(path.name).encode("utf-8"))
-        digest.update(path.read_bytes())
-        files.append(path.name)
-    return digest.hexdigest(), sorted(files)
-
-
 def physics_fingerprint(physics=None, topology="current"):
     backend = resolve_physics(physics, topology)
     simulation_class = backend["class"]
@@ -203,7 +188,13 @@ def physics_fingerprint(physics=None, topology="current"):
             "h_transfer_gate_full": HF.H_TRANSFER_GATE_FULL,
         })
 
-    source_sha256, source_files = _source_fingerprint(simulation_class)
+    source_identity = physics_source_identity(simulation_class)
+    source_sha256 = source_identity["sha256"]
+    source_files = source_identity["files"]
+    physics_spec = (
+        simulation_class.default_physics_spec()
+        if hasattr(simulation_class, "default_physics_spec") else None
+    )
     payload = {
         "requested_physics": backend["name"],
         "simulation_class": (
@@ -215,6 +206,7 @@ def physics_fingerprint(physics=None, topology="current"):
         "physics_model_revision": getattr(
             simulation_class, "physics_model_revision", None
         ),
+        "physics_model_id": getattr(simulation_class, "model_id", None),
         "h_state_active": backend["h_state_active"],
         "high_fidelity_active": backend["high_fidelity_active"],
         "topology_mode": topology,
@@ -224,7 +216,15 @@ def physics_fingerprint(physics=None, topology="current"):
         "git_revision": _git_revision(),
         "source_sha256": source_sha256,
         "source_files": source_files,
+        "source_algorithm": source_identity["algorithm"],
     }
+    if physics_spec is not None:
+        payload.update({
+            "parameter_sha256": physics_spec.parameter_sha256,
+            "enabled_terms": list(physics_spec.enabled_terms),
+            "capacity_solver": physics_spec.capacity.solver,
+            "geometry_convention": physics_spec.geometry.convention,
+        })
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     payload["fingerprint_sha256"] = hashlib.sha256(
         encoded.encode("utf-8")
@@ -386,7 +386,10 @@ def main():
     parser.add_argument("--device", default=None)
     parser.add_argument(
         "--physics", default="base",
-        choices=("base", "h-state", "high-fidelity", "optimised-valence"),
+        choices=(
+            "base", "h-state", "high-fidelity", "optimised-valence",
+            "unified-radial",
+        ),
         help="explicit ChemistryModel backend (default preserves the old base benchmark)",
     )
     parser.add_argument(
@@ -395,7 +398,10 @@ def main():
     )
     parser.add_argument(
         "--compare-physics", default=None,
-        choices=("base", "h-state", "high-fidelity", "optimised-valence"),
+        choices=(
+            "base", "h-state", "high-fidelity", "optimised-valence",
+            "unified-radial",
+        ),
         help="run an A/B comparison against this second backend",
     )
     parser.add_argument(

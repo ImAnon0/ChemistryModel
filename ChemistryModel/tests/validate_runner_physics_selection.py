@@ -12,6 +12,7 @@ from batched_torch import BatchedReactiveSimulation
 from valence_state_optimised_torch import (
     OptimisedValenceStateBatchedSimulation,
 )
+from research.unified_bond_capacity import UnifiedBondCapacityEnergyPrototype
 
 
 class RunnerOptions(SimpleNamespace):
@@ -59,9 +60,14 @@ def main():
         RunnerOptions(physics="optimised-valence")
     )
 
+    unified_class = batch_runner.grouped_simulation_class(
+        RunnerOptions(physics="unified-radial")
+    )
+
     selector_pass = (
         reactive_class is BatchedReactiveSimulation
         and valence_class is OptimisedValenceStateBatchedSimulation
+        and unified_class is UnifiedBondCapacityEnergyPrototype
     )
 
     # ------------------------------------------------------------
@@ -76,10 +82,16 @@ def main():
         condition_options("optimised-valence")
     )
 
+    unified_key = batch_runner.condition_key(
+        condition_options("unified-radial")
+    )
+
     identity_pass = (
         reactive_key.get("physics") == "reactive"
         and valence_key.get("physics") == "optimised-valence"
+        and unified_key.get("physics") == "unified-radial"
         and reactive_key != valence_key
+        and unified_key != valence_key
     )
 
     # Everything except physics should remain identical in this control.
@@ -122,8 +134,11 @@ def main():
             "SimulationClass = grouped_simulation_class(options)",
             '"physics": getattr(options, "physics", "reactive")',
             '"physics_model"',
+            '"physics_model_id"',
             '"physics_model_revision"',
+            '"physics_source_sha256"',
             "_optimised_valence",
+            "_unified_radial_v1",
         )
     )
 
@@ -132,6 +147,7 @@ def main():
         for token in (
             "self.physics_box = QtWidgets.QComboBox()",
             '"optimised-valence"',
+            '"unified-radial"',
             '"--physics"',
             '"physics": self.physics_box.currentData()',
             'first.get("physics", "reactive")',
@@ -141,6 +157,7 @@ def main():
 
     print(f"reactive selector : {reactive_class.__name__}")
     print(f"valence selector  : {valence_class.__name__}")
+    print(f"unified selector  : {unified_class.__name__}")
     print()
     print(
         "selector mapping       : "
@@ -180,14 +197,14 @@ def main():
 
     if passed:
         print(
-            "FINAL PASS - optimised valence is explicit opt-in for fresh "
-            "grouped runs; historical reactive physics remains default, "
-            "and the two physics models cannot silently pool."
+            "FINAL PASS - optimised valence and unified radial are explicit "
+            "opt-ins for fresh grouped runs; historical reactive physics "
+            "remains default, and physics models cannot silently pool."
         )
         return
 
     print(
-        "FINAL FAIL - do not launch the production valence batch yet."
+        "FINAL FAIL - runner physics selection is not safely isolated."
     )
     raise SystemExit(1)
 
