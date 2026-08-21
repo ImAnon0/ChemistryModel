@@ -5,6 +5,7 @@ import torch
 from scipy.spatial import cKDTree
 
 import reactive as R
+from chemistry_engine.runtime import RuntimeCacheField, RuntimeOwnedField
 
 
 # ============================================================
@@ -22,6 +23,57 @@ MAXIMUM_NEIGHBOURS = 12
 
 
 class ReactiveSimulation:
+
+    time_step = RuntimeOwnedField("time_step")
+    target_temperature = RuntimeOwnedField("target_temperature")
+    friction = RuntimeOwnedField("friction")
+    thermostat_is_on = RuntimeOwnedField("thermostat_is_on")
+    positions = RuntimeOwnedField("positions")
+    velocities = RuntimeOwnedField("velocities")
+    forces = RuntimeOwnedField("forces")
+    steps_taken = RuntimeOwnedField("steps_taken")
+    elapsed_femtoseconds = RuntimeOwnedField("elapsed_femtoseconds")
+    neighbours = RuntimeOwnedField("neighbours")
+    neighbour_mask = RuntimeOwnedField("neighbour_mask")
+    reference_positions = RuntimeOwnedField("reference_positions")
+    rebuild_count = RuntimeOwnedField("rebuild_count")
+    _potential_energy = RuntimeOwnedField("_potential_energy")
+    maximum_step = RuntimeOwnedField("maximum_step")
+    capped_steps = RuntimeOwnedField("capped_steps")
+    capped_atom_counts = RuntimeOwnedField("capped_atom_counts")
+    last_capped_atoms = RuntimeOwnedField("last_capped_atoms")
+    _last_move_capped_mask = RuntimeOwnedField("_last_move_capped_mask")
+    random_generator = RuntimeOwnedField("random_generator")
+    torch_generator = RuntimeOwnedField("torch_generator")
+
+    _potential_per_atom = RuntimeCacheField("_potential_per_atom")
+    _potential_cache_source = RuntimeCacheField("_potential_cache_source")
+    _potential_cache_version = RuntimeCacheField("_potential_cache_version")
+    _chemical_pair_cache = RuntimeCacheField("_chemical_pair_cache")
+    _chemical_pair_cache_source = RuntimeCacheField("_chemical_pair_cache_source")
+    _chemical_pair_cache_version = RuntimeCacheField("_chemical_pair_cache_version")
+    _softening_cache = RuntimeCacheField("_softening_cache")
+    _over_scale_cache = RuntimeCacheField("_over_scale_cache")
+    _heavy_membership_topology_cache = RuntimeCacheField(
+        "_heavy_membership_topology_cache"
+    )
+    _heavy_membership_cache_signature = RuntimeCacheField(
+        "_heavy_membership_cache_signature"
+    )
+    _factorised_h_structure_cache = RuntimeCacheField(
+        "_factorised_h_structure_cache"
+    )
+    _heavy_valence_structure_cache = RuntimeCacheField(
+        "_heavy_valence_structure_cache"
+    )
+    _cached_factorised_group_state_energies = RuntimeCacheField(
+        "_cached_factorised_group_state_energies"
+    )
+    _cached_h_topology = RuntimeCacheField("_cached_h_topology")
+    _h_candidate_cache = RuntimeCacheField("_h_candidate_cache")
+    _h_topology_cache_hits = RuntimeCacheField("_h_topology_cache_hits")
+    _h_topology_cache_misses = RuntimeCacheField("_h_topology_cache_misses")
+    _unified_lambda_cache = RuntimeCacheField("_unified_lambda_cache")
 
     def __init__(self, symbols, positions, box_size,
                  time_step=0.25, target_temperature=300.0,
@@ -138,6 +190,15 @@ class ReactiveSimulation:
 
         if relax_on_start:
             self.relax()
+
+        from chemistry_engine.backends.runtime_adapters import (
+            build_existing_runtime,
+        )
+        self.__dict__["_simulation_runtime"] = build_existing_runtime(self)
+
+    @property
+    def runtime(self):
+        return self.__dict__["_simulation_runtime"]
 
     # --------------------------------------------------------
 
@@ -1225,6 +1286,11 @@ class ReactiveSimulation:
     # --------------------------------------------------------
 
     def step(self, number_of_steps=1):
+        return self.runtime.step(number_of_steps)
+
+    def _legacy_step(self, number_of_steps=1):
+        """Pre-Stage-2C step retained only for exact regression comparison."""
+
         dt = self.time_step
 
         # Convert eV/A into amu * A / fs^2.
@@ -1274,12 +1340,17 @@ class ReactiveSimulation:
             self._potential_energy = potential
 
             if self.thermostat_is_on:
-                self._apply_langevin()
+                self._legacy_apply_langevin()
 
             self.elapsed_femtoseconds += dt
             self.steps_taken += 1
 
     def _apply_langevin(self):
+        return self.runtime.thermostat.apply(self.runtime)
+
+    def _legacy_apply_langevin(self):
+        """Pre-Stage-2C thermostat retained for exact regression comparison."""
+
         decay = float(np.exp(-self.friction * self.time_step))
 
         masses = self.masses[:, None]

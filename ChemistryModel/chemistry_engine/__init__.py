@@ -9,6 +9,7 @@ from .config import CapacitySpec, ExecutionConfig, GeometrySpec, PhysicsSpec
 from .context import InteractionContext
 from .engine import ChemistryEngine
 from .results import EnergyResult
+from .runtime import RuntimeState, SimulationRuntime
 
 __all__ = [
     "CapacitySpec",
@@ -18,4 +19,6 @@ __all__ = [
     "GeometrySpec",
     "InteractionContext",
     "PhysicsSpec",
+    "RuntimeState",
+    "SimulationRuntime",
 ]
