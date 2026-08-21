@@ -26,6 +26,7 @@ nvidia/
 sympy/
 networkx/
 functorch/
+research_data/test_tmp/
 
 # Simulation recordings and generated analysis
 *.npz

@@ -1,0 +1,644 @@
+{
+  "schema_version": 1,
+  "interpretation_policy": "Signals establish information content only; they are not fitted parameters and do not imply a production functional form.",
+  "families": {
+    "ethane": {
+      "count": 1,
+      "relative_energy_eV": {
+        "minimum": 0.0,
+        "maximum": 0.0,
+        "range": 0.0
+      },
+      "dipole_magnitude_debye": {
+        "minimum": 1.790029210142956e-10,
+        "maximum": 1.790029210142956e-10,
+        "range": 0.0
+      },
+      "polarizability_isotropic_angstrom3": {
+        "minimum": 3.748422688706426,
+        "maximum": 3.748422688706426,
+        "range": 0.0
+      },
+      "polarizability_anisotropy_fraction": {
+        "minimum": 0.089536311589916,
+        "maximum": 0.089536311589916,
+        "range": 0.0
+      },
+      "mbis_charge_span_e": {
+        "minimum": 0.45400778649207285,
+        "maximum": 0.45400778649207285,
+        "range": 0.0
+      }
+    },
+    "formaldehyde": {
+      "count": 1,
+      "relative_energy_eV": {
+        "minimum": 0.0,
+        "maximum": 0.0,
+        "range": 0.0
+      },
+      "dipole_magnitude_debye": {
+        "minimum": 2.534781485615338,
+        "maximum": 2.534781485615338,
+        "range": 0.0
+      },
+      "polarizability_isotropic_angstrom3": {
+        "minimum": 2.2468610233098154,
+        "maximum": 2.2468610233098154,
+        "range": 0.0
+      },
+      "polarizability_anisotropy_fraction": {
+        "minimum": 0.7862248125207467,
+        "maximum": 0.7862248125207467,
+        "range": 0.0
+      },
+      "mbis_charge_span_e": {
+        "minimum": 0.7573497278781213,
+        "maximum": 0.7573497278781213,
+        "range": 0.0
+      }
+    },
+    "h2": {
+      "count": 1,
+      "relative_energy_eV": {
+        "minimum": 0.0,
+        "maximum": 0.0,
+        "range": 0.0
+      },
+      "dipole_magnitude_debye": {
+        "minimum": 1.9818950505472327e-12,
+        "maximum": 1.9818950505472327e-12,
+        "range": 0.0
+      },
+      "polarizability_isotropic_angstrom3": {
+        "minimum": 0.4370471994113788,
+        "maximum": 0.4370471994113788,
+        "range": 0.0
+      },
+      "polarizability_anisotropy_fraction": {
+        "minimum": 1.7938733957009492,
+        "maximum": 1.7938733957009492,
+        "range": 0.0
+      },
+      "mbis_charge_span_e": {
+        "minimum": 1.150005424600145e-12,
+        "maximum": 1.150005424600145e-12,
+        "range": 0.0
+      }
+    },
+    "h3_transfer": {
+      "count": 4,
+      "relative_energy_eV": {
+        "minimum": 0.0,
+        "maximum": 0.4513844061066905,
+        "range": 0.4513844061066905
+      },
+      "dipole_magnitude_debye": {
+        "minimum": 0.0005404952141228326,
+        "maximum": 0.14313723580973028,
+        "range": 0.14259674059560745
+      },
+      "polarizability_isotropic_angstrom3": {
+        "minimum": 0.5347308803171832,
+        "maximum": 1.1950526814712275,
+        "range": 0.6603218011540443
+      },
+      "polarizability_anisotropy_fraction": {
+        "minimum": 1.4731824539395004,
+        "maximum": 2.315477449266366,
+        "range": 0.8422949953268655
+      },
+      "mbis_charge_span_e": {
+        "minimum": 0.00020303312623420593,
+        "maximum": 0.09092206651939398,
+        "range": 0.09071903339315977
+      }
+    },
+    "h_formaldehyde_transfer": {
+      "count": 4,
+      "relative_energy_eV": {
+        "minimum": 0.0,
+        "maximum": 0.4213139968210271,
+        "range": 0.4213139968210271
+      },
+      "dipole_magnitude_debye": {
+        "minimum": 1.9387382958966928,
+        "maximum": 2.534518326893886,
+        "range": 0.5957800309971932
+      },
+      "polarizability_isotropic_angstrom3": {
+        "minimum": 2.2883314250457913,
+        "maximum": 4.110297447716731,
+        "range": 1.82196602267094
+      },
+      "polarizability_anisotropy_fraction": {
+        "minimum": 0.7534655797377547,
+        "maximum": 1.5373419469256406,
+        "range": 0.7838763671878859
+      },
+      "mbis_charge_span_e": {
+        "minimum": 0.7073362672277459,
+        "maximum": 0.7883426336113519,
+        "range": 0.08100636638360603
+      }
+    },
+    "h_h2_approach": {
+      "count": 4,
+      "relative_energy_eV": {
+        "minimum": 0.0,
+        "maximum": 0.5614949437086807,
+        "range": 0.5614949437086807
+      },
+      "dipole_magnitude_debye": {
+        "minimum": 0.004952313095628428,
+        "maximum": 0.6008651984318794,
+        "range": 0.595912885336251
+      },
+      "polarizability_isotropic_angstrom3": {
+        "minimum": 0.5737084531506528,
+        "maximum": 1.0225946453549573,
+        "range": 0.4488861922043045
+      },
+      "polarizability_anisotropy_fraction": {
+        "minimum": 1.0143011035600635,
+        "maximum": 2.210021846532067,
+        "range": 1.1957207429720034
+      },
+      "mbis_charge_span_e": {
+        "minimum": 0.004647487008385711,
+        "maximum": 0.1302869051572964,
+        "range": 0.1256394181489107
+      }
+    },
+    "methane": {
+      "count": 1,
+      "relative_energy_eV": {
+        "minimum": 0.0,
+        "maximum": 0.0,
+        "range": 0.0
+      },
+      "dipole_magnitude_debye": {
+        "minimum": 1.701868898215617e-11,
+        "maximum": 1.701868898215617e-11,
+        "range": 0.0
+      },
+      "polarizability_isotropic_angstrom3": {
+        "minimum": 2.057709580725934,
+        "maximum": 2.057709580725934,
+        "range": 0.0
+      },
+      "polarizability_anisotropy_fraction": {
+        "minimum": 1.8298143667794915e-12,
+        "maximum": 1.8298143667794915e-12,
+        "range": 0.0
+      },
+      "mbis_charge_span_e": {
+        "minimum": 0.7152865638587906,
+        "maximum": 0.7152865638587906,
+        "range": 0.0
+      }
+    },
+    "n2": {
+      "count": 1,
+      "relative_energy_eV": {
+        "minimum": 0.0,
+        "maximum": 0.0,
+        "range": 0.0
+      },
+      "dipole_magnitude_debye": {
+        "minimum": 2.930661298334053e-08,
+        "maximum": 2.930661298334053e-08,
+        "range": 0.0
+      },
+      "polarizability_isotropic_angstrom3": {
+        "minimum": 1.52929833676266,
+        "maximum": 1.52929833676266,
+        "range": 0.0
+      },
+      "polarizability_anisotropy_fraction": {
+        "minimum": 0.7193811897437095,
+        "maximum": 0.7193811897437095,
+        "range": 0.0
+      },
+      "mbis_charge_span_e": {
+        "minimum": 1.2380149704575843e-08,
+        "maximum": 1.2380149704575843e-08,
+        "range": 0.0
+      }
+    },
+    "oh_stretch": {
+      "count": 3,
+      "relative_energy_eV": {
+        "minimum": 0.0,
+        "maximum": 1.194992140998238,
+        "range": 1.194992140998238
+      },
+      "dipole_magnitude_debye": {
+        "minimum": 1.6783594548084468,
+        "maximum": 1.9511832713232435,
+        "range": 0.2728238165147967
+      },
+      "polarizability_isotropic_angstrom3": {
+        "minimum": 0.6137173113305197,
+        "maximum": 0.9189006349032998,
+        "range": 0.3051833235727801
+      },
+      "polarizability_anisotropy_fraction": {
+        "minimum": 0.24006644365705343,
+        "maximum": 1.120952835348155,
+        "range": 0.8808863916911016
+      },
+      "mbis_charge_span_e": {
+        "minimum": 0.7017393648401344,
+        "maximum": 0.8533360894091034,
+        "range": 0.151596724568969
+      }
+    },
+    "water_angle": {
+      "count": 3,
+      "relative_energy_eV": {
+        "minimum": 0.0,
+        "maximum": 0.15051491847225407,
+        "range": 0.15051491847225407
+      },
+      "dipole_magnitude_debye": {
+        "minimum": 1.8731363077124052,
+        "maximum": 2.3142638931218102,
+        "range": 0.441127585409405
+      },
+      "polarizability_isotropic_angstrom3": {
+        "minimum": 1.008027863338218,
+        "maximum": 1.0222078504424295,
+        "range": 0.014179987104211422
+      },
+      "polarizability_anisotropy_fraction": {
+        "minimum": 0.07025833171539475,
+        "maximum": 0.2896976510477363,
+        "range": 0.21943931933234156
+      },
+      "mbis_charge_span_e": {
+        "minimum": 1.2518807488592518,
+        "maximum": 1.476000655943015,
+        "range": 0.22411990708376317
+      }
+    },
+    "water_h_direction": {
+      "count": 3,
+      "relative_energy_eV": {
+        "minimum": 0.0,
+        "maximum": 0.42668245226786894,
+        "range": 0.42668245226786894
+      },
+      "dipole_magnitude_debye": {
+        "minimum": 1.156855929034721,
+        "maximum": 2.7265333480717877,
+        "range": 1.5696774190370668
+      },
+      "polarizability_isotropic_angstrom3": {
+        "minimum": 1.6466974130758127,
+        "maximum": 1.718029424240834,
+        "range": 0.0713320111650213
+      },
+      "polarizability_anisotropy_fraction": {
+        "minimum": 0.6020403873893259,
+        "maximum": 0.6914866700876625,
+        "range": 0.08944628269833665
+      },
+      "mbis_charge_span_e": {
+        "minimum": 1.2049173859217894,
+        "maximum": 1.3133899083280096,
+        "range": 0.10847252240622018
+      }
+    },
+    "water_transfer": {
+      "count": 4,
+      "relative_energy_eV": {
+        "minimum": 0.0,
+        "maximum": 1.2205857792860115,
+        "range": 1.2205857792860115
+      },
+      "dipole_magnitude_debye": {
+        "minimum": 2.940994612938858,
+        "maximum": 3.7251842353401736,
+        "range": 0.7841896224013154
+      },
+      "polarizability_isotropic_angstrom3": {
+        "minimum": 1.743229542990656,
+        "maximum": 2.672907682658853,
+        "range": 0.929678139668197
+      },
+      "polarizability_anisotropy_fraction": {
+        "minimum": 0.29614281959445304,
+        "maximum": 1.6353820277733464,
+        "range": 1.3392392081788933
+      },
+      "mbis_charge_span_e": {
+        "minimum": 1.0687621840571444,
+        "maximum": 1.181243281039969,
+        "range": 0.11248109698282449
+      }
+    }
+  },
+  "rows": [
+    {
+      "geometry_id": "h2_equilibrium",
+      "family": "h2",
+      "role": "characterisation",
+      "relative_energy_eV": 0.0,
+      "dipole_magnitude_debye": 1.9818950505472327e-12,
+      "polarizability_isotropic_angstrom3": 0.4370471994113788,
+      "polarizability_anisotropy_fraction": 1.7938733957009492,
+      "mbis_charge_span_e": 1.150005424600145e-12
+    },
+    {
+      "geometry_id": "h3_reactant",
+      "family": "h3_transfer",
+      "role": "characterisation",
+      "relative_energy_eV": 0.0,
+      "dipole_magnitude_debye": 0.0005404952141228326,
+      "polarizability_isotropic_angstrom3": 0.5347308803171832,
+      "polarizability_anisotropy_fraction": 1.4731824539395004,
+      "mbis_charge_span_e": 0.00020303312623420593
+    },
+    {
+      "geometry_id": "h3_transfer_0p90",
+      "family": "h3_transfer",
+      "role": "validation",
+      "relative_energy_eV": 0.4513844061066905,
+      "dipole_magnitude_debye": 0.05759667133983581,
+      "polarizability_isotropic_angstrom3": 1.1724783433078454,
+      "polarizability_anisotropy_fraction": 2.315477449266366,
+      "mbis_charge_span_e": 0.09092206651939398
+    },
+    {
+      "geometry_id": "h3_transfer_1p06",
+      "family": "h3_transfer",
+      "role": "validation",
+      "relative_energy_eV": 0.34363787378843114,
+      "dipole_magnitude_debye": 0.14313723580973028,
+      "polarizability_isotropic_angstrom3": 1.1950526814712275,
+      "polarizability_anisotropy_fraction": 2.311692014526335,
+      "mbis_charge_span_e": 0.03188392345023406
+    },
+    {
+      "geometry_id": "h3_transfer_1p22",
+      "family": "h3_transfer",
+      "role": "final_holdout",
+      "relative_energy_eV": 0.3154599044802282,
+      "dipole_magnitude_debye": 0.14004049460995785,
+      "polarizability_isotropic_angstrom3": 1.168529477829291,
+      "polarizability_anisotropy_fraction": 2.288891128474138,
+      "mbis_charge_span_e": 0.02024926105651617
+    },
+    {
+      "geometry_id": "h_formaldehyde_reactant",
+      "family": "h_formaldehyde_transfer",
+      "role": "characterisation",
+      "relative_energy_eV": 0.0,
+      "dipole_magnitude_debye": 2.534518326893886,
+      "polarizability_isotropic_angstrom3": 2.2883314250457913,
+      "polarizability_anisotropy_fraction": 0.7534655797377547,
+      "mbis_charge_span_e": 0.7883426336113519
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_0p90",
+      "family": "h_formaldehyde_transfer",
+      "role": "validation",
+      "relative_energy_eV": 0.1564153336794334,
+      "dipole_magnitude_debye": 1.9387382958966928,
+      "polarizability_isotropic_angstrom3": 3.583788975322387,
+      "polarizability_anisotropy_fraction": 1.3164719973570538,
+      "mbis_charge_span_e": 0.7147083118485416
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p06",
+      "family": "h_formaldehyde_transfer",
+      "role": "validation",
+      "relative_energy_eV": 0.24847133782395758,
+      "dipole_magnitude_debye": 1.9636856057678316,
+      "polarizability_isotropic_angstrom3": 3.8887839946561535,
+      "polarizability_anisotropy_fraction": 1.4493844170036807,
+      "mbis_charge_span_e": 0.711724944527532
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p22",
+      "family": "h_formaldehyde_transfer",
+      "role": "final_holdout",
+      "relative_energy_eV": 0.4213139968210271,
+      "dipole_magnitude_debye": 1.9826002026027643,
+      "polarizability_isotropic_angstrom3": 4.110297447716731,
+      "polarizability_anisotropy_fraction": 1.5373419469256406,
+      "mbis_charge_span_e": 0.7073362672277459
+    },
+    {
+      "geometry_id": "water_transfer_reactant",
+      "family": "water_transfer",
+      "role": "characterisation",
+      "relative_energy_eV": 0.0,
+      "dipole_magnitude_debye": 3.581138405594516,
+      "polarizability_isotropic_angstrom3": 1.743229542990656,
+      "polarizability_anisotropy_fraction": 0.29614281959445304,
+      "mbis_charge_span_e": 1.181243281039969
+    },
+    {
+      "geometry_id": "water_transfer_1p10",
+      "family": "water_transfer",
+      "role": "validation",
+      "relative_energy_eV": 1.2205857792860115,
+      "dipole_magnitude_debye": 2.940994612938858,
+      "polarizability_isotropic_angstrom3": 2.577423883351084,
+      "polarizability_anisotropy_fraction": 0.9945585489983263,
+      "mbis_charge_span_e": 1.0687621840571444
+    },
+    {
+      "geometry_id": "water_transfer_1p30",
+      "family": "water_transfer",
+      "role": "validation",
+      "relative_energy_eV": 0.6485493712734751,
+      "dipole_magnitude_debye": 3.1071397906824396,
+      "polarizability_isotropic_angstrom3": 2.672907682658853,
+      "polarizability_anisotropy_fraction": 0.93161984270094,
+      "mbis_charge_span_e": 1.094744719285381
+    },
+    {
+      "geometry_id": "water_transfer_1p52",
+      "family": "water_transfer",
+      "role": "final_holdout",
+      "relative_energy_eV": 0.37489505564917636,
+      "dipole_magnitude_debye": 3.7251842353401736,
+      "polarizability_isotropic_angstrom3": 2.315502521052787,
+      "polarizability_anisotropy_fraction": 1.6353820277733464,
+      "mbis_charge_span_e": 1.1751962830624356
+    },
+    {
+      "geometry_id": "h_h2_linear_3p00",
+      "family": "h_h2_approach",
+      "role": "characterisation",
+      "relative_energy_eV": 0.0,
+      "dipole_magnitude_debye": 0.02574347461380612,
+      "polarizability_isotropic_angstrom3": 0.5737084531506528,
+      "polarizability_anisotropy_fraction": 1.5808511116912343,
+      "mbis_charge_span_e": 0.004647487008385711
+    },
+    {
+      "geometry_id": "h_h2_linear_1p80",
+      "family": "h_h2_approach",
+      "role": "validation",
+      "relative_energy_eV": 0.12472320580371132,
+      "dipole_magnitude_debye": 0.004952313095628428,
+      "polarizability_isotropic_angstrom3": 0.7742793676326328,
+      "polarizability_anisotropy_fraction": 1.9522303350956838,
+      "mbis_charge_span_e": 0.029987570709534478
+    },
+    {
+      "geometry_id": "h_h2_linear_1p20",
+      "family": "h_h2_approach",
+      "role": "validation",
+      "relative_energy_eV": 0.36689411714750975,
+      "dipole_magnitude_debye": 0.22095369039774668,
+      "polarizability_isotropic_angstrom3": 1.0225946453549573,
+      "polarizability_anisotropy_fraction": 2.210021846532067,
+      "mbis_charge_span_e": 0.0300502188318707
+    },
+    {
+      "geometry_id": "h_h2_perpendicular_1p50",
+      "family": "h_h2_approach",
+      "role": "final_holdout",
+      "relative_energy_eV": 0.5614949437086807,
+      "dipole_magnitude_debye": 0.6008651984318794,
+      "polarizability_isotropic_angstrom3": 0.7537217941300325,
+      "polarizability_anisotropy_fraction": 1.0143011035600635,
+      "mbis_charge_span_e": 0.1302869051572964
+    },
+    {
+      "geometry_id": "water_angle_90p0",
+      "family": "water_angle",
+      "role": "validation",
+      "relative_energy_eV": 0.15051491847225407,
+      "dipole_magnitude_debye": 2.3142638931218102,
+      "polarizability_isotropic_angstrom3": 1.0222078504424295,
+      "polarizability_anisotropy_fraction": 0.07025833171539475,
+      "mbis_charge_span_e": 1.2518807488592518
+    },
+    {
+      "geometry_id": "water_angle_104p5",
+      "family": "water_angle",
+      "role": "characterisation",
+      "relative_energy_eV": 0.0,
+      "dipole_magnitude_debye": 2.1319690999333667,
+      "polarizability_isotropic_angstrom3": 1.017064177887365,
+      "polarizability_anisotropy_fraction": 0.16685716562076283,
+      "mbis_charge_span_e": 1.3482252002474717
+    },
+    {
+      "geometry_id": "water_angle_120p0",
+      "family": "water_angle",
+      "role": "final_holdout",
+      "relative_energy_eV": 0.1420126843095204,
+      "dipole_magnitude_debye": 1.8731363077124052,
+      "polarizability_isotropic_angstrom3": 1.008027863338218,
+      "polarizability_anisotropy_fraction": 0.2896976510477363,
+      "mbis_charge_span_e": 1.476000655943015
+    },
+    {
+      "geometry_id": "oh_stretch_0p80",
+      "family": "oh_stretch",
+      "role": "validation",
+      "relative_energy_eV": 1.194992140998238,
+      "dipole_magnitude_debye": 1.6783594548084468,
+      "polarizability_isotropic_angstrom3": 0.6137173113305197,
+      "polarizability_anisotropy_fraction": 0.24006644365705343,
+      "mbis_charge_span_e": 0.8533360894091034
+    },
+    {
+      "geometry_id": "oh_stretch_0p97",
+      "family": "oh_stretch",
+      "role": "characterisation",
+      "relative_energy_eV": 0.0,
+      "dipole_magnitude_debye": 1.8157038822736842,
+      "polarizability_isotropic_angstrom3": 0.7213971012399892,
+      "polarizability_anisotropy_fraction": 0.63479616392631,
+      "mbis_charge_span_e": 0.7931487316130055
+    },
+    {
+      "geometry_id": "oh_stretch_1p20",
+      "family": "oh_stretch",
+      "role": "final_holdout",
+      "relative_energy_eV": 0.7639891628377882,
+      "dipole_magnitude_debye": 1.9511832713232435,
+      "polarizability_isotropic_angstrom3": 0.9189006349032998,
+      "polarizability_anisotropy_fraction": 1.120952835348155,
+      "mbis_charge_span_e": 0.7017393648401344
+    },
+    {
+      "geometry_id": "water_h_probe_lone_pair",
+      "family": "water_h_direction",
+      "role": "validation",
+      "relative_energy_eV": 0.024623112872177444,
+      "dipole_magnitude_debye": 2.7265333480717877,
+      "polarizability_isotropic_angstrom3": 1.6490665363090096,
+      "polarizability_anisotropy_fraction": 0.6020403873893259,
+      "mbis_charge_span_e": 1.2142340357705685
+    },
+    {
+      "geometry_id": "water_h_probe_out_of_plane",
+      "family": "water_h_direction",
+      "role": "final_holdout",
+      "relative_energy_eV": 0.0,
+      "dipole_magnitude_debye": 2.2423693541085976,
+      "polarizability_isotropic_angstrom3": 1.718029424240834,
+      "polarizability_anisotropy_fraction": 0.6445890179623898,
+      "mbis_charge_span_e": 1.2049173859217894
+    },
+    {
+      "geometry_id": "water_h_probe_h_side",
+      "family": "water_h_direction",
+      "role": "final_holdout",
+      "relative_energy_eV": 0.42668245226786894,
+      "dipole_magnitude_debye": 1.156855929034721,
+      "polarizability_isotropic_angstrom3": 1.6466974130758127,
+      "polarizability_anisotropy_fraction": 0.6914866700876625,
+      "mbis_charge_span_e": 1.3133899083280096
+    },
+    {
+      "geometry_id": "methane_equilibrium",
+      "family": "methane",
+      "role": "final_holdout",
+      "relative_energy_eV": 0.0,
+      "dipole_magnitude_debye": 1.701868898215617e-11,
+      "polarizability_isotropic_angstrom3": 2.057709580725934,
+      "polarizability_anisotropy_fraction": 1.8298143667794915e-12,
+      "mbis_charge_span_e": 0.7152865638587906
+    },
+    {
+      "geometry_id": "ethane_equilibrium",
+      "family": "ethane",
+      "role": "final_holdout",
+      "relative_energy_eV": 0.0,
+      "dipole_magnitude_debye": 1.790029210142956e-10,
+      "polarizability_isotropic_angstrom3": 3.748422688706426,
+      "polarizability_anisotropy_fraction": 0.089536311589916,
+      "mbis_charge_span_e": 0.45400778649207285
+    },
+    {
+      "geometry_id": "formaldehyde_equilibrium",
+      "family": "formaldehyde",
+      "role": "final_holdout",
+      "relative_energy_eV": 0.0,
+      "dipole_magnitude_debye": 2.534781485615338,
+      "polarizability_isotropic_angstrom3": 2.2468610233098154,
+      "polarizability_anisotropy_fraction": 0.7862248125207467,
+      "mbis_charge_span_e": 0.7573497278781213
+    },
+    {
+      "geometry_id": "n2_equilibrium",
+      "family": "n2",
+      "role": "final_holdout",
+      "relative_energy_eV": 0.0,
+      "dipole_magnitude_debye": 2.930661298334053e-08,
+      "polarizability_isotropic_angstrom3": 1.52929833676266,
+      "polarizability_anisotropy_fraction": 0.7193811897437095,
+      "mbis_charge_span_e": 1.2380149704575843e-08
+    }
+  ]
+}

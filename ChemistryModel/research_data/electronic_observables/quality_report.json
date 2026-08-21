@@ -1,0 +1,1959 @@
+{
+  "schema_version": 1,
+  "geometry_count": 30,
+  "result_count": 30,
+  "missing_geometry_ids": [],
+  "status_counts": {
+    "ok": 30
+  },
+  "check_count": 243,
+  "failed_check_count": 0,
+  "all_available_checks_pass": true,
+  "complete": true,
+  "checks": [
+    {
+      "geometry_id": "h2_equilibrium",
+      "check": "spin_contamination",
+      "value": 2.6645352591003757e-15,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.000000"
+    },
+    {
+      "geometry_id": "h2_equilibrium",
+      "check": "mulliken_charge_conservation",
+      "value": 2.3314683517128287e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h2_equilibrium",
+      "check": "lowdin_charge_conservation",
+      "value": 3.6637359812630166e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h2_equilibrium",
+      "check": "mbis_charge_conservation",
+      "value": 1.7595941192736145e-09,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h2_equilibrium",
+      "check": "net_force",
+      "value": 1.7543112002156697e-14,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h2_equilibrium",
+      "check": "mbis_dipole_reconstruction",
+      "value": 3.2460239087258093e-15,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h2_equilibrium",
+      "check": "polarizability_symmetry",
+      "value": 1.5285243516457925e-15,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h2_equilibrium",
+      "check": "polarizability_positive",
+      "value": 1.1857594244092693,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_reactant",
+      "check": "spin_contamination",
+      "value": 2.449019020911436e-08,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "h3_reactant",
+      "check": "mulliken_charge_conservation",
+      "value": 1.7763568394002505e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_reactant",
+      "check": "lowdin_charge_conservation",
+      "value": 3.774758283725532e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_reactant",
+      "check": "mbis_charge_conservation",
+      "value": 1.6230145412062056e-07,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_reactant",
+      "check": "net_force",
+      "value": 6.345961859169347e-06,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_reactant",
+      "check": "mbis_dipole_reconstruction",
+      "value": 1.529543608017926e-06,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_reactant",
+      "check": "polarizability_symmetry",
+      "value": 1.564771142259517e-16,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_reactant",
+      "check": "polarizability_positive",
+      "value": 1.8365288438050127,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_0p90",
+      "check": "spin_contamination",
+      "value": 0.0059883164178931025,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "h3_transfer_0p90",
+      "check": "mulliken_charge_conservation",
+      "value": 1.5543122344752192e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_0p90",
+      "check": "lowdin_charge_conservation",
+      "value": 7.105427357601002e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_0p90",
+      "check": "mbis_charge_conservation",
+      "value": 1.1788552231606353e-08,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_0p90",
+      "check": "net_force",
+      "value": 1.0285647822350168e-07,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_0p90",
+      "check": "mbis_dipole_reconstruction",
+      "value": 1.970889533520236e-08,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_0p90",
+      "check": "polarizability_symmetry",
+      "value": 7.97309941693146e-16,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_0p90",
+      "check": "polarizability_positive",
+      "value": 1.8053771275673554,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_1p06",
+      "check": "spin_contamination",
+      "value": 0.006822023316671033,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "h3_transfer_1p06",
+      "check": "mulliken_charge_conservation",
+      "value": 4.6629367034256575e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_1p06",
+      "check": "lowdin_charge_conservation",
+      "value": 6.661338147750939e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_1p06",
+      "check": "mbis_charge_conservation",
+      "value": 6.567221933363038e-10,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_1p06",
+      "check": "net_force",
+      "value": 1.692809078607249e-05,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_1p06",
+      "check": "mbis_dipole_reconstruction",
+      "value": 1.4521241542553316e-08,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_1p06",
+      "check": "polarizability_symmetry",
+      "value": 7.246345263341878e-16,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_1p06",
+      "check": "polarizability_positive",
+      "value": 1.8503130216031833,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_1p22",
+      "check": "spin_contamination",
+      "value": 0.006084648396639025,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "h3_transfer_1p22",
+      "check": "mulliken_charge_conservation",
+      "value": 4.6629367034256575e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_1p22",
+      "check": "lowdin_charge_conservation",
+      "value": 6.661338147750939e-16,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_1p22",
+      "check": "mbis_charge_conservation",
+      "value": 3.5989802056515113e-10,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_1p22",
+      "check": "net_force",
+      "value": 3.2036291788273275e-05,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_1p22",
+      "check": "mbis_dipole_reconstruction",
+      "value": 1.1465359842088861e-08,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_1p22",
+      "check": "polarizability_symmetry",
+      "value": 7.203464534855325e-16,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h3_transfer_1p22",
+      "check": "polarizability_positive",
+      "value": 1.869179958059727,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_reactant",
+      "check": "spin_contamination",
+      "value": 5.554872393176424e-07,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "h_formaldehyde_reactant",
+      "check": "mulliken_charge_conservation",
+      "value": 1.8540724511240114e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_reactant",
+      "check": "lowdin_charge_conservation",
+      "value": 1.354472090042691e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_reactant",
+      "check": "mbis_charge_conservation",
+      "value": 2.901095224056428e-07,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_reactant",
+      "check": "net_force",
+      "value": 0.0039413057998939,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_reactant",
+      "check": "mbis_dipole_reconstruction",
+      "value": 1.1375832815058125e-07,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_reactant",
+      "check": "polarizability_symmetry",
+      "value": 8.936280514731439e-07,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_reactant",
+      "check": "polarizability_positive",
+      "value": 9.699589002501794,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_0p90",
+      "check": "spin_contamination",
+      "value": 0.006971551395377418,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_0p90",
+      "check": "mulliken_charge_conservation",
+      "value": 1.765254609153999e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_0p90",
+      "check": "lowdin_charge_conservation",
+      "value": 2.375877272697835e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_0p90",
+      "check": "mbis_charge_conservation",
+      "value": 1.9004751859036384e-07,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_0p90",
+      "check": "net_force",
+      "value": 0.01066511416462736,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_0p90",
+      "check": "mbis_dipole_reconstruction",
+      "value": 2.0566575761584316e-06,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_0p90",
+      "check": "polarizability_symmetry",
+      "value": 0.00020147152457303686,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_0p90",
+      "check": "polarizability_positive",
+      "value": 10.29374028223437,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p06",
+      "check": "spin_contamination",
+      "value": 0.010009266270751382,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p06",
+      "check": "mulliken_charge_conservation",
+      "value": 9.769962616701378e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p06",
+      "check": "lowdin_charge_conservation",
+      "value": 4.440892098500626e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p06",
+      "check": "mbis_charge_conservation",
+      "value": 1.1461237464822915e-07,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p06",
+      "check": "net_force",
+      "value": 0.007476299463962989,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p06",
+      "check": "mbis_dipole_reconstruction",
+      "value": 2.69145347299191e-06,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p06",
+      "check": "polarizability_symmetry",
+      "value": 0.00018079008041670455,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p06",
+      "check": "polarizability_positive",
+      "value": 10.379802065063673,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p22",
+      "check": "spin_contamination",
+      "value": 0.012658439309326752,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p22",
+      "check": "mulliken_charge_conservation",
+      "value": 2.7977620220553945e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p22",
+      "check": "lowdin_charge_conservation",
+      "value": 3.552713678800501e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p22",
+      "check": "mbis_charge_conservation",
+      "value": 4.5849484028338827e-07,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p22",
+      "check": "net_force",
+      "value": 0.004459810793041233,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p22",
+      "check": "mbis_dipole_reconstruction",
+      "value": 2.2562259378089504e-06,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p22",
+      "check": "polarizability_symmetry",
+      "value": 0.00015430241271990574,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p22",
+      "check": "polarizability_positive",
+      "value": 10.41865140095035,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_reactant",
+      "check": "spin_contamination",
+      "value": 0.002479386030955766,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "water_transfer_reactant",
+      "check": "mulliken_charge_conservation",
+      "value": 3.4416913763379853e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_reactant",
+      "check": "lowdin_charge_conservation",
+      "value": 1.9539925233402755e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_reactant",
+      "check": "mbis_charge_conservation",
+      "value": 3.291277411721083e-06,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_reactant",
+      "check": "net_force",
+      "value": 0.002157798149560771,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_reactant",
+      "check": "mbis_dipole_reconstruction",
+      "value": 4.468101101929704e-06,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_reactant",
+      "check": "polarizability_symmetry",
+      "value": 5.191908921687927e-06,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_reactant",
+      "check": "polarizability_positive",
+      "value": 9.80576244256146,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p10",
+      "check": "spin_contamination",
+      "value": 0.0066272350807583535,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "water_transfer_1p10",
+      "check": "mulliken_charge_conservation",
+      "value": 2.6201263381153694e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p10",
+      "check": "lowdin_charge_conservation",
+      "value": 2.3203661214665772e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p10",
+      "check": "mbis_charge_conservation",
+      "value": 7.483755614101639e-06,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p10",
+      "check": "net_force",
+      "value": 0.0020704815455162536,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p10",
+      "check": "mbis_dipole_reconstruction",
+      "value": 1.7004312788911083e-05,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p10",
+      "check": "polarizability_symmetry",
+      "value": 4.642371063093905e-06,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p10",
+      "check": "polarizability_positive",
+      "value": 11.351615953297634,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p30",
+      "check": "spin_contamination",
+      "value": 0.007146422755468507,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "water_transfer_1p30",
+      "check": "mulliken_charge_conservation",
+      "value": 3.519406988061746e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p30",
+      "check": "lowdin_charge_conservation",
+      "value": 4.551914400963142e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p30",
+      "check": "mbis_charge_conservation",
+      "value": 2.2921312908263936e-06,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p30",
+      "check": "net_force",
+      "value": 0.002159362012504512,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p30",
+      "check": "mbis_dipole_reconstruction",
+      "value": 4.30271081902836e-06,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p30",
+      "check": "polarizability_symmetry",
+      "value": 1.5419774657242354e-05,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p30",
+      "check": "polarizability_positive",
+      "value": 12.425087318295084,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p52",
+      "check": "spin_contamination",
+      "value": 0.0030577592177039037,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "water_transfer_1p52",
+      "check": "mulliken_charge_conservation",
+      "value": 9.658940314238862e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p52",
+      "check": "lowdin_charge_conservation",
+      "value": 1.8762769116165146e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p52",
+      "check": "mbis_charge_conservation",
+      "value": 2.6063928856290275e-06,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p52",
+      "check": "net_force",
+      "value": 0.0016717655945632187,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p52",
+      "check": "mbis_dipole_reconstruction",
+      "value": 5.206860507034089e-06,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p52",
+      "check": "polarizability_symmetry",
+      "value": 1.007122421594876e-05,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_transfer_1p52",
+      "check": "polarizability_positive",
+      "value": 4.112712375492792,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_3p00",
+      "check": "spin_contamination",
+      "value": 3.0304423735971753e-06,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "h_h2_linear_3p00",
+      "check": "mulliken_charge_conservation",
+      "value": 3.6637359812630166e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_3p00",
+      "check": "lowdin_charge_conservation",
+      "value": 1.6653345369377348e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_3p00",
+      "check": "mbis_charge_conservation",
+      "value": 6.536409848274805e-08,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_3p00",
+      "check": "net_force",
+      "value": 0.0007414324471290978,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_3p00",
+      "check": "mbis_dipole_reconstruction",
+      "value": 3.828061193034138e-07,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_3p00",
+      "check": "polarizability_symmetry",
+      "value": 3.5411833263785175e-16,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_3p00",
+      "check": "polarizability_positive",
+      "value": 1.8314478495870061,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_1p80",
+      "check": "spin_contamination",
+      "value": 0.0006282062025277924,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "h_h2_linear_1p80",
+      "check": "mulliken_charge_conservation",
+      "value": 1.3322676295501878e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_1p80",
+      "check": "lowdin_charge_conservation",
+      "value": 4.884981308350689e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_1p80",
+      "check": "mbis_charge_conservation",
+      "value": 1.1696665155533359e-08,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_1p80",
+      "check": "net_force",
+      "value": 0.00025082643643614677,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_1p80",
+      "check": "mbis_dipole_reconstruction",
+      "value": 3.370475327654779e-08,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_1p80",
+      "check": "polarizability_symmetry",
+      "value": 5.951815301501736e-16,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_1p80",
+      "check": "polarizability_positive",
+      "value": 1.8248990859833496,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_1p20",
+      "check": "spin_contamination",
+      "value": 0.003922392107585493,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "h_h2_linear_1p20",
+      "check": "mulliken_charge_conservation",
+      "value": 2.220446049250313e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_1p20",
+      "check": "lowdin_charge_conservation",
+      "value": 7.771561172376096e-16,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_1p20",
+      "check": "mbis_charge_conservation",
+      "value": 8.13192176356975e-09,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_1p20",
+      "check": "net_force",
+      "value": 0.0001553625202014297,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_1p20",
+      "check": "mbis_dipole_reconstruction",
+      "value": 1.3505907239808163e-08,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_1p20",
+      "check": "polarizability_symmetry",
+      "value": 6.178583391607325e-16,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_linear_1p20",
+      "check": "polarizability_positive",
+      "value": 1.8171632364729673,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_perpendicular_1p50",
+      "check": "spin_contamination",
+      "value": 0.001205614181658765,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "h_h2_perpendicular_1p50",
+      "check": "mulliken_charge_conservation",
+      "value": 1.4432899320127035e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_perpendicular_1p50",
+      "check": "lowdin_charge_conservation",
+      "value": 5.88418203051333e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_perpendicular_1p50",
+      "check": "mbis_charge_conservation",
+      "value": 6.171843520974551e-08,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_perpendicular_1p50",
+      "check": "net_force",
+      "value": 0.0015184521175966026,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_perpendicular_1p50",
+      "check": "mbis_dipole_reconstruction",
+      "value": 1.0974429523469288e-07,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_perpendicular_1p50",
+      "check": "polarizability_symmetry",
+      "value": 3.4957140699368435e-14,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h_h2_perpendicular_1p50",
+      "check": "polarizability_positive",
+      "value": 1.7954709693132591,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_90p0",
+      "check": "spin_contamination",
+      "value": 8.881784197001252e-15,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.000000"
+    },
+    {
+      "geometry_id": "water_angle_90p0",
+      "check": "mulliken_charge_conservation",
+      "value": 7.327471962526033e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_90p0",
+      "check": "lowdin_charge_conservation",
+      "value": 7.549516567451064e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_90p0",
+      "check": "mbis_charge_conservation",
+      "value": 1.3713131252757194e-07,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_90p0",
+      "check": "net_force",
+      "value": 0.000908255973697647,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_90p0",
+      "check": "mbis_dipole_reconstruction",
+      "value": 1.6300972049965403e-07,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_90p0",
+      "check": "polarizability_symmetry",
+      "value": 1.84091451994548e-10,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_90p0",
+      "check": "polarizability_positive",
+      "value": 6.582894051532851,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_104p5",
+      "check": "spin_contamination",
+      "value": 8.881784197001252e-15,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.000000"
+    },
+    {
+      "geometry_id": "water_angle_104p5",
+      "check": "mulliken_charge_conservation",
+      "value": 1.27675647831893e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_104p5",
+      "check": "lowdin_charge_conservation",
+      "value": 2.842170943040401e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_104p5",
+      "check": "mbis_charge_conservation",
+      "value": 1.925828163051868e-07,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_104p5",
+      "check": "net_force",
+      "value": 0.0020473552207632695,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_104p5",
+      "check": "mbis_dipole_reconstruction",
+      "value": 3.048791510362756e-07,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_104p5",
+      "check": "polarizability_symmetry",
+      "value": 2.6884190345591685e-11,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_104p5",
+      "check": "polarizability_positive",
+      "value": 6.438084027039917,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_120p0",
+      "check": "spin_contamination",
+      "value": 7.993605777301127e-15,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.000000"
+    },
+    {
+      "geometry_id": "water_angle_120p0",
+      "check": "mulliken_charge_conservation",
+      "value": 8.548717289613705e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_120p0",
+      "check": "lowdin_charge_conservation",
+      "value": 9.547918011776346e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_120p0",
+      "check": "mbis_charge_conservation",
+      "value": 4.912835621651013e-08,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_120p0",
+      "check": "net_force",
+      "value": 0.0011459435328698975,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_120p0",
+      "check": "mbis_dipole_reconstruction",
+      "value": 2.618902428253025e-07,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_120p0",
+      "check": "polarizability_symmetry",
+      "value": 4.6153270526782255e-11,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_angle_120p0",
+      "check": "polarizability_positive",
+      "value": 6.029113756360585,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_0p80",
+      "check": "spin_contamination",
+      "value": 0.0020525039319707616,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "oh_stretch_0p80",
+      "check": "mulliken_charge_conservation",
+      "value": 1.4099832412739488e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_0p80",
+      "check": "lowdin_charge_conservation",
+      "value": 1.2434497875801753e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_0p80",
+      "check": "mbis_charge_conservation",
+      "value": 7.380523903144365e-08,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_0p80",
+      "check": "net_force",
+      "value": 0.0026396269457187316,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_0p80",
+      "check": "mbis_dipole_reconstruction",
+      "value": 4.30061025680218e-08,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_0p80",
+      "check": "polarizability_symmetry",
+      "value": 4.848691373840667e-07,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_0p80",
+      "check": "polarizability_positive",
+      "value": 3.5012644637690142,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_0p97",
+      "check": "spin_contamination",
+      "value": 0.0025187691415875513,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "oh_stretch_0p97",
+      "check": "mulliken_charge_conservation",
+      "value": 1.1102230246251565e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_0p97",
+      "check": "lowdin_charge_conservation",
+      "value": 8.881784197001252e-16,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_0p97",
+      "check": "mbis_charge_conservation",
+      "value": 5.438793232448447e-08,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_0p97",
+      "check": "net_force",
+      "value": 0.0009410278504889957,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_0p97",
+      "check": "mbis_dipole_reconstruction",
+      "value": 1.4372801615537311e-08,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_0p97",
+      "check": "polarizability_symmetry",
+      "value": 5.39720226711688e-10,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_0p97",
+      "check": "polarizability_positive",
+      "value": 3.453160639453066,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_1p20",
+      "check": "spin_contamination",
+      "value": 0.0047488904182584335,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "oh_stretch_1p20",
+      "check": "mulliken_charge_conservation",
+      "value": 1.454392162258955e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_1p20",
+      "check": "lowdin_charge_conservation",
+      "value": 2.020605904817785e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_1p20",
+      "check": "mbis_charge_conservation",
+      "value": 3.67308022330981e-08,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_1p20",
+      "check": "net_force",
+      "value": 3.953931540756634e-05,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_1p20",
+      "check": "mbis_dipole_reconstruction",
+      "value": 5.370401234829794e-09,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_1p20",
+      "check": "polarizability_symmetry",
+      "value": 1.0602343143359544e-09,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "oh_stretch_1p20",
+      "check": "polarizability_positive",
+      "value": 3.453618195957639,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_lone_pair",
+      "check": "spin_contamination",
+      "value": 0.001279743200674588,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "water_h_probe_lone_pair",
+      "check": "mulliken_charge_conservation",
+      "value": 1.709743457922741e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_lone_pair",
+      "check": "lowdin_charge_conservation",
+      "value": 2.5091040356528538e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_lone_pair",
+      "check": "mbis_charge_conservation",
+      "value": 3.807438428843346e-07,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_lone_pair",
+      "check": "net_force",
+      "value": 0.0035893661885828543,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_lone_pair",
+      "check": "mbis_dipole_reconstruction",
+      "value": 7.015630765216967e-08,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_lone_pair",
+      "check": "polarizability_symmetry",
+      "value": 2.1314128450995226e-10,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_lone_pair",
+      "check": "polarizability_positive",
+      "value": 8.302103539869453,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_out_of_plane",
+      "check": "spin_contamination",
+      "value": 0.002888116032294441,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "water_h_probe_out_of_plane",
+      "check": "mulliken_charge_conservation",
+      "value": 9.769962616701378e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_out_of_plane",
+      "check": "lowdin_charge_conservation",
+      "value": 8.104628079763643e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_out_of_plane",
+      "check": "mbis_charge_conservation",
+      "value": 2.77323179276312e-06,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_out_of_plane",
+      "check": "net_force",
+      "value": 0.0011053469305140882,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_out_of_plane",
+      "check": "mbis_dipole_reconstruction",
+      "value": 8.11389870539261e-06,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_out_of_plane",
+      "check": "polarizability_symmetry",
+      "value": 0.0002889515565309854,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_out_of_plane",
+      "check": "polarizability_positive",
+      "value": 8.852579427602626,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_h_side",
+      "check": "spin_contamination",
+      "value": 0.003330123956994946,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.750000"
+    },
+    {
+      "geometry_id": "water_h_probe_h_side",
+      "check": "mulliken_charge_conservation",
+      "value": 9.2148511043888e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_h_side",
+      "check": "lowdin_charge_conservation",
+      "value": 2.1094237467877974e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_h_side",
+      "check": "mbis_charge_conservation",
+      "value": 3.306304984240782e-07,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_h_side",
+      "check": "net_force",
+      "value": 0.0036666466009513954,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_h_side",
+      "check": "mbis_dipole_reconstruction",
+      "value": 4.256026092663918e-08,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_h_side",
+      "check": "polarizability_symmetry",
+      "value": 3.785201422188211e-10,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "water_h_probe_h_side",
+      "check": "polarizability_positive",
+      "value": 8.204236069276332,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "methane_equilibrium",
+      "check": "spin_contamination",
+      "value": 1.2434497875801753e-14,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.000000"
+    },
+    {
+      "geometry_id": "methane_equilibrium",
+      "check": "mulliken_charge_conservation",
+      "value": 1.1324274851176597e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "methane_equilibrium",
+      "check": "lowdin_charge_conservation",
+      "value": 1.7208456881689926e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "methane_equilibrium",
+      "check": "mbis_charge_conservation",
+      "value": 2.3324812673225503e-05,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "methane_equilibrium",
+      "check": "net_force",
+      "value": 1.435340941534848e-12,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "methane_equilibrium",
+      "check": "mbis_dipole_reconstruction",
+      "value": 2.1930754002393926e-14,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "methane_equilibrium",
+      "check": "polarizability_symmetry",
+      "value": 5.368498847344887e-13,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "methane_equilibrium",
+      "check": "polarizability_positive",
+      "value": 13.886112543467116,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "ethane_equilibrium",
+      "check": "spin_contamination",
+      "value": 1.0658141036401503e-14,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.000000"
+    },
+    {
+      "geometry_id": "ethane_equilibrium",
+      "check": "mulliken_charge_conservation",
+      "value": 1.2656542480726785e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "ethane_equilibrium",
+      "check": "lowdin_charge_conservation",
+      "value": 1.5765166949677223e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "ethane_equilibrium",
+      "check": "mbis_charge_conservation",
+      "value": 1.1513306084565134e-05,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "ethane_equilibrium",
+      "check": "net_force",
+      "value": 1.4431119856522258e-12,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "ethane_equilibrium",
+      "check": "mbis_dipole_reconstruction",
+      "value": 1.7963464254950892e-13,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "ethane_equilibrium",
+      "check": "polarizability_symmetry",
+      "value": 1.403651944390751e-06,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "ethane_equilibrium",
+      "check": "polarizability_positive",
+      "value": 24.54058175044878,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "formaldehyde_equilibrium",
+      "check": "spin_contamination",
+      "value": 1.0658141036401503e-14,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.000000"
+    },
+    {
+      "geometry_id": "formaldehyde_equilibrium",
+      "check": "mulliken_charge_conservation",
+      "value": 1.3100631690576847e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "formaldehyde_equilibrium",
+      "check": "lowdin_charge_conservation",
+      "value": 1.6653345369377348e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "formaldehyde_equilibrium",
+      "check": "mbis_charge_conservation",
+      "value": 6.196336787347989e-07,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "formaldehyde_equilibrium",
+      "check": "net_force",
+      "value": 0.006938551957713642,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "formaldehyde_equilibrium",
+      "check": "mbis_dipole_reconstruction",
+      "value": 9.858871045098638e-07,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "formaldehyde_equilibrium",
+      "check": "polarizability_symmetry",
+      "value": 5.19862819894997e-09,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "formaldehyde_equilibrium",
+      "check": "polarizability_positive",
+      "value": 9.173731981318197,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "n2_equilibrium",
+      "check": "spin_contamination",
+      "value": 1.4210854715202004e-14,
+      "tolerance": 0.05,
+      "passed": true,
+      "detail": "expected <S^2>=0.000000"
+    },
+    {
+      "geometry_id": "n2_equilibrium",
+      "check": "mulliken_charge_conservation",
+      "value": 1.0658141036401503e-14,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "n2_equilibrium",
+      "check": "lowdin_charge_conservation",
+      "value": 7.105427357601002e-15,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "n2_equilibrium",
+      "check": "mbis_charge_conservation",
+      "value": 4.6790107104628873e-07,
+      "tolerance": 5e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "n2_equilibrium",
+      "check": "net_force",
+      "value": 4.0373365217129356e-11,
+      "tolerance": 0.02,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "n2_equilibrium",
+      "check": "mbis_dipole_reconstruction",
+      "value": 1.637909573350841e-13,
+      "tolerance": 2e-05,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "n2_equilibrium",
+      "check": "polarizability_symmetry",
+      "value": 7.804869429815667e-12,
+      "tolerance": 0.001,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "n2_equilibrium",
+      "check": "polarizability_positive",
+      "value": 7.845493458046155,
+      "tolerance": 0.0,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "h2_equilibrium",
+      "check": "symmetry_zero_dipole",
+      "value": 1.9818950505472327e-12,
+      "tolerance": 0.0002,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "methane_equilibrium",
+      "check": "symmetry_zero_dipole",
+      "value": 1.701868898215617e-11,
+      "tolerance": 0.0002,
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "geometry_id": "n2_equilibrium",
+      "check": "symmetry_zero_dipole",
+      "value": 2.930661298334053e-08,
+      "tolerance": 0.0002,
+      "passed": true,
+      "detail": ""
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "manifest": "research_data\\electronic_observables\\manifest.json",
+  "manifest_sha256": "1d0502f55552c728a93f5d1b9def15221812c944400a198fba0d1d2e8ad4893b",
+  "method": "wb97x-d",
+  "basis": "jun-cc-pvdz",
+  "references": {
+    "singlet": "RKS",
+    "open_shell": "UKS"
+  },
+  "scf_type": "DF",
+  "threads": 8,
+  "memory": "4 GB",
+  "psi4_version": "1.11",
+  "python_version": "3.12.13",
+  "constants": {
+    "hartree_to_eV": 27.211386245988,
+    "bohr_to_angstrom": 0.529177210903,
+    "dipole_au_to_debye": 2.541746473,
+    "polarizability_au_to_angstrom3": 0.14818471147216278
+  },
+  "property_conventions": {
+    "charges": "Mulliken, Lowdin, and MBIS are partition-dependent proxies.",
+    "dipole": "Psi4 total electric dipole in the fixed input frame.",
+    "polarizability": "Static analytic dipole polarizability in atomic units.",
+    "mbis_multipoles": "Raw Psi4 component ordering and atomic-unit convention retained."
+  }
+}

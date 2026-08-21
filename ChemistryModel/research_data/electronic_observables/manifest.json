@@ -1,0 +1,1219 @@
+{
+  "schema_version": 1,
+  "purpose": "small electronic-observable characterisation and hold-out set",
+  "fitting_policy": "No parameters are fitted in this phase.",
+  "coordinate_policy": "Exact fixed Cartesian inputs; C1, no reorientation, no COM shift.",
+  "roles": {
+    "characterisation": "May be inspected while designing a future model.",
+    "validation": "Used to reject formulations, not tune individual geometries.",
+    "final_holdout": "Must remain unseen until a candidate is frozen."
+  },
+  "geometries": [
+    {
+      "geometry_id": "h2_equilibrium",
+      "family": "h2",
+      "role": "characterisation",
+      "comparison_group": "h2",
+      "reference_geometry_id": "h2_equilibrium",
+      "purpose": "Symmetry, zero dipole, and accepted H2 reference.",
+      "charge": 0,
+      "multiplicity": 1,
+      "symbols": [
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          -0.37072
+        ],
+        [
+          0.0,
+          0.0,
+          0.37072
+        ]
+      ],
+      "scan_coordinate": {}
+    },
+    {
+      "geometry_id": "h3_reactant",
+      "family": "h3_transfer",
+      "role": "characterisation",
+      "comparison_group": "h3_transfer",
+      "reference_geometry_id": "h3_reactant",
+      "purpose": "Three-centre H electronic redistribution and false-binding gate. Separated reactant reference.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.74144
+        ],
+        [
+          0.0,
+          0.0,
+          5.74144
+        ]
+      ],
+      "scan_coordinate": {
+        "donor_distance_angstrom": 0.74144,
+        "transfer_distance_angstrom": 5.0,
+        "source_geometry_id": "h3_reactant_reference_0000"
+      }
+    },
+    {
+      "geometry_id": "h3_transfer_0p90",
+      "family": "h3_transfer",
+      "role": "validation",
+      "comparison_group": "h3_transfer",
+      "reference_geometry_id": "h3_reactant",
+      "purpose": "Three-centre H electronic redistribution and false-binding gate.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.8428571429
+        ],
+        [
+          0.0,
+          0.0,
+          1.7428571429
+        ]
+      ],
+      "scan_coordinate": {
+        "donor_distance_angstrom": 0.8428571429,
+        "transfer_distance_angstrom": 0.9,
+        "source_geometry_id": "h3_dense_transfer_0003"
+      }
+    },
+    {
+      "geometry_id": "h3_transfer_1p06",
+      "family": "h3_transfer",
+      "role": "validation",
+      "comparison_group": "h3_transfer",
+      "reference_geometry_id": "h3_reactant",
+      "purpose": "Three-centre H electronic redistribution and false-binding gate.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.8428571429
+        ],
+        [
+          0.0,
+          0.0,
+          1.9028571429
+        ]
+      ],
+      "scan_coordinate": {
+        "donor_distance_angstrom": 0.8428571429,
+        "transfer_distance_angstrom": 1.06,
+        "source_geometry_id": "h3_dense_transfer_0011"
+      }
+    },
+    {
+      "geometry_id": "h3_transfer_1p22",
+      "family": "h3_transfer",
+      "role": "final_holdout",
+      "comparison_group": "h3_transfer",
+      "reference_geometry_id": "h3_reactant",
+      "purpose": "Three-centre H electronic redistribution and false-binding gate.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          0.8428571429
+        ],
+        [
+          0.0,
+          0.0,
+          2.0628571429
+        ]
+      ],
+      "scan_coordinate": {
+        "donor_distance_angstrom": 0.8428571429,
+        "transfer_distance_angstrom": 1.22,
+        "source_geometry_id": "h3_dense_transfer_0019"
+      }
+    },
+    {
+      "geometry_id": "h_formaldehyde_reactant",
+      "family": "h_formaldehyde_transfer",
+      "role": "characterisation",
+      "comparison_group": "h_formaldehyde_transfer",
+      "reference_geometry_id": "h_formaldehyde_reactant",
+      "purpose": "H abstraction from formaldehyde. Separated reactant reference.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "C",
+        "O",
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.2,
+          0.0
+        ],
+        [
+          0.9243724248,
+          -0.577611998,
+          0.0
+        ],
+        [
+          -0.9243724248,
+          -0.577611998,
+          0.0
+        ],
+        [
+          5.1646129056,
+          -3.2272083192,
+          0.0
+        ]
+      ],
+      "scan_coordinate": {
+        "donor_distance_angstrom": 1.09,
+        "transfer_distance_angstrom": 5.0,
+        "source_geometry_id": "formaldehyde_reactant_reference_0000"
+      }
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_0p90",
+      "family": "h_formaldehyde_transfer",
+      "role": "validation",
+      "comparison_group": "h_formaldehyde_transfer",
+      "reference_geometry_id": "h_formaldehyde_reactant",
+      "purpose": "H abstraction from formaldehyde.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "C",
+        "O",
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.2,
+          0.0
+        ],
+        [
+          1.1751523618,
+          -0.7343166947,
+          0.0
+        ],
+        [
+          -0.9243724248,
+          -0.577611998,
+          0.0
+        ],
+        [
+          1.9383956484,
+          -1.2112440325,
+          0.0
+        ]
+      ],
+      "scan_coordinate": {
+        "donor_distance_angstrom": 1.3857142857,
+        "transfer_distance_angstrom": 0.9,
+        "source_geometry_id": "formaldehyde_dense_transfer_0003"
+      }
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p06",
+      "family": "h_formaldehyde_transfer",
+      "role": "validation",
+      "comparison_group": "h_formaldehyde_transfer",
+      "reference_geometry_id": "h_formaldehyde_reactant",
+      "purpose": "H abstraction from formaldehyde.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "C",
+        "O",
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.2,
+          0.0
+        ],
+        [
+          1.1751523618,
+          -0.7343166947,
+          0.0
+        ],
+        [
+          -0.9243724248,
+          -0.577611998,
+          0.0
+        ],
+        [
+          2.0740833437,
+          -1.2960311148,
+          0.0
+        ]
+      ],
+      "scan_coordinate": {
+        "donor_distance_angstrom": 1.3857142857,
+        "transfer_distance_angstrom": 1.06,
+        "source_geometry_id": "formaldehyde_dense_transfer_0011"
+      }
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p22",
+      "family": "h_formaldehyde_transfer",
+      "role": "final_holdout",
+      "comparison_group": "h_formaldehyde_transfer",
+      "reference_geometry_id": "h_formaldehyde_reactant",
+      "purpose": "H abstraction from formaldehyde.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "C",
+        "O",
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.2,
+          0.0
+        ],
+        [
+          1.1751523618,
+          -0.7343166947,
+          0.0
+        ],
+        [
+          -0.9243724248,
+          -0.577611998,
+          0.0
+        ],
+        [
+          2.2097710391,
+          -1.3808181971,
+          0.0
+        ]
+      ],
+      "scan_coordinate": {
+        "donor_distance_angstrom": 1.3857142857,
+        "transfer_distance_angstrom": 1.22,
+        "source_geometry_id": "formaldehyde_dense_transfer_0019"
+      }
+    },
+    {
+      "geometry_id": "water_transfer_reactant",
+      "family": "water_transfer",
+      "role": "characterisation",
+      "comparison_group": "water_transfer",
+      "reference_geometry_id": "water_transfer_reactant",
+      "purpose": "Proton transfer and the established water microscope. Separated reactant reference.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "O",
+        "H",
+        "H",
+        "O",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.96,
+          0.0,
+          0.0
+        ],
+        [
+          0.2403648039,
+          0.0,
+          0.9294217348
+        ],
+        [
+          5.96,
+          0.0,
+          0.0
+        ],
+        [
+          5.7196351961,
+          0.0,
+          0.9294217348
+        ]
+      ],
+      "scan_coordinate": {
+        "donor_distance_angstrom": 0.96,
+        "transfer_distance_angstrom": 5.0,
+        "source_geometry_id": "water_reactant_reference_0000"
+      }
+    },
+    {
+      "geometry_id": "water_transfer_1p10",
+      "family": "water_transfer",
+      "role": "validation",
+      "comparison_group": "water_transfer",
+      "reference_geometry_id": "water_transfer_reactant",
+      "purpose": "Proton transfer and the established water microscope.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "O",
+        "H",
+        "H",
+        "O",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0285714286,
+          0.0,
+          0.0
+        ],
+        [
+          0.2403648039,
+          0.0,
+          0.9294217348
+        ],
+        [
+          2.1285714286,
+          0.0,
+          0.0
+        ],
+        [
+          1.8882066247,
+          0.0,
+          0.9294217348
+        ]
+      ],
+      "scan_coordinate": {
+        "donor_distance_angstrom": 1.0285714286,
+        "transfer_distance_angstrom": 1.1,
+        "source_geometry_id": "water_dense_transfer_0001"
+      }
+    },
+    {
+      "geometry_id": "water_transfer_1p30",
+      "family": "water_transfer",
+      "role": "validation",
+      "comparison_group": "water_transfer",
+      "reference_geometry_id": "water_transfer_reactant",
+      "purpose": "Proton transfer and the established water microscope.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "O",
+        "H",
+        "H",
+        "O",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0285714286,
+          0.0,
+          0.0
+        ],
+        [
+          0.2403648039,
+          0.0,
+          0.9294217348
+        ],
+        [
+          2.3285714286,
+          0.0,
+          0.0
+        ],
+        [
+          2.0882066247,
+          0.0,
+          0.9294217348
+        ]
+      ],
+      "scan_coordinate": {
+        "donor_distance_angstrom": 1.0285714286,
+        "transfer_distance_angstrom": 1.3,
+        "source_geometry_id": "water_dense_transfer_0011"
+      }
+    },
+    {
+      "geometry_id": "water_transfer_1p52",
+      "family": "water_transfer",
+      "role": "final_holdout",
+      "comparison_group": "water_transfer",
+      "reference_geometry_id": "water_transfer_reactant",
+      "purpose": "Proton transfer and the established water microscope.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "O",
+        "H",
+        "H",
+        "O",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.0285714286,
+          0.0,
+          0.0
+        ],
+        [
+          0.2403648039,
+          0.0,
+          0.9294217348
+        ],
+        [
+          2.5485714286,
+          0.0,
+          0.0
+        ],
+        [
+          2.3082066247,
+          0.0,
+          0.9294217348
+        ]
+      ],
+      "scan_coordinate": {
+        "donor_distance_angstrom": 1.0285714286,
+        "transfer_distance_angstrom": 1.52,
+        "source_geometry_id": "water_dense_transfer_0022"
+      }
+    },
+    {
+      "geometry_id": "h_h2_linear_3p00",
+      "family": "h_h2_approach",
+      "role": "characterisation",
+      "comparison_group": "h_h2_approach",
+      "reference_geometry_id": "h_h2_linear_3p00",
+      "purpose": "Reject an artificial H-H2 complex and resolve orientation.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          -0.37072
+        ],
+        [
+          0.0,
+          0.0,
+          0.37072
+        ],
+        [
+          0.0,
+          0.0,
+          3.37072
+        ]
+      ],
+      "scan_coordinate": {
+        "approach_distance_angstrom": 3.0,
+        "orientation": "linear"
+      }
+    },
+    {
+      "geometry_id": "h_h2_linear_1p80",
+      "family": "h_h2_approach",
+      "role": "validation",
+      "comparison_group": "h_h2_approach",
+      "reference_geometry_id": "h_h2_linear_3p00",
+      "purpose": "Reject an artificial H-H2 complex and resolve orientation.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          -0.37072
+        ],
+        [
+          0.0,
+          0.0,
+          0.37072
+        ],
+        [
+          0.0,
+          0.0,
+          2.17072
+        ]
+      ],
+      "scan_coordinate": {
+        "approach_distance_angstrom": 1.8,
+        "orientation": "linear"
+      }
+    },
+    {
+      "geometry_id": "h_h2_linear_1p20",
+      "family": "h_h2_approach",
+      "role": "validation",
+      "comparison_group": "h_h2_approach",
+      "reference_geometry_id": "h_h2_linear_3p00",
+      "purpose": "Reject an artificial H-H2 complex and resolve orientation.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          -0.37072
+        ],
+        [
+          0.0,
+          0.0,
+          0.37072
+        ],
+        [
+          0.0,
+          0.0,
+          1.57072
+        ]
+      ],
+      "scan_coordinate": {
+        "approach_distance_angstrom": 1.2,
+        "orientation": "linear"
+      }
+    },
+    {
+      "geometry_id": "h_h2_perpendicular_1p50",
+      "family": "h_h2_approach",
+      "role": "final_holdout",
+      "comparison_group": "h_h2_approach",
+      "reference_geometry_id": "h_h2_linear_3p00",
+      "purpose": "Reject an artificial H-H2 complex and resolve orientation.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          -0.37072
+        ],
+        [
+          0.0,
+          0.0,
+          0.37072
+        ],
+        [
+          1.5,
+          0.0,
+          0.0
+        ]
+      ],
+      "scan_coordinate": {
+        "approach_distance_angstrom": 1.5,
+        "orientation": "perpendicular"
+      }
+    },
+    {
+      "geometry_id": "water_angle_90p0",
+      "family": "water_angle",
+      "role": "validation",
+      "comparison_group": "water_angle",
+      "reference_geometry_id": "water_angle_104p5",
+      "purpose": "Directional density response at fixed radial participation.",
+      "charge": 0,
+      "multiplicity": 1,
+      "symbols": [
+        "O",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.676842611,
+          0.676842611,
+          0.0
+        ],
+        [
+          0.676842611,
+          -0.676842611,
+          0.0
+        ]
+      ],
+      "scan_coordinate": {
+        "hoh_angle_degrees": 90.0,
+        "oh_distance_angstrom": 0.9572
+      }
+    },
+    {
+      "geometry_id": "water_angle_104p5",
+      "family": "water_angle",
+      "role": "characterisation",
+      "comparison_group": "water_angle",
+      "reference_geometry_id": "water_angle_104p5",
+      "purpose": "Directional density response at fixed radial participation.",
+      "charge": 0,
+      "multiplicity": 1,
+      "symbols": [
+        "O",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.5860143804,
+          0.75684806,
+          0.0
+        ],
+        [
+          0.5860143804,
+          -0.75684806,
+          0.0
+        ]
+      ],
+      "scan_coordinate": {
+        "hoh_angle_degrees": 104.5,
+        "oh_distance_angstrom": 0.9572
+      }
+    },
+    {
+      "geometry_id": "water_angle_120p0",
+      "family": "water_angle",
+      "role": "final_holdout",
+      "comparison_group": "water_angle",
+      "reference_geometry_id": "water_angle_104p5",
+      "purpose": "Directional density response at fixed radial participation.",
+      "charge": 0,
+      "multiplicity": 1,
+      "symbols": [
+        "O",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.4786,
+          0.8289595165,
+          0.0
+        ],
+        [
+          0.4786,
+          -0.8289595165,
+          0.0
+        ]
+      ],
+      "scan_coordinate": {
+        "hoh_angle_degrees": 120.0,
+        "oh_distance_angstrom": 0.9572
+      }
+    },
+    {
+      "geometry_id": "oh_stretch_0p80",
+      "family": "oh_stretch",
+      "role": "validation",
+      "comparison_group": "oh_stretch",
+      "reference_geometry_id": "oh_stretch_0p97",
+      "purpose": "Open-shell bond stretching and continuous charge response.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "O",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.8,
+          0.0,
+          0.0
+        ]
+      ],
+      "scan_coordinate": {
+        "oh_distance_angstrom": 0.8
+      }
+    },
+    {
+      "geometry_id": "oh_stretch_0p97",
+      "family": "oh_stretch",
+      "role": "characterisation",
+      "comparison_group": "oh_stretch",
+      "reference_geometry_id": "oh_stretch_0p97",
+      "purpose": "Open-shell bond stretching and continuous charge response.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "O",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.97,
+          0.0,
+          0.0
+        ]
+      ],
+      "scan_coordinate": {
+        "oh_distance_angstrom": 0.97
+      }
+    },
+    {
+      "geometry_id": "oh_stretch_1p20",
+      "family": "oh_stretch",
+      "role": "final_holdout",
+      "comparison_group": "oh_stretch",
+      "reference_geometry_id": "oh_stretch_0p97",
+      "purpose": "Open-shell bond stretching and continuous charge response.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "O",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.2,
+          0.0,
+          0.0
+        ]
+      ],
+      "scan_coordinate": {
+        "oh_distance_angstrom": 1.2
+      }
+    },
+    {
+      "geometry_id": "water_h_probe_lone_pair",
+      "family": "water_h_direction",
+      "role": "validation",
+      "comparison_group": "water_h_direction",
+      "reference_geometry_id": "water_h_probe_out_of_plane",
+      "purpose": "Directional donor/acceptor density response without fitting a water term.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "O",
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.5860143804,
+          0.75684806,
+          0.0
+        ],
+        [
+          0.5860143804,
+          -0.75684806,
+          0.0
+        ],
+        [
+          -1.7,
+          0.0,
+          0.0
+        ]
+      ],
+      "scan_coordinate": {
+        "probe_radius_angstrom": 1.7,
+        "orientation": "opposite_bisector"
+      }
+    },
+    {
+      "geometry_id": "water_h_probe_out_of_plane",
+      "family": "water_h_direction",
+      "role": "final_holdout",
+      "comparison_group": "water_h_direction",
+      "reference_geometry_id": "water_h_probe_out_of_plane",
+      "purpose": "Directional donor/acceptor density response without fitting a water term.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "O",
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.5860143804,
+          0.75684806,
+          0.0
+        ],
+        [
+          0.5860143804,
+          -0.75684806,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.7
+        ]
+      ],
+      "scan_coordinate": {
+        "probe_radius_angstrom": 1.7,
+        "orientation": "out_of_plane"
+      }
+    },
+    {
+      "geometry_id": "water_h_probe_h_side",
+      "family": "water_h_direction",
+      "role": "final_holdout",
+      "comparison_group": "water_h_direction",
+      "reference_geometry_id": "water_h_probe_out_of_plane",
+      "purpose": "Directional donor/acceptor density response without fitting a water term.",
+      "charge": 0,
+      "multiplicity": 2,
+      "symbols": [
+        "O",
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.5860143804,
+          0.75684806,
+          0.0
+        ],
+        [
+          0.5860143804,
+          -0.75684806,
+          0.0
+        ],
+        [
+          1.7,
+          0.0,
+          0.0
+        ]
+      ],
+      "scan_coordinate": {
+        "probe_radius_angstrom": 1.7,
+        "orientation": "hydrogen_side"
+      }
+    },
+    {
+      "geometry_id": "methane_equilibrium",
+      "family": "methane",
+      "role": "final_holdout",
+      "comparison_group": "methane",
+      "reference_geometry_id": "methane_equilibrium",
+      "purpose": "Tetrahedral capacity and zero-dipole symmetry.",
+      "charge": 0,
+      "multiplicity": 1,
+      "symbols": [
+        "C",
+        "H",
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.6293117934,
+          0.6293117934,
+          0.6293117934
+        ],
+        [
+          0.6293117934,
+          -0.6293117934,
+          -0.6293117934
+        ],
+        [
+          -0.6293117934,
+          0.6293117934,
+          -0.6293117934
+        ],
+        [
+          -0.6293117934,
+          -0.6293117934,
+          0.6293117934
+        ]
+      ],
+      "scan_coordinate": {}
+    },
+    {
+      "geometry_id": "ethane_equilibrium",
+      "family": "ethane",
+      "role": "final_holdout",
+      "comparison_group": "ethane",
+      "reference_geometry_id": "ethane_equilibrium",
+      "purpose": "Single C-C bond and local carbon response.",
+      "charge": 0,
+      "multiplicity": 1,
+      "symbols": [
+        "C",
+        "C",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          -0.7625,
+          0.0,
+          0.0
+        ],
+        [
+          0.7625,
+          0.0,
+          0.0
+        ],
+        [
+          -1.1258333333,
+          1.0276618553,
+          0.0
+        ],
+        [
+          -1.1258333333,
+          -0.5138309277,
+          0.8899812732
+        ],
+        [
+          -1.1258333333,
+          -0.5138309277,
+          -0.8899812732
+        ],
+        [
+          1.1258333333,
+          0.5138309277,
+          0.8899812732
+        ],
+        [
+          1.1258333333,
+          -1.0276618553,
+          0.0
+        ],
+        [
+          1.1258333333,
+          0.5138309277,
+          -0.8899812732
+        ]
+      ],
+      "scan_coordinate": {}
+    },
+    {
+      "geometry_id": "formaldehyde_equilibrium",
+      "family": "formaldehyde",
+      "role": "final_holdout",
+      "comparison_group": "formaldehyde",
+      "reference_geometry_id": "formaldehyde_equilibrium",
+      "purpose": "Polar C=O multiple-bond reference.",
+      "charge": 0,
+      "multiplicity": 1,
+      "symbols": [
+        "C",
+        "O",
+        "H",
+        "H"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          0.0
+        ],
+        [
+          1.208,
+          0.0,
+          0.0
+        ],
+        [
+          -0.5880826678,
+          0.9484802454,
+          0.0
+        ],
+        [
+          -0.5880826678,
+          -0.9484802454,
+          0.0
+        ]
+      ],
+      "scan_coordinate": {}
+    },
+    {
+      "geometry_id": "n2_equilibrium",
+      "family": "n2",
+      "role": "final_holdout",
+      "comparison_group": "n2",
+      "reference_geometry_id": "n2_equilibrium",
+      "purpose": "Triple-bond reference with zero-dipole symmetry.",
+      "charge": 0,
+      "multiplicity": 1,
+      "symbols": [
+        "N",
+        "N"
+      ],
+      "coordinates_angstrom": [
+        [
+          0.0,
+          0.0,
+          -0.5488
+        ],
+        [
+          0.0,
+          0.0,
+          0.5488
+        ]
+      ],
+      "scan_coordinate": {}
+    }
+  ]
+}

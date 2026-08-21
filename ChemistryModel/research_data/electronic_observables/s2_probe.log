@@ -1,0 +1,3 @@
+2026-08-21:05:52:55,19 INFO     [psi4.driver.task_planner:259] PLANNING Atomic:  keywords={'REFERENCE': 'UKS', 'SCF_TYPE': 'DF', 'function_kwargs': {}}
+2026-08-21:05:52:55,22 INFO     [psi4.driver.driver:531] Compute energy(): method=wb97x-d, basis=jun-cc-pvdz, molecule=default, nre=1.4846360632686109
+2026-08-21:05:52:56,671 INFO     [psi4.driver.driver:534] Return energy(): -1.657883065734444

@@ -1,0 +1,422 @@
+{
+  "schema_version": 1,
+  "cancellation_warning": false,
+  "families": {
+    "ethane": {
+      "count": 1,
+      "baseline_mae_eV": 0.0,
+      "candidate_mae_eV": 0.0,
+      "improved": 0,
+      "regressed": 0,
+      "baseline_force_rmse_eV_per_angstrom": 0.3420194139180416,
+      "candidate_force_rmse_eV_per_angstrom": 0.3420194139180416
+    },
+    "formaldehyde": {
+      "count": 1,
+      "baseline_mae_eV": 0.0,
+      "candidate_mae_eV": 0.0,
+      "improved": 0,
+      "regressed": 0,
+      "baseline_force_rmse_eV_per_angstrom": 0.3997605917548828,
+      "candidate_force_rmse_eV_per_angstrom": 0.3997605917548828
+    },
+    "h2": {
+      "count": 1,
+      "baseline_mae_eV": 0.0,
+      "candidate_mae_eV": 0.0,
+      "improved": 0,
+      "regressed": 0,
+      "baseline_force_rmse_eV_per_angstrom": 0.3795282281800319,
+      "candidate_force_rmse_eV_per_angstrom": 0.3795282281800319
+    },
+    "h3_transfer": {
+      "count": 4,
+      "baseline_mae_eV": 0.148378741793874,
+      "candidate_mae_eV": 0.14837874179387467,
+      "improved": 0,
+      "regressed": 0,
+      "baseline_force_rmse_eV_per_angstrom": 1.0873522717863302,
+      "candidate_force_rmse_eV_per_angstrom": 1.0873522717863309
+    },
+    "h_formaldehyde_transfer": {
+      "count": 4,
+      "baseline_mae_eV": 0.3024475999211118,
+      "candidate_mae_eV": 0.3024475999211109,
+      "improved": 0,
+      "regressed": 0,
+      "baseline_force_rmse_eV_per_angstrom": 1.4470490266769787,
+      "candidate_force_rmse_eV_per_angstrom": 1.4470490266769787
+    },
+    "h_h2_approach": {
+      "count": 4,
+      "baseline_mae_eV": 0.26327806666497544,
+      "candidate_mae_eV": 0.26327806666497544,
+      "improved": 0,
+      "regressed": 0,
+      "baseline_force_rmse_eV_per_angstrom": 0.5968961841528003,
+      "candidate_force_rmse_eV_per_angstrom": 0.5968961841528003
+    },
+    "methane": {
+      "count": 1,
+      "baseline_mae_eV": 0.0,
+      "candidate_mae_eV": 0.0,
+      "improved": 0,
+      "regressed": 0,
+      "baseline_force_rmse_eV_per_angstrom": 0.21637546007506586,
+      "candidate_force_rmse_eV_per_angstrom": 0.21637546007506586
+    },
+    "n2": {
+      "count": 1,
+      "baseline_mae_eV": 0.0,
+      "candidate_mae_eV": 0.0,
+      "improved": 0,
+      "regressed": 0,
+      "baseline_force_rmse_eV_per_angstrom": 0.12269173843031327,
+      "candidate_force_rmse_eV_per_angstrom": 0.12269173843031327
+    },
+    "oh_stretch": {
+      "count": 3,
+      "baseline_mae_eV": 0.12950917997895317,
+      "candidate_mae_eV": 0.12950917997895317,
+      "improved": 0,
+      "regressed": 0,
+      "baseline_force_rmse_eV_per_angstrom": 1.1603675041465882,
+      "candidate_force_rmse_eV_per_angstrom": 1.1603675041465882
+    },
+    "water_angle": {
+      "count": 3,
+      "baseline_mae_eV": 0.038034883585500744,
+      "candidate_mae_eV": 0.038034883585500744,
+      "improved": 0,
+      "regressed": 0,
+      "baseline_force_rmse_eV_per_angstrom": 0.27570999654909967,
+      "candidate_force_rmse_eV_per_angstrom": 0.27570999654909967
+    },
+    "water_h_direction": {
+      "count": 3,
+      "baseline_mae_eV": 0.15043518838001782,
+      "candidate_mae_eV": 0.15043518838001782,
+      "improved": 0,
+      "regressed": 0,
+      "baseline_force_rmse_eV_per_angstrom": 0.6779146015607302,
+      "candidate_force_rmse_eV_per_angstrom": 0.6779146015607302
+    },
+    "water_transfer": {
+      "count": 4,
+      "baseline_mae_eV": 0.7832898614853652,
+      "candidate_mae_eV": 0.12953891048026245,
+      "improved": 1,
+      "regressed": 1,
+      "baseline_force_rmse_eV_per_angstrom": 7.266550856560728,
+      "candidate_force_rmse_eV_per_angstrom": 0.8863249938095855
+    }
+  },
+  "most_improved": [
+    "water_transfer_1p10"
+  ],
+  "most_regressed": [
+    "water_transfer_1p30"
+  ],
+  "rows": [
+    {
+      "geometry_id": "ethane_equilibrium",
+      "family": "ethane",
+      "baseline_residual_eV": 0.0,
+      "candidate_residual_eV": 0.0,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.3420194139180416,
+      "candidate_force_rmse_eV_per_angstrom": 0.3420194139180416
+    },
+    {
+      "geometry_id": "formaldehyde_equilibrium",
+      "family": "formaldehyde",
+      "baseline_residual_eV": 0.0,
+      "candidate_residual_eV": 0.0,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.3997605917548828,
+      "candidate_force_rmse_eV_per_angstrom": 0.3997605917548828
+    },
+    {
+      "geometry_id": "h2_equilibrium",
+      "family": "h2",
+      "baseline_residual_eV": 0.0,
+      "candidate_residual_eV": 0.0,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.3795282281800319,
+      "candidate_force_rmse_eV_per_angstrom": 0.3795282281800319
+    },
+    {
+      "geometry_id": "h3_reactant",
+      "family": "h3_transfer",
+      "baseline_residual_eV": 0.0,
+      "candidate_residual_eV": 0.0,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.30965751593268276,
+      "candidate_force_rmse_eV_per_angstrom": 0.30965751593268276
+    },
+    {
+      "geometry_id": "h3_transfer_0p90",
+      "family": "h3_transfer",
+      "baseline_residual_eV": 0.3249173909387135,
+      "candidate_residual_eV": 0.3249173909387144,
+      "absolute_improvement_eV": -8.881784197001252e-16,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 1.193444125466098,
+      "candidate_force_rmse_eV_per_angstrom": 1.1934441254660972
+    },
+    {
+      "geometry_id": "h3_transfer_1p06",
+      "family": "h3_transfer",
+      "baseline_residual_eV": 0.10435421769344888,
+      "candidate_residual_eV": 0.10435421769344888,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 1.5566597885915598,
+      "candidate_force_rmse_eV_per_angstrom": 1.556659788591562
+    },
+    {
+      "geometry_id": "h3_transfer_1p22",
+      "family": "h3_transfer",
+      "baseline_residual_eV": -0.1642433585433336,
+      "candidate_residual_eV": -0.16424335854333538,
+      "absolute_improvement_eV": -1.7763568394002505e-15,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.8865401833163093,
+      "candidate_force_rmse_eV_per_angstrom": 0.8865401833163093
+    },
+    {
+      "geometry_id": "h_formaldehyde_reactant",
+      "family": "h_formaldehyde_transfer",
+      "baseline_residual_eV": 0.0,
+      "candidate_residual_eV": 0.0,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.44845441931984814,
+      "candidate_force_rmse_eV_per_angstrom": 0.44845441931984814
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_0p90",
+      "family": "h_formaldehyde_transfer",
+      "baseline_residual_eV": -0.4297928302310545,
+      "candidate_residual_eV": -0.4297928302310581,
+      "absolute_improvement_eV": -3.552713678800501e-15,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.9052677779372126,
+      "candidate_force_rmse_eV_per_angstrom": 0.9052677779372121
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p06",
+      "family": "h_formaldehyde_transfer",
+      "baseline_residual_eV": 0.5140501318844706,
+      "candidate_residual_eV": 0.514050131884467,
+      "absolute_improvement_eV": 3.552713678800501e-15,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 1.817696806155571,
+      "candidate_force_rmse_eV_per_angstrom": 1.8176968061555703
+    },
+    {
+      "geometry_id": "h_formaldehyde_transfer_1p22",
+      "family": "h_formaldehyde_transfer",
+      "baseline_residual_eV": 0.26594743756892214,
+      "candidate_residual_eV": 0.2659474375689186,
+      "absolute_improvement_eV": 3.552713678800501e-15,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 2.0127495490845653,
+      "candidate_force_rmse_eV_per_angstrom": 2.0127495490845657
+    },
+    {
+      "geometry_id": "h_h2_linear_1p20",
+      "family": "h_h2_approach",
+      "baseline_residual_eV": -0.36689411714750975,
+      "candidate_residual_eV": -0.36689411714750975,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.9012752320688565,
+      "candidate_force_rmse_eV_per_angstrom": 0.9012752320688565
+    },
+    {
+      "geometry_id": "h_h2_linear_1p80",
+      "family": "h_h2_approach",
+      "baseline_residual_eV": -0.12472320580371132,
+      "candidate_residual_eV": -0.12472320580371132,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.35934520231336387,
+      "candidate_force_rmse_eV_per_angstrom": 0.35934520231336387
+    },
+    {
+      "geometry_id": "h_h2_linear_3p00",
+      "family": "h_h2_approach",
+      "baseline_residual_eV": 0.0,
+      "candidate_residual_eV": 0.0,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.30162165531036933,
+      "candidate_force_rmse_eV_per_angstrom": 0.30162165531036933
+    },
+    {
+      "geometry_id": "h_h2_perpendicular_1p50",
+      "family": "h_h2_approach",
+      "baseline_residual_eV": -0.5614949437086807,
+      "candidate_residual_eV": -0.5614949437086807,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.6266885808008027,
+      "candidate_force_rmse_eV_per_angstrom": 0.6266885808008027
+    },
+    {
+      "geometry_id": "methane_equilibrium",
+      "family": "methane",
+      "baseline_residual_eV": 0.0,
+      "candidate_residual_eV": 0.0,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.21637546007506586,
+      "candidate_force_rmse_eV_per_angstrom": 0.21637546007506586
+    },
+    {
+      "geometry_id": "n2_equilibrium",
+      "family": "n2",
+      "baseline_residual_eV": 0.0,
+      "candidate_residual_eV": 0.0,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.12269173843031327,
+      "candidate_force_rmse_eV_per_angstrom": 0.12269173843031327
+    },
+    {
+      "geometry_id": "oh_stretch_0p80",
+      "family": "oh_stretch",
+      "baseline_residual_eV": -0.29908266407879935,
+      "candidate_residual_eV": -0.29908266407879935,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 1.949543480505775,
+      "candidate_force_rmse_eV_per_angstrom": 1.949543480505775
+    },
+    {
+      "geometry_id": "oh_stretch_0p97",
+      "family": "oh_stretch",
+      "baseline_residual_eV": 0.0,
+      "candidate_residual_eV": 0.0,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.48844679451132683,
+      "candidate_force_rmse_eV_per_angstrom": 0.48844679451132683
+    },
+    {
+      "geometry_id": "oh_stretch_1p20",
+      "family": "oh_stretch",
+      "baseline_residual_eV": 0.08944487585806016,
+      "candidate_residual_eV": 0.08944487585806016,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.00762762002107385,
+      "candidate_force_rmse_eV_per_angstrom": 0.00762762002107385
+    },
+    {
+      "geometry_id": "water_angle_104p5",
+      "family": "water_angle",
+      "baseline_residual_eV": 0.0,
+      "candidate_residual_eV": 0.0,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.11713962628905794,
+      "candidate_force_rmse_eV_per_angstrom": 0.11713962628905794
+    },
+    {
+      "geometry_id": "water_angle_120p0",
+      "family": "water_angle",
+      "baseline_residual_eV": -0.0465047662210587,
+      "candidate_residual_eV": -0.0465047662210587,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.18624889535801295,
+      "candidate_force_rmse_eV_per_angstrom": 0.18624889535801295
+    },
+    {
+      "geometry_id": "water_angle_90p0",
+      "family": "water_angle",
+      "baseline_residual_eV": -0.06759988453544352,
+      "candidate_residual_eV": -0.06759988453544352,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.4238368359664995,
+      "candidate_force_rmse_eV_per_angstrom": 0.4238368359664995
+    },
+    {
+      "geometry_id": "water_h_probe_h_side",
+      "family": "water_h_direction",
+      "baseline_residual_eV": -0.4266824522678725,
+      "candidate_residual_eV": -0.4266824522678725,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.991899172945789,
+      "candidate_force_rmse_eV_per_angstrom": 0.991899172945789
+    },
+    {
+      "geometry_id": "water_h_probe_lone_pair",
+      "family": "water_h_direction",
+      "baseline_residual_eV": -0.024623112872180997,
+      "candidate_residual_eV": -0.024623112872180997,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.4475202327480665,
+      "candidate_force_rmse_eV_per_angstrom": 0.4475202327480665
+    },
+    {
+      "geometry_id": "water_h_probe_out_of_plane",
+      "family": "water_h_direction",
+      "baseline_residual_eV": 0.0,
+      "candidate_residual_eV": 0.0,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.44109669350189773,
+      "candidate_force_rmse_eV_per_angstrom": 0.44109669350189773
+    },
+    {
+      "geometry_id": "water_transfer_1p10",
+      "family": "water_transfer",
+      "baseline_residual_eV": 2.71728786034004,
+      "candidate_residual_eV": -0.08908108002297155,
+      "absolute_improvement_eV": 2.6282067803170683,
+      "classification": "improved",
+      "baseline_force_rmse_eV_per_angstrom": 14.462147478211653,
+      "candidate_force_rmse_eV_per_angstrom": 1.031437088282883
+    },
+    {
+      "geometry_id": "water_transfer_1p30",
+      "family": "water_transfer",
+      "baseline_residual_eV": -0.1418628776613584,
+      "candidate_residual_eV": -0.15506585395801942,
+      "absolute_improvement_eV": -0.013202976296661006,
+      "classification": "regressed",
+      "baseline_force_rmse_eV_per_angstrom": 0.9119378529871467,
+      "candidate_force_rmse_eV_per_angstrom": 0.9234286311575355
+    },
+    {
+      "geometry_id": "water_transfer_1p52",
+      "family": "water_transfer",
+      "baseline_residual_eV": -0.2740087079400624,
+      "candidate_residual_eV": -0.2740087079400588,
+      "absolute_improvement_eV": 3.552713678800501e-15,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.9297530210868551,
+      "candidate_force_rmse_eV_per_angstrom": 0.9297530210868558
+    },
+    {
+      "geometry_id": "water_transfer_reactant",
+      "family": "water_transfer",
+      "baseline_residual_eV": 0.0,
+      "candidate_residual_eV": 0.0,
+      "absolute_improvement_eV": 0.0,
+      "classification": "unchanged",
+      "baseline_force_rmse_eV_per_angstrom": 0.6010527385006751,
+      "candidate_force_rmse_eV_per_angstrom": 0.6010527385006751
+    }
+  ]
+}

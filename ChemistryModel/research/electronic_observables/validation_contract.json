@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "policy": "A future electronic correction is evaluated only after its parameters and implementation are frozen.",
+  "physics_gates": [
+    "permutation symmetry",
+    "finite-difference force agreement",
+    "cutoff continuity in energy and force",
+    "NVE energy conservation",
+    "no false stable H3",
+    "no artificial H-H2 complex"
+  ],
+  "chemistry_gates": [
+    "H-transfer QM microscope",
+    "water-transfer RMSE no worse than 0.214 eV",
+    "Grambow barrier MAE, RMSE, sign agreement, reaction MAE and worst failures"
+  ],
+  "safety_gates": [
+    "accepted molecules unchanged unless the change is declared and independently justified",
+    "no new energy or force catastrophes",
+    "no NaNs, optimizer failures, or move-cap regression",
+    "existing H-state behaviour preserved"
+  ],
+  "reporting_requirements": [
+    "per-geometry absolute residual changes",
+    "per-family gains and regressions",
+    "most improved and most regressed reactions",
+    "signed and absolute metrics shown together",
+    "explicit cancellation warning",
+    "final holdout opened only after candidate freeze"
+  ]
+}
