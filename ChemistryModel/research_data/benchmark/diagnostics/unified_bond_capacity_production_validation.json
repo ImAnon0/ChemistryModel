@@ -1,0 +1,1755 @@
+{
+  "angles": [
+    {
+      "absolute_error": 0.0,
+      "absolute_error_magnitude": 0.0,
+      "centre": "C",
+      "classification": "fit target",
+      "model_deg": 109.47,
+      "molecule": "CH4",
+      "percent_error": 0.0,
+      "reference_deg": 109.47,
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": 0.25,
+      "absolute_error_magnitude": 0.25,
+      "centre": "N",
+      "classification": "fit target",
+      "model_deg": 107.0,
+      "molecule": "NH3",
+      "percent_error": 0.234192037470726,
+      "reference_deg": 106.75,
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": -0.01999999999999602,
+      "absolute_error_magnitude": 0.01999999999999602,
+      "centre": "O",
+      "classification": "fit target",
+      "model_deg": 104.5,
+      "molecule": "H2O",
+      "percent_error": 0.01913509376195563,
+      "reference_deg": 104.52,
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": 1.6700000000000017,
+      "absolute_error_magnitude": 1.6700000000000017,
+      "centre": "C",
+      "classification": "hold-out",
+      "model_deg": 109.47,
+      "molecule": "ethanol C-C-O",
+      "percent_error": 1.5491651205936936,
+      "reference_deg": 107.8,
+      "status": "GOOD"
+    },
+    {
+      "absolute_error": -6.700000000000003,
+      "absolute_error_magnitude": 6.700000000000003,
+      "centre": "O",
+      "classification": "hold-out",
+      "model_deg": 104.5,
+      "molecule": "dimethyl ether C-O-C",
+      "percent_error": 6.02517985611511,
+      "reference_deg": 111.2,
+      "status": "ACCEPTABLE"
+    },
+    {
+      "absolute_error": -5.530000000000001,
+      "absolute_error_magnitude": 5.530000000000001,
+      "centre": "C",
+      "classification": "hold-out",
+      "model_deg": 109.47,
+      "molecule": "ethylamine C-C-N",
+      "percent_error": 4.808695652173914,
+      "reference_deg": 115.0,
+      "status": "GOOD"
+    }
+  ],
+  "baseline_summary": {
+    "strong": [
+      "deterministic core, high-fidelity, recorder, and replay regressions",
+      "preserved focused N-N and O-O recombination ensembles",
+      "H2 effective depth now matches the thermochemical convention while preserving equilibrium length and harmonic curvature",
+      "whole-model H2-forming abstraction energies now have the expected sign and are within 0.10 eV of their BDE298-derived comparisons",
+      "most fitted X-H geometry and curvature diagnostics"
+    ],
+    "uncertain": [
+      "reaction-energy references are calibration-linked BDE298 differences, not independent like-for-like electronic energies",
+      "ammonia lacks a bundled independent abstraction-barrier reference and broader collision ensembles are still needed",
+      "the full H2 Morse curve is convention-dependent; spectroscopy constrains its equilibrium length and local curvature here",
+      "double/triple bond transfer and other high-level pointwise potential curves remain sparsely validated"
+    ],
+    "weak": [
+      "the relaxed methane abstraction barrier remains below its reference range",
+      "N-N/N-O heavy-atom curvature transfer is weak or uncertain"
+    ]
+  },
+  "bond_depth_diagnostics": [
+    {
+      "absolute_error": 0.0003730631704414178,
+      "absolute_error_magnitude": 0.0003730631704414178,
+      "classification": "derived from calibration-linked pair depths; not an independent hold-out",
+      "diagnostic_kind": "effective pair-depth difference",
+      "model_eV": 0.03337306317044142,
+      "note": "bond-depth diagnostic only; not the model's reaction thermochemistry and omits all non-pair-depth terms, fragment relaxation, thermal corrections, and ZPE",
+      "percent_error": 1.1304944558830843,
+      "reaction": "H + CH4 -> H2 + CH3",
+      "reference_eV": 0.033,
+      "status": "GOOD"
+    },
+    {
+      "absolute_error": -0.0001329222158887866,
+      "absolute_error_magnitude": 0.0001329222158887866,
+      "classification": "derived from calibration-linked pair depths; not an independent hold-out",
+      "diagnostic_kind": "effective pair-depth difference",
+      "model_eV": 0.6448670777841112,
+      "note": "bond-depth diagnostic only; not the model's reaction thermochemistry and omits all non-pair-depth terms, fragment relaxation, thermal corrections, and ZPE",
+      "percent_error": 0.020608095486633584,
+      "reaction": "H + H2O -> H2 + OH",
+      "reference_eV": 0.645,
+      "status": "GOOD"
+    },
+    {
+      "absolute_error": 1.611649479160704e-05,
+      "absolute_error_magnitude": 1.611649479160704e-05,
+      "classification": "derived from calibration-linked pair depths; not an independent hold-out",
+      "diagnostic_kind": "effective pair-depth difference",
+      "model_eV": 0.13701611649479162,
+      "note": "bond-depth diagnostic only; not the model's reaction thermochemistry and omits all non-pair-depth terms, fragment relaxation, thermal corrections, and ZPE",
+      "percent_error": 0.011763864811391998,
+      "reaction": "H + NH3 -> H2 + NH2",
+      "reference_eV": 0.137,
+      "status": "GOOD"
+    },
+    {
+      "note": "bond-depth diagnostic unavailable as independent evidence: formation energy is the inverse of a calibration-linked BDE",
+      "reaction": "CH3 + CH3 -> C2H6",
+      "status": "INSUFFICIENT REFERENCE DATA"
+    },
+    {
+      "note": "bond-depth diagnostic unavailable as independent evidence: formation energy is the inverse of a calibration-linked BDE",
+      "reaction": "CH3 + OH -> CH3OH",
+      "status": "INSUFFICIENT REFERENCE DATA"
+    },
+    {
+      "note": "bond-depth diagnostic unavailable as independent evidence: formation energy is the inverse of a calibration-linked BDE",
+      "reaction": "NH2 + NH2 -> N2H4",
+      "status": "INSUFFICIENT REFERENCE DATA"
+    },
+    {
+      "note": "bond-depth diagnostic unavailable as independent evidence: formation energy is the inverse of a calibration-linked BDE",
+      "reaction": "OH + OH -> H2O2",
+      "status": "INSUFFICIENT REFERENCE DATA"
+    }
+  ],
+  "collision_abstraction": [
+    {
+      "barrier_eV": 0.12627143374576733,
+      "caution": "static surface threshold, not a trajectory probability or experimental rate",
+      "collision_energy_multipliers": [
+        {
+          "classically_above_static_barrier": false,
+          "multiplier": 1,
+          "nominal_eV": 0.025851999786
+        },
+        {
+          "classically_above_static_barrier": false,
+          "multiplier": 2,
+          "nominal_eV": 0.051703999572
+        },
+        {
+          "classically_above_static_barrier": false,
+          "multiplier": 3,
+          "nominal_eV": 0.077555999358
+        },
+        {
+          "classically_above_static_barrier": true,
+          "multiplier": 5,
+          "nominal_eV": 0.12925999893
+        }
+      ],
+      "reaction": "H + CH2O -> H2 + HCO",
+      "status": "ACCEPTABLE"
+    },
+    {
+      "barrier_eV": 1.2025935802739696e-12,
+      "caution": "static surface threshold, not a trajectory probability or experimental rate",
+      "collision_energy_multipliers": [
+        {
+          "classically_above_static_barrier": true,
+          "multiplier": 1,
+          "nominal_eV": 0.025851999786
+        },
+        {
+          "classically_above_static_barrier": true,
+          "multiplier": 2,
+          "nominal_eV": 0.051703999572
+        },
+        {
+          "classically_above_static_barrier": true,
+          "multiplier": 3,
+          "nominal_eV": 0.077555999358
+        },
+        {
+          "classically_above_static_barrier": true,
+          "multiplier": 5,
+          "nominal_eV": 0.12925999893
+        }
+      ],
+      "reaction": "H/O-H exchange proxy",
+      "status": "ACCEPTABLE"
+    },
+    {
+      "barrier_eV": 0.16498013563510128,
+      "caution": "static surface threshold, not a trajectory probability or experimental rate",
+      "collision_energy_multipliers": [
+        {
+          "classically_above_static_barrier": false,
+          "multiplier": 1,
+          "nominal_eV": 0.025851999786
+        },
+        {
+          "classically_above_static_barrier": false,
+          "multiplier": 2,
+          "nominal_eV": 0.051703999572
+        },
+        {
+          "classically_above_static_barrier": false,
+          "multiplier": 3,
+          "nominal_eV": 0.077555999358
+        },
+        {
+          "classically_above_static_barrier": false,
+          "multiplier": 5,
+          "nominal_eV": 0.12925999893
+        }
+      ],
+      "reaction": "H + CH4 -> H2 + CH3",
+      "status": "ACCEPTABLE"
+    },
+    {
+      "barrier_eV": 0.16816396144599643,
+      "caution": "static surface threshold, not a trajectory probability or experimental rate",
+      "collision_energy_multipliers": [
+        {
+          "classically_above_static_barrier": false,
+          "multiplier": 1,
+          "nominal_eV": 0.025851999786
+        },
+        {
+          "classically_above_static_barrier": false,
+          "multiplier": 2,
+          "nominal_eV": 0.051703999572
+        },
+        {
+          "classically_above_static_barrier": false,
+          "multiplier": 3,
+          "nominal_eV": 0.077555999358
+        },
+        {
+          "classically_above_static_barrier": false,
+          "multiplier": 5,
+          "nominal_eV": 0.12925999893
+        }
+      ],
+      "reaction": "H + NH3 -> H2 + NH2",
+      "status": "ACCEPTABLE"
+    }
+  ],
+  "dissociation_energies": [
+    {
+      "absolute_error": 0.0,
+      "absolute_error_magnitude": 0.0,
+      "caution": "effective pair De compared with molecular thermochemical quantity",
+      "classification": "hold-out",
+      "model_effective_depth_kJ_mol": 435.78,
+      "pair": "H-H",
+      "percent_error": 0.0,
+      "reaction": "H2 -> H + H",
+      "reference_kJ_mol": 435.78,
+      "reference_quantity": "D298",
+      "source": "https://doi.org/10.1063/1.3120443",
+      "status": "GOOD"
+    },
+    {
+      "absolute_error": 5.684341886080802e-14,
+      "absolute_error_magnitude": 5.684341886080802e-14,
+      "caution": "effective pair De compared with molecular thermochemical quantity",
+      "classification": "calibration-linked",
+      "model_effective_depth_kJ_mol": 439.00000000000006,
+      "pair": "C-H",
+      "percent_error": 1.2948386984238727e-14,
+      "reaction": "CH4 -> CH3 + H",
+      "reference_kJ_mol": 439.0,
+      "reference_quantity": "BDE298",
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": -5.684341886080802e-14,
+      "absolute_error_magnitude": 5.684341886080802e-14,
+      "caution": "effective pair De compared with molecular thermochemical quantity",
+      "classification": "calibration-linked",
+      "model_effective_depth_kJ_mol": 448.99999999999994,
+      "pair": "N-H",
+      "percent_error": 1.2660004200625392e-14,
+      "reaction": "NH3 -> NH2 + H",
+      "reference_kJ_mol": 449.0,
+      "reference_quantity": "BDE298",
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": -5.684341886080802e-14,
+      "absolute_error_magnitude": 5.684341886080802e-14,
+      "caution": "effective pair De compared with molecular thermochemical quantity",
+      "classification": "calibration-linked",
+      "model_effective_depth_kJ_mol": 497.99999999999994,
+      "pair": "O-H",
+      "percent_error": 1.1414341136708435e-14,
+      "reaction": "H2O -> OH + H",
+      "reference_kJ_mol": 498.0,
+      "reference_quantity": "BDE298",
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": -29.0,
+      "absolute_error_magnitude": 29.0,
+      "caution": "effective pair De compared with molecular thermochemical quantity",
+      "classification": "hold-out",
+      "model_effective_depth_kJ_mol": 348.0,
+      "pair": "C-C",
+      "percent_error": 7.6923076923076925,
+      "reaction": "C2H6 -> CH3 + CH3",
+      "reference_kJ_mol": 377.0,
+      "reference_quantity": "BDE298",
+      "source": "https://cccbdb.nist.gov/",
+      "status": "ACCEPTABLE"
+    },
+    {
+      "absolute_error": 0.0,
+      "absolute_error_magnitude": 0.0,
+      "caution": "effective pair De compared with molecular thermochemical quantity",
+      "classification": "calibration-linked",
+      "model_effective_depth_kJ_mol": 356.0,
+      "pair": "C-N",
+      "percent_error": 0.0,
+      "reaction": "CH3NH2 -> CH3 + NH2",
+      "reference_kJ_mol": 356.0,
+      "reference_quantity": "BDE298",
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": -26.569999999999993,
+      "absolute_error_magnitude": 26.569999999999993,
+      "caution": "effective pair De compared with molecular thermochemical quantity",
+      "classification": "hold-out",
+      "model_effective_depth_kJ_mol": 358.0,
+      "pair": "C-O",
+      "percent_error": 6.909015263801127,
+      "reaction": "CH3OH -> CH3 + OH",
+      "reference_kJ_mol": 384.57,
+      "reference_quantity": "BDE298",
+      "source": "https://doi.org/10.1021/acs.jpca.5b01346",
+      "status": "ACCEPTABLE"
+    },
+    {
+      "absolute_error": -64.4,
+      "absolute_error_magnitude": 64.4,
+      "caution": "effective pair De compared with molecular thermochemical quantity",
+      "classification": "hold-out",
+      "model_effective_depth_kJ_mol": 146.0,
+      "pair": "O-O",
+      "percent_error": 30.60836501901141,
+      "reaction": "H2O2 -> OH + OH",
+      "reference_kJ_mol": 210.4,
+      "reference_quantity": "BDE298",
+      "source": "https://doi.org/10.1021/jp056311j",
+      "status": "FAIL"
+    }
+  ],
+  "dynamic_reactions": [
+    {
+      "path": "runs/nn_width_2000_focused_control/index.json",
+      "reaction": "NH2 + NH2 -> N2H4",
+      "status": "NOT RUN"
+    },
+    {
+      "path": "runs/oo_width_2735_focused_candidate/index.json",
+      "reaction": "OH + OH -> H2O2",
+      "status": "NOT RUN"
+    },
+    {
+      "note": "no preserved matched focused ensemble yet",
+      "reaction": "H + H -> H2",
+      "status": "INSUFFICIENT REFERENCE DATA"
+    },
+    {
+      "note": "no preserved matched focused ensemble yet",
+      "reaction": "H + CH3 -> CH4",
+      "status": "INSUFFICIENT REFERENCE DATA"
+    },
+    {
+      "note": "no preserved matched focused ensemble yet",
+      "reaction": "CH3 + CH3 -> C2H6",
+      "status": "INSUFFICIENT REFERENCE DATA"
+    },
+    {
+      "note": "no preserved matched focused ensemble yet",
+      "reaction": "CH3 + OH -> CH3OH",
+      "status": "INSUFFICIENT REFERENCE DATA"
+    }
+  ],
+  "geometry": [
+    {
+      "absolute_error": 0.0,
+      "absolute_error_magnitude": 0.0,
+      "bond": "H-H",
+      "classification": "fit target",
+      "model_A": 0.74144,
+      "molecule": "H2",
+      "note": "generic pair re; full molecular relaxation may shift this value",
+      "percent_error": 0.0,
+      "reference_A": 0.74144,
+      "source": "https://webbook.nist.gov/cgi/cbook.cgi?ID=C1333740&Mask=3FF7&Units=SI",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": 0.0,
+      "absolute_error_magnitude": 0.0,
+      "bond": "C-H",
+      "classification": "fit target",
+      "model_A": 1.086,
+      "molecule": "CH4",
+      "note": "generic pair re; full molecular relaxation may shift this value",
+      "percent_error": 0.0,
+      "reference_A": 1.086,
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": 0.0,
+      "absolute_error_magnitude": 0.0,
+      "bond": "N-H",
+      "classification": "fit target",
+      "model_A": 1.0109,
+      "molecule": "NH3",
+      "note": "generic pair re; full molecular relaxation may shift this value",
+      "percent_error": 0.0,
+      "reference_A": 1.0109,
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": 0.0,
+      "absolute_error_magnitude": 0.0,
+      "bond": "O-H",
+      "classification": "fit target",
+      "model_A": 0.96,
+      "molecule": "H2O",
+      "note": "generic pair re; full molecular relaxation may shift this value",
+      "percent_error": 0.0,
+      "reference_A": 0.96,
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": 0.0,
+      "absolute_error_magnitude": 0.0,
+      "bond": "C-C",
+      "classification": "fit target",
+      "model_A": 1.525,
+      "molecule": "C2H6",
+      "note": "generic pair re; full molecular relaxation may shift this value",
+      "percent_error": 0.0,
+      "reference_A": 1.525,
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": -0.001000000000000112,
+      "absolute_error_magnitude": 0.001000000000000112,
+      "bond": "C-N",
+      "classification": "fit target",
+      "model_A": 1.47,
+      "molecule": "CH3NH2",
+      "note": "generic pair re; full molecular relaxation may shift this value",
+      "percent_error": 0.06798096532971529,
+      "reference_A": 1.471,
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": 0.0,
+      "absolute_error_magnitude": 0.0,
+      "bond": "C-O",
+      "classification": "fit target",
+      "model_A": 1.427,
+      "molecule": "CH3OH",
+      "note": "generic pair re; full molecular relaxation may shift this value",
+      "percent_error": 0.0,
+      "reference_A": 1.427,
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": 0.0,
+      "absolute_error_magnitude": 0.0,
+      "bond": "N-N",
+      "classification": "fit target",
+      "model_A": 1.446,
+      "molecule": "N2H4",
+      "note": "generic pair re; full molecular relaxation may shift this value",
+      "percent_error": 0.0,
+      "reference_A": 1.446,
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": 0.0,
+      "absolute_error_magnitude": 0.0,
+      "bond": "N-O",
+      "classification": "fit target",
+      "model_A": 1.453,
+      "molecule": "NH2OH",
+      "note": "generic pair re; full molecular relaxation may shift this value",
+      "percent_error": 0.0,
+      "reference_A": 1.453,
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": 0.0,
+      "absolute_error_magnitude": 0.0,
+      "bond": "O-O",
+      "classification": "fit target",
+      "model_A": 1.475,
+      "molecule": "H2O2",
+      "note": "generic pair re; full molecular relaxation may shift this value",
+      "percent_error": 0.0,
+      "reference_A": 1.475,
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    }
+  ],
+  "git_revision": "60e8019f0cadb3c631bb45efdd2ff88861992c6a",
+  "golden_validation": {
+    "dense_soup_stress": {
+      "execution": {
+        "name": "dense optimised-valence soup",
+        "returncode": 0,
+        "status": "PASS",
+        "stderr_tail": "",
+        "stdout_tail": "    max states solved/call  : 101\n    max topology group      : 11\n\n  H state pressure (group):\n    max component edges    : 7\n    max states             : 25\n    max transitions        : 32\n    max topology group     : 268\n    largest Hamiltonian    : (268, 2, 2)\n    largest Hamiltonian MB : 0.004\n    max H states/call      : 682\n    max topology groups    : 12\n    structure cache entries: 83\n    structure cache CUDA MB: 0.258\n    S=2 eigvalsh chunk size : 512\n    largest original S=2 B : 268\n    chunked S=2 groups     : 0\n    chunked eigvalsh calls : 0\n    largest submitted eig B: 268\n\n  CUDA memory:\n    observed allocated     : 24.5 MB\n    observed reserved      : 1162.0 MB\n    peak allocated         : 92.9 MB\n    peak reserved          : 1162.0 MB\n    allocator retries      : 0\n    allocator OOMs/rejects : 0 / 0\n    final device free      : 763.3 MB\n    pressure H solve       : (1, 5, 5)  edges 3, states 5, transitions 2\n",
+        "wall_seconds": 406.0755433999875
+      },
+      "failures": [],
+      "runs": [
+        {
+          "end_time_fs": 998.0,
+          "final_carbon_overvalent": 0,
+          "final_nitrogen_overvalent": 0,
+          "final_potential_eV": -1058.0439453125,
+          "final_temperature_K": 567.7091064453125,
+          "frames": 296,
+          "maximum_carbon_bond_coordination": 5,
+          "maximum_carbon_radial_coordination": 4.378990578678243,
+          "maximum_nitrogen_bond_coordination": 4,
+          "maximum_nitrogen_radial_coordination": 3.4843602826220916,
+          "maximum_simultaneous_carbon_overvalent": 1,
+          "maximum_simultaneous_nitrogen_overvalent": 1,
+          "minimum_heavy_heavy_distance_A": 0.8764032543708333,
+          "move_cap_events": 0,
+          "numerical_failures": 0,
+          "seed": 0,
+          "stable": true
+        },
+        {
+          "end_time_fs": 1000.0,
+          "final_carbon_overvalent": 0,
+          "final_nitrogen_overvalent": 0,
+          "final_potential_eV": -1066.1885986328125,
+          "final_temperature_K": 615.7167358398438,
+          "frames": 264,
+          "maximum_carbon_bond_coordination": 4,
+          "maximum_carbon_radial_coordination": 4.252344804512516,
+          "maximum_nitrogen_bond_coordination": 3,
+          "maximum_nitrogen_radial_coordination": 3.293025681170713,
+          "maximum_simultaneous_carbon_overvalent": 0,
+          "maximum_simultaneous_nitrogen_overvalent": 0,
+          "minimum_heavy_heavy_distance_A": 0.8953250820221068,
+          "move_cap_events": 0,
+          "numerical_failures": 0,
+          "seed": 1,
+          "stable": true
+        }
+      ],
+      "status": "PASS",
+      "thresholds": {
+        "bond_definition": "radial taper > 0.35",
+        "final_carbon_overvalent": 0,
+        "final_nitrogen_overvalent": 0,
+        "maximum_carbon_bond_coordination": 5,
+        "maximum_nitrogen_bond_coordination": 4,
+        "maximum_simultaneous_carbon_overvalent": 2,
+        "maximum_simultaneous_nitrogen_overvalent": 2,
+        "note": "radial coordination is reported but not used as an integer bond-count failure criterion"
+      }
+    },
+    "regressions": {
+      "checks": [
+        {
+          "name": "main runtime imports",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "main imports PASS",
+          "wall_seconds": 3.3834321000031196
+        },
+        {
+          "name": "heavy overcoordination guard",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "HEAVY OVER-COORDINATION REGRESSION GUARD\n\nbase radial over term : 6.666432739645 eV\n|dE| base/valence    : 0.000000000000e+00 eV\n|dF|max base/valence : 0.000000000000e+00 eV/A\n\nFINAL PASS - heavy valence topology leaves radial over-coordination protection intact.",
+          "wall_seconds": 3.3385588999954052
+        },
+        {
+          "name": "runner physics selection",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "RUNNER / LAB OPT-IN PHYSICS SMOKE TEST\n\nreactive selector : BatchedReactiveSimulation\nvalence selector  : OptimisedValenceStateBatchedSimulation\n\nselector mapping       : PASS\ncondition separation   : PASS\nonly physics differs   : PASS\nreactive default/guard : PASS\nrunner wiring          : PASS\nLab wiring             : PASS\n\nFINAL PASS - optimised valence is explicit opt-in for fresh grouped runs; historical reactive physics remains default, and the two physics models cannot silently pool.",
+          "wall_seconds": 3.3495070000062697
+        },
+        {
+          "name": "heavy valence density matrix",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "HEAVY-VALENCE DENSITY-MATRIX VALIDATION\n  temperature       : 0.010000 eV\n  exact probability : 0.500000000000\n  exact force       : 50.000000000000\n  near forces       : 49.999999999950, 49.999999999950\n  far max |new-old| : 2.220e-16\nFINAL PASS",
+          "wall_seconds": 2.88589000000502
+        },
+        {
+          "name": "optimised valence integration",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "  max |dEtot|    : 0.000000000000e+00 eV\n  max |dPosition|: 0.000000000000e+00 A\n  max |dVelocity|: 0.000000000000e+00 A/fs\n  max |dForce|   : 1.776356839400e-15 eV/A\n  caps ref/new   : 0/0\n\n5. LIVE H COMPONENT MERGE\n  backend      : index_select\n  counts seen  : (1, 2)\n  transitions  : ((5, 2, 1),)\n  max |dEtot|  : 0.000000000000e+00 eV\n  max |dF|     : 0.000000000000e+00 eV/A\n\n6. EXPLICIT NEIGHBOUR REBUILD\n  backend       : index_select\n  rebuild count : 1 -> 2\n  max |dE|      : 0.000000000000e+00 eV\n  max |dF|      : 7.105427357601e-15 eV/A\n\n7. ACTUAL 8 x 330 MD-STEP THROUGHPUT\n  backend             : index_select\n  reference median    : 50.000 ms\n  optimised median    : 28.952 ms\n  speedup             : 1.727 x\n\n  DEVICE RESULT : PASS\n\n====================================================================================\nFINAL PASS - device-aware gather selection preserves the validated cached-H/batched-heavy physics and chooses the measured fast backend on each device.\nThis is a suitable final performance candidate before wiring it into the normal simulation runner.",
+          "wall_seconds": 183.51618299999973
+        },
+        {
+          "name": "batched heavy valence",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "================================================================================\n\n1. 106-GEOMETRY EQUIVALENCE\n  geometries       : 106\n  max |dE|         : 0.000000000000e+00 eV (None)\n  max |dF|         : 2.486899575160e-13 eV/A (water_dense_transfer_0002)\n\n2. 960-ATOM REPEATED-WATER EQUIVALENCE\n  max |dE|         : 0.000000000000e+00 eV\n  max |dF|         : 2.413624855535e-13 eV/A\n  diagnostics      : {'competitive_atom_count': 384, 'topology_group_count': 1, 'largest_topology_group': 384, 'zero_row_count': 0, 'total_states_solved': 1152, 'group_shapes': ((3, 2, 384),), 'largest_candidate_count': 3, 'largest_state_count': 3, 'largest_state_shape': (3, 2, 3), 'centres_over_128': 0, 'centres_over_200': 0}\n\n3. THROUGHPUT\n  8 x 120 atoms (960 total):\n    reference    : 9945.492 ms (median 13299.550, min 2502.633)\n    batched-heavy: 115.760 ms (median 111.211, min 107.514)\n      heavy diagnostics: {'competitive_atom_count': 384, 'topology_group_count': 1, 'largest_topology_group': 384, 'zero_row_count': 0, 'total_states_solved': 1152, 'group_shapes': ((3, 2, 384),), 'largest_candidate_count': 3, 'largest_state_count': 3, 'largest_state_shape': (3, 2, 3), 'centres_over_128': 0, 'centres_over_200': 0}\n    speedup      : 85.915 x\n\n  8 x 330 atoms (2640 total):\n    reference    : 29479.515 ms (median 28642.531, min 12647.217)\n    batched-heavy: 3060.715 ms (median 3076.013, min 2980.098)\n      heavy diagnostics: {'competitive_atom_count': 1056, 'topology_group_count': 1, 'largest_topology_group': 1056, 'zero_row_count': 0, 'total_states_solved': 3168, 'group_shapes': ((3, 2, 1056),), 'largest_candidate_count': 3, 'largest_state_count': 3, 'largest_state_shape': (3, 2, 3), 'centres_over_128': 0, 'centres_over_200': 0}\n    speedup      : 9.632 x\n\n  equivalence : PASS\n\n================================================================================\nFINAL PASS - batched heavy-valence membership reproduces the validated reference within tolerance.\nUse the 8 x 330 timing to decide whether the next target is remaining H topology host-sync or the heavy angle/topology tensor work.",
+          "wall_seconds": 379.7395143999893
+        },
+        {
+          "name": "large heavy valence states",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "D:\\Projects\\ChemistryModel\\ChemistryModel\\ChemistryModel\\tests\\validate_large_heavy_valence_states.py:109: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.\nConsider using tensor.detach() first. (Triggered internally at C:\\actions-runner\\_work\\pytorch\\pytorch\\torch\\csrc\\autograd\\generated\\python_variable_methods.cpp:823.)\n  matrix_error = float(",
+          "stdout_tail": "LARGE HEAVY-VALENCE STATE EXECUTION VALIDATION\n\ncandidate limit : 12\nstate limit     : 512\ncovers C(12,4) : PASS\n\nsmall control   : states=10, transitions=30\nmatrix error    : 0.000e+00\nenergy error    : 0.000e+00\ngradient error  : 0.000e+00\nold/new exact  : PASS\n\nformer crash case, N=10 V=4\nstates          : 210\ntransitions     : 2520\nflat indices    : 5040\nassembled shape : (1, 210, 210)\nsymmetry error  : 0.000e+00\neigh/autograd   : PASS\n\nmaximum carbon case, N=12 V=4\nstates          : 495\ntransitions     : 7920\nflat indices    : 15840\nold basis size  : 14.46 GiB\ncompact indices : 123.8 KiB\n\nFINAL PASS - compact Hamiltonian assembly is equivalent on the control and supports the 210-state production case without the transition-basis memory explosion.",
+          "wall_seconds": 3.1720411999849603
+        },
+        {
+          "name": "cached H topology",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "GPU   : NVIDIA GeForce RTX 4060 Ti\n================================================================================\n\n1. 106-GEOMETRY EQUIVALENCE\n  geometries       : 106\n  max |dE|         : 0.000000000000e+00 eV (None)\n  max |dF|         : 7.105427357601e-15 eV/A (water_dense_transfer_0000)\n\n2. 8 x 330 CACHE-HIT EQUIVALENCE\n  max |dE|         : 0.000000000000e+00 eV\n  max |dF|         : 7.105427357601e-15 eV/A\n  diagnostics      : {'component_counts_per_box': (198, 198, 198, 198, 198, 198, 198, 198), 'largest_component_edges': 2, 'component_total': 1584, 'topology_group_count': 2, 'largest_topology_group': 1056, 'candidate_h_pairs': 4752, 'topology_cache_hits': 1, 'topology_cache_misses': 1, 'candidate_rebuild_count': 1}\n\n3. EXPLICIT NEIGHBOUR-REBUILD INVALIDATION\n  rebuild count    : 1 -> 2\n  max |dE|         : 0.000000000000e+00 eV\n  max |dF|         : 7.105427357601e-15 eV/A\n  diagnostics      : {'component_counts_per_box': (198, 198, 198, 198, 198, 198, 198, 198), 'largest_component_edges': 2, 'component_total': 1584, 'topology_group_count': 2, 'largest_topology_group': 1056, 'candidate_h_pairs': 4752, 'topology_cache_hits': 1, 'topology_cache_misses': 2, 'candidate_rebuild_count': 2}\n\n4. 8 x 330 THROUGHPUT\n    reference : 2414.619 ms (median 2466.651, min 1853.787)\n    cached-H  : 160.006 ms (median 159.980, min 149.409)\n      diagnostics: {'component_counts_per_box': (198, 198, 198, 198, 198, 198, 198, 198), 'largest_component_edges': 2, 'component_total': 1584, 'topology_group_count': 2, 'largest_topology_group': 1056, 'candidate_h_pairs': 4752, 'topology_cache_hits': 11, 'topology_cache_misses': 1, 'candidate_rebuild_count': 1}\n    speedup   : 15.091 x\n\n  equivalence : PASS\n\n================================================================================\nFINAL PASS - cached H topology reproduces the validated batched-heavy reference through static, cache-hit, live topology change and neighbour-rebuild cases.\nUse the throughput numbers to decide whether CPU/GPU topology bookkeeping is now small enough to move to the base/autograd path.",
+          "wall_seconds": 54.102666400023736
+        },
+        {
+          "name": "factorised H grouped execution",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "\n2. HEAVY-VALENCE WRAPPER - 106 GEOMETRIES\n  geometries       : 106\n  max |dE|         : 0.000000000000e+00 eV (None)\n  max |dF|         : 0.000000000000e+00 eV/A (None)\n\n3. MULTI-COMPONENT STRESS EQUIVALENCE\n  boxes            : 8\n  H3 components/box: 24\n  max |dE|         : 0.000000000000e+00 eV\n  max |dF|         : 0.000000000000e+00 eV/A\n  grouped diagnostics: {'component_counts_per_box': (24, 24, 24, 24, 24, 24, 24, 24), 'largest_component_edges': 2, 'component_total': 192, 'topology_group_count': 1, 'largest_topology_group': 192}\n\n4. THROUGHPUT\n  8 x formaldehyde transfer:\n    reference factorisable : 86.834 ms/force\n    grouped factorisable   : 34.501 ms/force\n    speedup                : 2.517 x\n    diagnostics            : {'component_counts_per_box': (2, 2, 2, 2, 2, 2, 2, 2), 'largest_component_edges': 2, 'component_total': 16, 'topology_group_count': 2, 'largest_topology_group': 8}\n  8 x multi-H3 stress:\n    reference factorisable : 621.434 ms/force\n    grouped factorisable   : 41.487 ms/force\n    speedup                : 14.979 x\n    diagnostics            : {'component_counts_per_box': (24, 24, 24, 24, 24, 24, 24, 24), 'largest_component_edges': 2, 'component_total': 192, 'topology_group_count': 1, 'largest_topology_group': 192}\n\nRESULT: PASS\n\n==============================================================================\nFINAL PASS - grouped factorisable H-state reproduces the validated reference within tolerance.\nPerformance numbers above determine whether the next target should be topology discovery / host synchronisation or the heavy-valence membership path.",
+          "wall_seconds": 33.91195369997877
+        },
+        {
+          "name": "H-state components",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "\nDENSE TRANSFER RESIDUALS VS QM\nsystem           old MAE  old RMSE   old max  local MAE local RMSE  local max\nformaldehyde      0.3571    0.3810    0.5670     0.3571     0.3810     0.5670\nh3                0.1912    0.2231    0.4892     0.1912     0.2231     0.4892\nmethane           0.1892    0.2184    0.3374     0.1892     0.2184     0.3374\nwater             1.2633    2.3840    7.7707     1.2633     2.3840     7.7707\n\nMODEL CHANGE AFTER REACTANT ALIGNMENT\nformaldehyde   mean |local-old|=0.000000 eV  max=0.000000 eV\nh3             mean |local-old|=0.000000 eV  max=0.000000 eV\nmethane        mean |local-old|=0.000000 eV  max=0.000000 eV\nwater          mean |local-old|=0.000000 eV  max=0.000000 eV\n\nWORST ADJACENT RESIDUAL STEP\nformaldehyde   old    1.000->1.020 A  dResidual=-0.190866 eV\nformaldehyde   local  1.000->1.020 A  dResidual=-0.190866 eV\nh3             old    1.100->1.120 A  dResidual=+0.061836 eV\nh3             local  1.100->1.120 A  dResidual=+0.061836 eV\nmethane        old    0.980->1.000 A  dResidual=-0.127778 eV\nmethane        local  0.980->1.000 A  dResidual=-0.127778 eV\nwater          old    1.080->1.100 A  dResidual=+1.373622 eV\nwater          local  1.080->1.100 A  dResidual=+1.373622 eV\n\nPRODUCT REFERENCE RELATIVE ENERGIES\nsystem                QM     old H   local H\nformaldehyde     -0.4959   -0.4386   -0.4386\nh3               -0.0000   +0.0000   +0.0000\nmethane          +0.5412   +0.0552   +0.0552\nwater            -0.0000   +0.0000   +0.0000",
+          "wall_seconds": 4.416220200015232
+        },
+        {
+          "name": "H-state factorised",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "  max |dF| A       : 0.000000000000e+00 eV/A\n  max |dF| B       : 0.000000000000e+00 eV/A\n  diagnostics      : {'component_counts_per_box': (2,), 'largest_component_edges': 2}\n\n  size consistency: PASS\n\n3. COMPONENT MERGE / SPLIT\n  transition       : 1.186303834794 .. 1.186303834794 A\n  microscopic span : 7.471161467265e-10 eV\n  FD dE/dgap       : -1.899858048660e-05 eV/A\n  autograd dE/dgap : -9.246831899290e-06 eV/A\n  |FD-autograd|    : 9.751748587306e-06 eV/A\n\n  microscopic rows:\n    1.186298834794 A  components=1  E=-5.037634138102  dE/dgap=-2.891134e-04\n    1.186301834794 A  components=1  E=-5.037634138717  dE/dgap=-1.211914e-04\n    1.186302834794 A  components=1  E=-5.037634138811  dE/dgap=-6.521880e-05\n    1.186303334794 A  components=1  E=-5.037634138836  dE/dgap=-3.723273e-05\n    1.186303734794 A  components=1  E=-5.037634138847  dE/dgap=-1.484400e-05\n    1.186303834794 A  components=1  E=-5.037634138848  dE/dgap=-9.246832e-06\n    1.186303934794 A  components=2  E=-5.037634138849  dE/dgap=+1.406982e-05\n    1.186304334794 A  components=2  E=-5.037634138849  dE/dgap=-1.776357e-15\n    1.186304834794 A  components=2  E=-5.037634138849  dE/dgap=-1.776357e-15\n    1.186305834794 A  components=2  E=-5.037634138849  dE/dgap=-1.776357e-15\n    1.186308834794 A  components=2  E=-5.037634138849  dE/dgap=-1.776357e-15\n  merge continuity: PASS\n\nFINAL\n  PASS - factorisable H-state preserves the existing microscope, is size-consistent, and is smooth through the tested component merge/split boundary.\n  Next: controlled NVE before any performance optimisation.",
+          "wall_seconds": 7.320466300006956
+        },
+        {
+          "name": "H-state factorised NVE",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "\n2. TWO DISCONNECTED UNEQUAL COMPONENTS\n  components seen   : (2,)\n\n  max |dE|          : 1.861017498e-03 eV\n  RMS dE            : 3.661041244e-04 eV\n  final dE          : +2.557010834e-04 eV\n  capped steps      : 0\n  neighbour rebuilds: 30\n  wrote             : research_data\\qm_residual\\h_state_factorised_nve_disconnected.csv\n  result            : PASS\n\n3. DYNAMIC COMPONENT MERGE\n  bridge initial/min/final : 1.186504000 / 1.180467382 / 1.180467382 A\n  component counts seen    : (1, 2)\n  observed 2->1 merge      : yes\n  transitions:\n    step     5  t=0.005000 fs  2->1  bridge=1.186256444512 A\n\n  max |dE|          : 1.412310890e-08 eV\n  RMS dE            : 8.985921988e-09 eV\n  final dE          : +1.412310890e-08 eV\n  capped steps      : 0\n  neighbour rebuilds: 1\n  wrote             : research_data\\qm_residual\\h_state_factorised_nve_merge.csv\n  result            : PASS\n\nFINAL\n  PASS - factorisable H-state preserves matched single-component dynamics, conserves energy for disconnected components, and crosses a live 2->1 component merge without an NVE pathology.\n  Next: integrate this H-state formulation into the experimental heavy-valence engine, rerun its equivalence/QM/force/NVE suite, then return to performance engineering.",
+          "wall_seconds": 25.907374799979152
+        },
+        {
+          "name": "index-select gather",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "  positions  force median=  70.658 ms mean=  70.112 | step median=  57.384 ms mean=  61.195 rebuilds=8\n             force speedup=1.056 x  step speedup=1.042 x\n  scalar     force median=  72.617 ms mean=  72.418 | step median=  54.579 ms mean=  58.589 rebuilds=8\n             force speedup=1.027 x  step speedup=1.096 x\n  all        force median=  68.874 ms mean=  69.986 | step median=  56.904 ms mean=  61.030 rebuilds=8\n             force speedup=1.083 x  step speedup=1.051 x\n\n====================================================================================\nDEVICE: cuda\nGPU   : NVIDIA GeForce RTX 4060 Ti\n====================================================================================\n\n1. STATIC EQUIVALENCE\n  positions  106 dE=0.000e+00 dF=3.553e-15 | 2640 dE=0.000e+00 dF=7.105e-15 => PASS\n  scalar     106 dE=0.000e+00 dF=0.000e+00 | 2640 dE=0.000e+00 dF=0.000e+00 => PASS\n  all        106 dE=0.000e+00 dF=3.553e-15 | 2640 dE=0.000e+00 dF=7.105e-15 => PASS\n\n2. THROUGHPUT\n  default    force median=  42.922 ms mean=  43.092 | step median=  35.406 ms mean= 249.816 rebuilds=8\n  positions  force median=  32.709 ms mean=  34.939 | step median=  67.498 ms mean=  98.577 rebuilds=8\n             force speedup=1.312 x  step speedup=0.525 x\n  scalar     force median=  88.855 ms mean=  86.961 | step median=  60.146 ms mean=  64.062 rebuilds=8\n             force speedup=0.483 x  step speedup=0.589 x\n  all        force median=  80.572 ms mean=  81.619 | step median=  55.703 ms mean=  58.560 rebuilds=8\n             force speedup=0.533 x  step speedup=0.636 x\n\n====================================================================================\nBEST VALID CUDA ACTUAL-STEP MODE: default\n====================================================================================\nNo index_select mode beat the existing gather path. Do not change production gather execution.",
+          "wall_seconds": 194.98000750000938
+        },
+        {
+          "name": "smooth valence NVE",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "\nsteps        : 1000\ntemperature  : 100.0 K\nseed         : 913\nthermostat   : off\nfriction     : 0\ndevice       : CPU / float64\n\nwater_intact\n  H-state  dt=0.25 fs  drift=-5.456951e-04 eV  max|drift|=9.281901e-04 eV  span=1.384051e-03 eV  force_jump=5.630204e-01 eV/A  caps=0\n  smooth   dt=0.25 fs  drift=-5.456951e-04 eV  max|drift|=9.281901e-04 eV  span=1.384051e-03 eV  force_jump=5.630204e-01 eV/A  caps=0\n           O-O membership 01=0.00000..0.00000  10=0.00000..0.00000\n\nwater_competition_x1.160\n  H-state  dt=0.25 fs  drift=-2.918817e-03 eV  max|drift|=2.144191e-02 eV  span=2.144191e-02 eV  force_jump=7.613400e+00 eV/A  caps=0\n  smooth   dt=0.25 fs  drift=+4.016670e-03 eV  max|drift|=8.467918e-03 eV  span=1.358574e-02 eV  force_jump=4.774077e+00 eV/A  caps=0\n           O-O membership 01=0.00000..1.00000  10=0.00000..1.00000\n\nperoxide_OO_1.475\n  H-state  dt=0.25 fs  drift=+4.986256e-07 eV  max|drift|=7.035096e-05 eV  span=9.039965e-05 eV  force_jump=1.431425e-01 eV/A  caps=0\n  smooth   dt=0.25 fs  drift=+4.986256e-07 eV  max|drift|=7.035096e-05 eV  span=9.039965e-05 eV  force_jump=1.431425e-01 eV/A  caps=0\n           O-O membership 01=1.00000..1.00000  10=1.00000..1.00000\n\nwrote : research_data\\qm_residual\\smooth_valence_nve.csv\n\nCONTROL COMPARISON\nsystem                         H max drift    smooth max     ratio  H caps  S caps\nwater_intact                  9.281901e-04  9.281901e-04     1.000       0       0\nwater_competition_x1.160      2.144191e-02  8.467918e-03     0.395       0       0\nperoxide_OO_1.475             7.035096e-05  7.035096e-05     1.000       0       0",
+          "wall_seconds": 32.23437979997834
+        },
+        {
+          "name": "valence-state factorised fixed",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "4. H-ONLY SIZE CONSISTENCY REGRESSION\n  known historical bug geometry (two identical H3, spacing 0.900 A):\n    historical valence:\n      E(A+B)-E(A)-E(B) : +2.133317609464e+00 eV\n      max |dF| A/B     : 1.776e-15 / 3.553e-15 eV/A\n    factorisable valence:\n      E(A+B)-E(A)-E(B) : +0.000000000000e+00 eV\n      max |dF| A/B     : 0.000e+00 / 0.000e+00 eV/A\n  unequal disconnected control:\n    spacings            : 0.991676000 / 1.087692480 A\n    factorisable E nonadditivity : +0.000000000000e+00 eV\n    factorisable max |dF| A/B    : 0.000e+00 / 0.000e+00 eV/A\n\n5. LIVE H-COMPONENT MERGE - WRAPPER VS STANDALONE FACTORISABLE H\n  component counts seen : (1, 2)\n  transitions           : ((5, 2, 1),)\n  max |dEtot|           : 0.000000000000e+00 eV\n  max |dPosition|       : 0.000000000000e+00 A\n  max |dVelocity|       : 0.000000000000e+00 A/fs\n  max |dForce|          : 0.000000000000e+00 eV/A\n  caps standalone/wrapped : 0/0\n\nFINAL\n  existing heavy-valence behaviour preserved : PASS\n  candidate H size consistency               : PASS\n  historical size-consistency bug reproduced : PASS\n  live factorisable H merge survives wrapper : PASS\n\n  PASS - the corrected factorisable H-state is integrated under the heavy-valence engine without changing the existing validated heavy-valence behaviour.\n  Next: run the broader valence QM/force/NVE checks if desired, then return to component-batched performance engineering.",
+          "wall_seconds": 19.615280199999688
+        },
+        {
+          "name": "valence-state promotion",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "1. ENERGY EQUIVALENCE \u2014 ALL QM GEOMETRIES\n  geometries            : 106\n  worst geometry        : water_dense_transfer_0004\n  scratch energy        : -13.246494833236 eV\n  module energy         : -13.246494833236 eV\n  max |difference|      : 1.776357e-15 eV\n\n2. FORCE EQUIVALENCE\n  x=1.080 A  dE=+0.000000e+00 eV  max dF=2.895462e-13 eV/A  RMS dF=1.374930e-13 eV/A\n  x=1.160 A  dE=-1.776357e-15 eV  max dF=4.769518e-13 eV/A  RMS dF=2.372194e-13 eV/A\n  x=1.320 A  dE=+0.000000e+00 eV  max dF=1.789680e-13 eV/A  RMS dF=8.753652e-14 eV/A\n  x=1.535 A  dE=+0.000000e+00 eV  max dF=6.938894e-18 eV/A  RMS dF=1.791615e-18 eV/A\n\n3. SHARED-GEOMETRY DYNAMIC EQUIVALENCE\n  trajectory steps      : 250\n  sample interval       : 25 steps\n  criterion             : same geometry -> same energy/force\n  trajectory separation : reported only; not a failure criterion\n  water_intact                 samples= 22  dE_same_max=0.000000e+00 eV  dF_same_max=2.220446e-16 eV/A  final dpos=3.552714e-15 A  caps=0/0\n    worst dE: driver=None step=0  signed=+0.000000e+00 eV\n    worst dF: driver=scratch step=0  RMS=5.733167e-17 eV/A\n  water_competition_x1.160     samples= 22  dE_same_max=0.000000e+00 eV  dF_same_max=7.842615e-13 eV/A  final dpos=2.587756e-05 A  caps=0/0\n    worst dE: driver=None step=0  signed=+0.000000e+00 eV\n    worst dF: driver=scratch step=0  RMS=3.860893e-13 eV/A\n  peroxide_OO_1.475            samples= 22  dE_same_max=0.000000e+00 eV  dF_same_max=2.220446e-16 eV/A  final dpos=5.329071e-15 A  caps=0/0\n    worst dE: driver=None step=0  signed=+0.000000e+00 eV\n    worst dF: driver=scratch step=75  RMS=6.938894e-17 eV/A\n\nPROMOTION RESULT\n  PASS \u2014 promoted module reproduces the corrected scratch physics on static and dynamically visited shared geometries within numerical tolerance.",
+          "wall_seconds": 19.214114700007485
+        },
+        {
+          "name": "molecule library",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "SKIP - no recording with per-frame atom identity history was found under runs/. No molecule data was extracted.",
+          "wall_seconds": 0.18226879998110235
+        },
+        {
+          "name": "heavy state pressure diagnostics",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "HEAVY-VALENCE STATE-PRESSURE DIAGNOSTICS VALIDATION\n\naccumulated : {'evaluation_count': 2, 'max_candidate_count': 10, 'max_state_count': 210, 'centre_evaluations_over_128': 2, 'centre_evaluations_over_200': 1, 'evaluations_with_over_128': 1, 'evaluations_with_over_200': 1, 'max_topology_group': 7, 'max_total_states_solved': 630, 'max_competitive_atom_count': 8, 'max_state_shape': (10, 4, 210)}\nexpected    : {'evaluation_count': 2, 'max_candidate_count': 10, 'max_state_count': 210, 'centre_evaluations_over_128': 2, 'centre_evaluations_over_200': 1, 'evaluations_with_over_128': 1, 'evaluations_with_over_200': 1, 'max_topology_group': 7, 'max_total_states_solved': 630, 'max_competitive_atom_count': 8, 'max_state_shape': (10, 4, 210)}\n\naccumulator semantics : PASS\nlive current         : {'competitive_atom_count': 1, 'topology_group_count': 1, 'largest_topology_group': 1, 'zero_row_count': 0, 'total_states_solved': 5, 'group_shapes': ((5, 4, 1),), 'largest_candidate_count': 5, 'largest_state_count': 5, 'largest_state_shape': (5, 4, 5), 'centres_over_128': 0, 'centres_over_200': 0}\nlive cumulative pre  : {'evaluation_count': 1, 'max_candidate_count': 5, 'max_state_count': 5, 'centre_evaluations_over_128': 0, 'centre_evaluations_over_200': 0, 'evaluations_with_over_128': 0, 'evaluations_with_over_200': 0, 'max_topology_group': 1, 'max_total_states_solved': 5, 'max_competitive_atom_count': 1, 'max_state_shape': (5, 4, 5)}\nlive cumulative post : {'evaluation_count': 2, 'max_candidate_count': 5, 'max_state_count': 5, 'centre_evaluations_over_128': 0, 'centre_evaluations_over_200': 0, 'evaluations_with_over_128': 0, 'evaluations_with_over_200': 0, 'max_topology_group': 1, 'max_total_states_solved': 5, 'max_competitive_atom_count': 1, 'max_state_shape': (5, 4, 5)}\n\nlive-counter wiring   : PASS\nrunner persistence    : PASS\n\nFINAL PASS - state-pressure diagnostics accumulate correctly and are persisted/reported without changing the solver.",
+          "wall_seconds": 2.708134400018025
+        },
+        {
+          "name": "smooth valence force probe",
+          "returncode": 0,
+          "status": "PASS",
+          "stderr_tail": "",
+          "stdout_tail": "DIFFERENTIABLE SMOOTH-VALENCE FORCE MICROSCOPE\n\nengine modification : none\ndevice              : CPU / float64\nfinite diff step    : 1.0e-05 A\n\nAUTOGRAD VS CENTRAL FINITE DIFFERENCE\n   x / A        E / eV      max |F|   max abs err      RMS err     max rel\n   1.080    -10.251368    49.093089  2.608066e-08 9.695571e-09   5.312e-10\n   1.160    -13.246495    23.283258  2.441885e-08 9.164330e-09   1.049e-09\n   1.320    -14.666858     2.698992  1.209056e-08 4.535959e-09   4.480e-09\n   1.535    -15.039012     4.014217  4.918319e-09 2.601581e-09   1.225e-09\n\nFORCE CONTINUITY \u2014 STATE COMPETITION REGION\nwindow              : 1.150 -> 1.170 A in 0.0005 A steps\nworst max-component force jump : 1.1500->1.1505 A  1.590658e-01 eV/A\nworst energy step             : 1.1500->1.1505 A  -1.378943e-02 eV\n\nFORCE CONTINUITY \u2014 O-H CUTOFF REGION\nwindow              : 1.532 -> 1.540 A in 0.0005 A steps\nworst max-component force jump : 1.5320->1.5325 A  1.900358e-02 eV/A\nworst energy step             : 1.5320->1.5325 A  -7.044542e-05 eV",
+          "wall_seconds": 5.08539860000019
+        },
+        {
+          "name": "pytest suite",
+          "returncode": 1,
+          "status": "FAIL",
+          "stderr_tail": "",
+          "stdout_tail": "ERROR tests/test_chemistry_manager.py::test_status_reports_idle_unvalidated_molecule\nERROR tests/test_chemistry_manager.py::test_store_can_find_unique_product_ids_by_state\nERROR tests/test_grambow_failure_diagnostics.py::test_score_loader_detects_csv_despite_json_suffix\nERROR tests/test_grambow_failure_diagnostics.py::test_score_loader_accepts_real_json\nERROR tests/test_manager_runner.py::test_autonomous_plans_one_at_a_time_and_next_plan_sees_history\nERROR tests/test_manager_runner.py::test_sequential_pair_planning_preserves_pair_category_offset\nERROR tests/test_manager_runner.py::test_periodic_empty_checkpoints_skip_qm_and_final_check_still_occurs\nERROR tests/test_manager_runner.py::test_qm_decision_is_visible_before_the_very_next_plan[validated]\nERROR tests/test_manager_runner.py::test_qm_decision_is_visible_before_the_very_next_plan[rejected]\nERROR tests/test_manager_runner.py::test_failed_md_does_not_abort_budget_or_advance_completed_qm_counter\nERROR tests/test_manager_runner.py::test_receipt_is_atomic_and_resume_does_not_repeat_completed_experiment\nERROR tests/test_manager_runner.py::test_resume_rejects_changed_scientific_or_runtime_settings\nERROR tests/test_mixture_builder.py::test_legacy_custom_file_round_trips_without_changing_schema\nERROR tests/test_mixture_builder.py::test_builtins_are_not_mutated_by_custom_save\nERROR tests/test_qm_structure_validator.py::test_validation_persists_and_does_not_overwrite_library_geometry\nERROR tests/test_qm_structure_validator.py::test_failed_job_is_persisted - Pe...\nERROR tests/test_qm_structure_validator.py::test_optimisation_failure_keeps_exact_geometry_result\nERROR tests/test_qm_structure_validator.py::test_auto_validation_selects_lowest_successful_spin_and_records_selection\nERROR tests/test_reaction_benchmark_diagnostics.py::test_ab_comparison_has_zero_control_and_responds_to_oo_exclusion\nERROR tests/test_reaction_benchmark_diagnostics.py::test_summary_persists_physics_revision_and_topology\nERROR tests/test_reaction_producer.py::test_trusted_pool_requires_explicit_or_successful_qm_validation\nERROR tests/test_reaction_producer.py::test_generation_is_reproducible_and_uses_atom_fallback\nERROR tests/test_reaction_producer.py::test_generation_covers_all_reactant_orderings_with_trusted_molecule\nERROR tests/test_reaction_producer.py::test_generation_updates_novelty_within_same_invocation\nERROR tests/test_reaction_producer.py::test_prepare_microcell_box_is_safe - P...\nERROR tests/test_reaction_producer.py::test_production_is_fresh_daily_attempt_and_failures_do_not_abort\nERROR tests/test_reaction_producer.py::test_explicit_seed_is_preserved_but_invocations_are_still_independent\nERROR tests/test_reaction_producer.py::test_full_cm_router_goes_straight_to_qm\nERROR tests/test_reaction_producer.py::test_controlled_final_event_routing_bypasses_characterisation_queue\n285 passed, 1 skipped, 2 warnings, 49 errors in 202.95s (0:03:22)",
+          "wall_seconds": 204.0373864999856
+        }
+      ],
+      "status": "FAIL"
+    },
+    "status": "FAIL"
+  },
+  "harmonic_curvature": [
+    {
+      "absolute_error": -0.0052011990464961855,
+      "absolute_error_magnitude": 0.0052011990464961855,
+      "classification": "calibration-linked",
+      "comparison_quality": "clean/strong comparison",
+      "model_cm-1": 4401.2047988009535,
+      "pair": "H-H",
+      "percent_error": 0.00011817657068161224,
+      "reference_cm-1": 4401.21,
+      "source": "https://webbook.nist.gov/cgi/cbook.cgi?ID=C1333740&Mask=3FF7&Units=SI",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": 19.222098881976763,
+      "absolute_error_magnitude": 19.222098881976763,
+      "classification": "calibration-linked",
+      "comparison_quality": "approximate polyatomic normal mode",
+      "model_cm-1": 2936.2220988819768,
+      "pair": "C-H",
+      "percent_error": 0.6589680796015346,
+      "reference_cm-1": 2917.0,
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": -137.86333289989898,
+      "absolute_error_magnitude": 137.86333289989898,
+      "classification": "calibration-linked",
+      "comparison_quality": "approximate polyatomic normal mode",
+      "model_cm-1": 3199.136667100101,
+      "pair": "N-H",
+      "percent_error": 4.131355495951423,
+      "reference_cm-1": 3337.0,
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": 93.7965629561736,
+      "absolute_error_magnitude": 93.7965629561736,
+      "classification": "calibration-linked",
+      "comparison_quality": "approximate polyatomic normal mode",
+      "model_cm-1": 3750.7965629561736,
+      "pair": "O-H",
+      "percent_error": 2.564849957784348,
+      "reference_cm-1": 3657.0,
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    },
+    {
+      "absolute_error": 64.30902311887235,
+      "absolute_error_magnitude": 64.30902311887235,
+      "classification": "hold-out diagnostic",
+      "comparison_quality": "mixed polyatomic normal mode",
+      "model_cm-1": 1057.3090231188723,
+      "pair": "C-C",
+      "percent_error": 6.476235963632663,
+      "reference_cm-1": 993.0,
+      "source": "https://cccbdb.nist.gov/",
+      "status": "ACCEPTABLE"
+    },
+    {
+      "absolute_error": 13.63229435567223,
+      "absolute_error_magnitude": 13.63229435567223,
+      "classification": "hold-out diagnostic",
+      "comparison_quality": "perturbed polyatomic normal mode",
+      "model_cm-1": 1058.4456943556722,
+      "pair": "C-N",
+      "percent_error": 1.3047587593796393,
+      "reference_cm-1": 1044.8134,
+      "source": "https://doi.org/10.1016/j.jms.2011.09.003",
+      "status": "GOOD"
+    },
+    {
+      "absolute_error": 24.576641818859343,
+      "absolute_error_magnitude": 24.576641818859343,
+      "classification": "hold-out diagnostic",
+      "comparison_quality": "polyatomic normal mode",
+      "model_cm-1": 1057.5766418188593,
+      "pair": "C-O",
+      "percent_error": 2.3791521605865773,
+      "reference_cm-1": 1033.0,
+      "source": "https://cccbdb.nist.gov/",
+      "status": "GOOD"
+    },
+    {
+      "absolute_error": -344.00052374316704,
+      "absolute_error_magnitude": 344.00052374316704,
+      "classification": "hold-out diagnostic",
+      "comparison_quality": "polyatomic normal mode; rejected width fit",
+      "model_cm-1": 733.239476256833,
+      "pair": "N-N",
+      "percent_error": 31.933508200880677,
+      "reference_cm-1": 1077.24,
+      "source": "https://doi.org/10.1016/S0022-2852(03)00106-1",
+      "status": "FAIL"
+    },
+    {
+      "absolute_error": -176.01648508251333,
+      "absolute_error_magnitude": 176.01648508251333,
+      "classification": "hold-out diagnostic",
+      "comparison_quality": "polyatomic normal mode",
+      "model_cm-1": 778.9835149174867,
+      "pair": "N-O",
+      "percent_error": 18.431045558378358,
+      "reference_cm-1": 955.0,
+      "source": "https://cccbdb.nist.gov/",
+      "status": "WEAK"
+    },
+    {
+      "absolute_error": 0.23815128042747347,
+      "absolute_error_magnitude": 0.23815128042747347,
+      "classification": "calibration-linked",
+      "comparison_quality": "polyatomic mode used to select width",
+      "model_cm-1": 877.2381512804275,
+      "pair": "O-O",
+      "percent_error": 0.02715522011715775,
+      "reference_cm-1": 877.0,
+      "source": "https://cccbdb.nist.gov/",
+      "status": "FIT TARGET - NOT INDEPENDENT"
+    }
+  ],
+  "holdout_geometry": [
+    {
+      "absolute_error": 0.0129999999999999,
+      "absolute_error_magnitude": 0.0129999999999999,
+      "bond": "C-C",
+      "classification": "hold-out",
+      "model_A": 1.525,
+      "molecule": "ethanol",
+      "note": "generic pair re; full molecular relaxation may shift this value",
+      "percent_error": 0.8597883597883531,
+      "reference_A": 1.512,
+      "source": "https://cccbdb.nist.gov/exp2x.asp?casno=64175&charge=0",
+      "status": "GOOD"
+    },
+    {
+      "absolute_error": -0.0040000000000000036,
+      "absolute_error_magnitude": 0.0040000000000000036,
+      "bond": "C-O",
+      "classification": "hold-out",
+      "model_A": 1.427,
+      "molecule": "ethanol",
+      "note": "generic pair re; full molecular relaxation may shift this value",
+      "percent_error": 0.27952480782669487,
+      "reference_A": 1.431,
+      "source": "https://cccbdb.nist.gov/exp2x.asp?casno=64175&charge=0",
+      "status": "GOOD"
+    },
+    {
+      "absolute_error": 0.016000000000000014,
+      "absolute_error_magnitude": 0.016000000000000014,
+      "bond": "C-O",
+      "classification": "hold-out",
+      "model_A": 1.427,
+      "molecule": "dimethyl ether",
+      "note": "generic pair re; full molecular relaxation may shift this value",
+      "percent_error": 1.1339475549255855,
+      "reference_A": 1.411,
+      "source": "https://cccbdb.nist.gov/expgeom2.asp?casno=115106&charge=0",
+      "status": "GOOD"
+    },
+    {
+      "absolute_error": 0.0009999999999998899,
+      "absolute_error_magnitude": 0.0009999999999998899,
+      "bond": "C-N",
+      "classification": "hold-out",
+      "model_A": 1.47,
+      "molecule": "ethylamine",
+      "note": "generic pair re; full molecular relaxation may shift this value",
+      "percent_error": 0.06807351940094554,
+      "reference_A": 1.469,
+      "source": "https://cccbdb.nist.gov/exp2x.asp?casno=75047&charge=0",
+      "status": "GOOD"
+    }
+  ],
+  "large_mixture": {
+    "caution": "historical matched seeds; stochastic products need distribution-level interpretation",
+    "current_calibration_stage": null,
+    "historical_baseline": null,
+    "status": "INSUFFICIENT REFERENCE DATA"
+  },
+  "mode": "full",
+  "numerical_stability": {
+    "source": "NVE endurance plus focused batch health",
+    "status": "GOOD"
+  },
+  "parameter_consistency": {
+    "audit": {
+      "pairs": [
+        {
+          "bond_order": 1,
+          "depth_eV": 3.606778255687413,
+          "depth_kJ_mol": 348.0,
+          "elements": [
+            "C",
+            "C"
+          ],
+          "pair": "C-C",
+          "re_A": 1.525,
+          "source": "reactive.py live table",
+          "state": "accepted single-bond calibration",
+          "width_inv_A": 1.85
+        },
+        {
+          "bond_order": 1,
+          "depth_eV": 4.549930040939007,
+          "depth_kJ_mol": 439.0,
+          "elements": [
+            "C",
+            "H"
+          ],
+          "pair": "C-H",
+          "re_A": 1.086,
+          "source": "reactive.py live table",
+          "state": "accepted single-bond calibration",
+          "width_inv_A": 1.8
+        },
+        {
+          "bond_order": 1,
+          "depth_eV": 3.6896926983468936,
+          "depth_kJ_mol": 356.0,
+          "elements": [
+            "C",
+            "N"
+          ],
+          "pair": "C-N",
+          "re_A": 1.47,
+          "source": "reactive.py live table",
+          "state": "accepted single-bond calibration",
+          "width_inv_A": 1.9
+        },
+        {
+          "bond_order": 1,
+          "depth_eV": 3.7104213090117635,
+          "depth_kJ_mol": 358.0,
+          "elements": [
+            "C",
+            "O"
+          ],
+          "pair": "C-O",
+          "re_A": 1.427,
+          "source": "reactive.py live table",
+          "state": "accepted single-bond calibration",
+          "width_inv_A": 1.95
+        },
+        {
+          "bond_order": 1,
+          "depth_eV": 4.516556977768565,
+          "depth_kJ_mol": 435.78,
+          "elements": [
+            "H",
+            "H"
+          ],
+          "pair": "H-H",
+          "re_A": 0.74144,
+          "source": "reactive.py live table",
+          "state": "accepted single-bond calibration",
+          "width_inv_A": 1.9936
+        },
+        {
+          "bond_order": 1,
+          "depth_eV": 4.653573094263357,
+          "depth_kJ_mol": 449.0,
+          "elements": [
+            "N",
+            "H"
+          ],
+          "pair": "N-H",
+          "re_A": 1.0109,
+          "source": "reactive.py live table",
+          "state": "accepted single-bond calibration",
+          "width_inv_A": 1.95
+        },
+        {
+          "bond_order": 1,
+          "depth_eV": 1.7308389905166608,
+          "depth_kJ_mol": 167.0,
+          "elements": [
+            "N",
+            "N"
+          ],
+          "pair": "N-N",
+          "re_A": 1.446,
+          "source": "reactive.py live table",
+          "state": "accepted single-bond calibration",
+          "width_inv_A": 2.0
+        },
+        {
+          "bond_order": 1,
+          "depth_eV": 2.083225371819454,
+          "depth_kJ_mol": 201.0,
+          "elements": [
+            "N",
+            "O"
+          ],
+          "pair": "N-O",
+          "re_A": 1.453,
+          "source": "reactive.py live table",
+          "state": "accepted single-bond calibration",
+          "width_inv_A": 2.0
+        },
+        {
+          "bond_order": 1,
+          "depth_eV": 5.1614240555526765,
+          "depth_kJ_mol": 498.0,
+          "elements": [
+            "O",
+            "H"
+          ],
+          "pair": "O-H",
+          "re_A": 0.96,
+          "source": "reactive.py live table",
+          "state": "accepted single-bond calibration",
+          "width_inv_A": 2.18
+        },
+        {
+          "bond_order": 1,
+          "depth_eV": 1.5131885785355237,
+          "depth_kJ_mol": 146.0,
+          "elements": [
+            "O",
+            "O"
+          ],
+          "pair": "O-O",
+          "re_A": 1.475,
+          "source": "reactive.py live table",
+          "state": "accepted single-bond calibration",
+          "width_inv_A": 2.735
+        },
+        {
+          "bond_order": 2,
+          "depth_eV": 6.363683474115148,
+          "depth_kJ_mol": 614.0,
+          "elements": [
+            "C",
+            "C"
+          ],
+          "pair": "C-C",
+          "re_A": 1.34,
+          "source": "reactive.py live table",
+          "state": "inherited; not recalibrated in this stage",
+          "width_inv_A": 1.95
+        },
+        {
+          "bond_order": 2,
+          "depth_eV": 6.374047779447583,
+          "depth_kJ_mol": 615.0,
+          "elements": [
+            "C",
+            "N"
+          ],
+          "pair": "C-N",
+          "re_A": 1.29,
+          "source": "reactive.py live table",
+          "state": "inherited; not recalibrated in this stage",
+          "width_inv_A": 2.0
+        },
+        {
+          "bond_order": 2,
+          "depth_eV": 7.773228999326321,
+          "depth_kJ_mol": 750.0,
+          "elements": [
+            "C",
+            "O"
+          ],
+          "pair": "C-O",
+          "re_A": 1.2,
+          "source": "reactive.py live table",
+          "state": "inherited; not recalibrated in this stage",
+          "width_inv_A": 2.1
+        },
+        {
+          "bond_order": 2,
+          "depth_eV": 4.3322796289578696,
+          "depth_kJ_mol": 418.0,
+          "elements": [
+            "N",
+            "N"
+          ],
+          "pair": "N-N",
+          "re_A": 1.25,
+          "source": "reactive.py live table",
+          "state": "inherited; not recalibrated in this stage",
+          "width_inv_A": 2.1
+        },
+        {
+          "bond_order": 2,
+          "depth_eV": 6.291133336788102,
+          "depth_kJ_mol": 607.0,
+          "elements": [
+            "N",
+            "O"
+          ],
+          "pair": "N-O",
+          "re_A": 1.21,
+          "source": "reactive.py live table",
+          "state": "inherited; not recalibrated in this stage",
+          "width_inv_A": 2.1
+        },
+        {
+          "bond_order": 2,
+          "depth_eV": 5.1614240555526765,
+          "depth_kJ_mol": 498.0,
+          "elements": [
+            "O",
+            "O"
+          ],
+          "pair": "O-O",
+          "re_A": 1.21,
+          "source": "reactive.py live table",
+          "state": "inherited; not recalibrated in this stage",
+          "width_inv_A": 2.15
+        },
+        {
+          "bond_order": 3,
+          "depth_eV": 8.695652173913045,
+          "depth_kJ_mol": 839.0,
+          "elements": [
+            "C",
+            "C"
+          ],
+          "pair": "C-C",
+          "re_A": 1.2,
+          "source": "reactive.py live table",
+          "state": "inherited; not recalibrated in this stage",
+          "width_inv_A": 2.05
+        },
+        {
+          "bond_order": 3,
+          "depth_eV": 9.234596051199668,
+          "depth_kJ_mol": 891.0,
+          "elements": [
+            "C",
+            "N"
+          ],
+          "pair": "C-N",
+          "re_A": 1.16,
+          "source": "reactive.py live table",
+          "state": "inherited; not recalibrated in this stage",
+          "width_inv_A": 2.1
+        },
+        {
+          "bond_order": 3,
+          "depth_eV": 9.794268539151163,
+          "depth_kJ_mol": 945.0,
+          "elements": [
+            "N",
+            "N"
+          ],
+          "pair": "N-N",
+          "re_A": 1.1,
+          "source": "reactive.py live table",
+          "state": "inherited; not recalibrated in this stage",
+          "width_inv_A": 2.2
+        }
+      ],
+      "semantics": {
+        "bond_order": "continuously blends single/double/triple tables",
+        "environment_softening": 0.174,
+        "high_fidelity": "separate H-transfer correction; base pair tables shared",
+        "morse": "D exp(-2 a (r-re)) - 2 D exp(-a (r-re))",
+        "over_coordination_depth_weight": 0.0,
+        "over_coordination_penalty_eV": 7.778,
+        "stored_depth": "classical effective Morse De before environment/bond-order terms"
+      },
+      "status": "GOOD"
+    },
+    "numpy_torch": {
+      "maximum_absolute_difference": 0.0,
+      "status": "GOOD",
+      "tables": {
+        "double_depth": 0.0,
+        "double_length": 0.0,
+        "double_width": 0.0,
+        "single_depth": 0.0,
+        "single_length": 0.0,
+        "single_width": 0.0,
+        "triple_depth": 0.0,
+        "triple_length": 0.0,
+        "triple_width": 0.0
+      }
+    }
+  },
+  "performance": {
+    "device": "cpu",
+    "gpu_memory": "not measured in quick local probe",
+    "median_seconds": 0.3938081999949645,
+    "status": "GOOD",
+    "steps": 100,
+    "steps_per_second": 253.93072059260996
+  },
+  "potential_curves": [
+    {
+      "coordinate": "H2 H-H",
+      "model_dissociation_coordinate_eV": 4.5165512409691235,
+      "note": "H2 spectroscopy constrains equilibrium length and harmonic curvature. The full Morse-curve difference is reported only as a depth-convention diagnostic and is not a pointwise fit requirement.",
+      "post_minimum_falling_steps": 0,
+      "reference_curve": {
+        "kind": "spectroscopy-derived Morse approximation",
+        "model_depth_convention": "thermochemical/BDE298-like effective bond depth",
+        "points": [
+          {
+            "absolute_error_eV": 0.23405559672144527,
+            "distance_A": 0.6,
+            "model_eV": -4.037305145409414,
+            "spectroscopic_Morse_reference_eV": -4.2713607421308595
+          },
+          {
+            "absolute_error_eV": 0.23059242931577462,
+            "distance_A": 0.74144,
+            "model_eV": -4.516556977768565,
+            "spectroscopic_Morse_reference_eV": -4.74714940708434
+          },
+          {
+            "absolute_error_eV": 0.22203889852040337,
+            "distance_A": 1.0,
+            "model_eV": -3.7838379288345916,
+            "spectroscopic_Morse_reference_eV": -4.005876827354995
+          },
+          {
+            "absolute_error_eV": 0.15192135976460452,
+            "distance_A": 1.5,
+            "model_eV": -1.7715726971855277,
+            "spectroscopic_Morse_reference_eV": -1.9234940569501322
+          },
+          {
+            "absolute_error_eV": 0.08101139702118199,
+            "distance_A": 2.0,
+            "model_eV": -0.7049062746739455,
+            "spectroscopic_Morse_reference_eV": -0.7859176716951275
+          }
+        ],
+        "reference_depth_convention": "spectroscopic De derived from D0 plus ZPE",
+        "required_pointwise_target": false,
+        "source": "https://webbook.nist.gov/cgi/cbook.cgi?ID=C1333740&Mask=3FF7&Units=SI"
+      },
+      "reference_curve_status": "CONVENTION-DEPENDENT DIAGNOSTIC",
+      "sampled_minimum_A": 0.740875,
+      "shape_status": "GOOD",
+      "short_range_above_dissociation_eV": 1.796729919900102
+    },
+    {
+      "coordinate": "CH4 C-H",
+      "model_dissociation_coordinate_eV": 4.57188189724004,
+      "note": "model curve validated for shape; no external pointwise curve bundled",
+      "post_minimum_falling_steps": 0,
+      "reference_curve_status": "INSUFFICIENT REFERENCE DATA",
+      "sampled_minimum_A": 1.089,
+      "shape_status": "GOOD",
+      "short_range_above_dissociation_eV": 7.43174573288028
+    },
+    {
+      "coordinate": "C2H6 C-C",
+      "model_dissociation_coordinate_eV": 3.650919024601052,
+      "note": "model curve validated for shape; no external pointwise curve bundled",
+      "post_minimum_falling_steps": 0,
+      "reference_curve_status": "INSUFFICIENT REFERENCE DATA",
+      "sampled_minimum_A": 1.525,
+      "shape_status": "GOOD",
+      "short_range_above_dissociation_eV": 5.8526684439180485
+    },
+    {
+      "coordinate": "CH3NH2 C-N",
+      "model_dissociation_coordinate_eV": 3.7082847148026197,
+      "note": "model curve validated for shape; no external pointwise curve bundled",
+      "post_minimum_falling_steps": 0,
+      "reference_curve_status": "INSUFFICIENT REFERENCE DATA",
+      "sampled_minimum_A": 1.4675,
+      "shape_status": "GOOD",
+      "short_range_above_dissociation_eV": 4.006798121357356
+    },
+    {
+      "coordinate": "CH3OH C-O",
+      "model_dissociation_coordinate_eV": 3.7192332594464794,
+      "note": "model curve validated for shape; no external pointwise curve bundled",
+      "post_minimum_falling_steps": 0,
+      "reference_curve_status": "INSUFFICIENT REFERENCE DATA",
+      "sampled_minimum_A": 1.429,
+      "shape_status": "GOOD",
+      "short_range_above_dissociation_eV": 3.5549702263247323
+    },
+    {
+      "coordinate": "N2H4 N-N",
+      "model_dissociation_coordinate_eV": 1.7682562380946507,
+      "note": "model curve validated for shape; no external pointwise curve bundled",
+      "post_minimum_falling_steps": 0,
+      "reference_curve_status": "INSUFFICIENT REFERENCE DATA",
+      "sampled_minimum_A": 1.4455,
+      "shape_status": "GOOD",
+      "short_range_above_dissociation_eV": 1.8159940493579967
+    },
+    {
+      "coordinate": "NH2OH N-O",
+      "model_dissociation_coordinate_eV": 2.09751279775438,
+      "note": "model curve validated for shape; no external pointwise curve bundled",
+      "post_minimum_falling_steps": 0,
+      "reference_curve_status": "INSUFFICIENT REFERENCE DATA",
+      "sampled_minimum_A": 1.451,
+      "shape_status": "GOOD",
+      "short_range_above_dissociation_eV": 2.6633767450860013
+    },
+    {
+      "coordinate": "H2O2 O-O",
+      "model_dissociation_coordinate_eV": 1.4390884529512977,
+      "note": "model curve validated for shape; no external pointwise curve bundled",
+      "post_minimum_falling_steps": 0,
+      "reference_curve_status": "INSUFFICIENT REFERENCE DATA",
+      "sampled_minimum_A": 1.473,
+      "shape_status": "GOOD",
+      "short_range_above_dissociation_eV": 10.020634910181855
+    }
+  ],
+  "reaction_barriers": [
+    {
+      "absolute_error_eV": 0.19772856625423268,
+      "caution": null,
+      "model": {
+        "barrier": 0.12627143374576733,
+        "donor": 1.12,
+        "reactant_donor": 1.08,
+        "reactant_transfer": 1.5900000000000007,
+        "reaction": -0.7535366147016607,
+        "spectators": [
+          1.1999996492161082,
+          1.086,
+          119.99483280849682,
+          120.01200936958547
+        ],
+        "transfer": 1.0500000000000003
+      },
+      "reference_eV": [
+        0.324,
+        0.324
+      ],
+      "scan_kind": "relaxed",
+      "status": "WEAK",
+      "system": "formaldehyde",
+      "wall_seconds": 17.134237699996447
+    },
+    {
+      "absolute_error_eV": 0.3639999999987974,
+      "caution": null,
+      "model": {
+        "barrier": 1.2025935802739696e-12,
+        "donor": 0.9800000000000001,
+        "reactant_donor": 0.9800000000000001,
+        "reactant_transfer": 1.7800000000000007,
+        "reaction": -0.009386374152663635,
+        "spectators": [
+          0.960000003448027,
+          0.9600000621864385,
+          75.52922073058612,
+          72.27040061871536
+        ],
+        "transfer": 1.5400000000000005
+      },
+      "reference_eV": [
+        0.364,
+        0.525
+      ],
+      "scan_kind": "relaxed",
+      "status": "WEAK",
+      "system": "water",
+      "wall_seconds": 27.673821900010807
+    },
+    {
+      "absolute_error_eV": 0.47501986436489874,
+      "caution": null,
+      "model": {
+        "barrier": 0.16498013563510128,
+        "donor": 1.12,
+        "reactant_donor": 1.08,
+        "reactant_transfer": 1.5900000000000007,
+        "reaction": 0.03410162281116769,
+        "spectators": [
+          1.0859999211509985,
+          1.0859999211509714,
+          1.0859999211509705,
+          109.47001985558839
+        ],
+        "transfer": 1.0500000000000003
+      },
+      "reference_eV": [
+        0.64,
+        0.64
+      ],
+      "scan_kind": "relaxed",
+      "status": "WEAK",
+      "system": "methane",
+      "wall_seconds": 18.451374099997338
+    },
+    {
+      "caution": null,
+      "model": {
+        "barrier": 0.16816396144599643,
+        "donor": 1.04,
+        "reactant_donor": 1.0,
+        "reactant_transfer": 1.5900000000000007,
+        "reaction": 0.13604336284433316,
+        "spectators": [
+          1.0109002074416074,
+          1.0109002464989516,
+          106.97134023510056
+        ],
+        "transfer": 1.0500000000000003
+      },
+      "scan_kind": "relaxed",
+      "status": "INSUFFICIENT REFERENCE DATA",
+      "system": "ammonia",
+      "wall_seconds": 19.053419099975144
+    }
+  ],
+  "rules": {
+    "fit_targets_are_independent_validation": false,
+    "force_field_modified": false,
+    "overall_accuracy_percentage": null
+  },
+  "schema_version": 3,
+  "stable_molecule_endurance": [
+    {
+      "capped_steps": 0,
+      "drift_eV": 3.481166714891515e-07,
+      "energy_end_eV": -4.5124625772674865,
+      "energy_start_eV": -4.512462925384158,
+      "max_displacement_A": 0.10391083359718323,
+      "molecule": "H2",
+      "status": "GOOD"
+    },
+    {
+      "capped_steps": 0,
+      "drift_eV": 1.9937528183078257e-05,
+      "energy_end_eV": -18.153470895777513,
+      "energy_start_eV": -18.153490833305696,
+      "max_displacement_A": 0.634760320186615,
+      "molecule": "CH4",
+      "status": "GOOD"
+    },
+    {
+      "capped_steps": 0,
+      "drift_eV": 3.653528261970962e-05,
+      "energy_end_eV": -13.91520837477094,
+      "energy_start_eV": -13.91524491005356,
+      "max_displacement_A": 0.3328922986984253,
+      "molecule": "NH3",
+      "status": "GOOD"
+    },
+    {
+      "capped_steps": 0,
+      "drift_eV": 3.3037226327081726e-05,
+      "energy_end_eV": -10.286824221962743,
+      "energy_start_eV": -10.28685725918907,
+      "max_displacement_A": 1.3485037088394165,
+      "molecule": "H2O",
+      "status": "GOOD"
+    },
+    {
+      "capped_steps": 0,
+      "drift_eV": 2.106785855815474e-05,
+      "energy_end_eV": -30.807842219291835,
+      "energy_start_eV": -30.807863287150393,
+      "max_displacement_A": 0.900130033493042,
+      "molecule": "C2H6",
+      "status": "GOOD"
+    },
+    {
+      "capped_steps": 0,
+      "drift_eV": 2.190561138348812e-05,
+      "energy_end_eV": -26.55629324791208,
+      "energy_start_eV": -26.556315153523464,
+      "max_displacement_A": 1.028192162513733,
+      "molecule": "CH3NH2",
+      "status": "GOOD"
+    },
+    {
+      "capped_steps": 0,
+      "drift_eV": 8.966083731465346e-05,
+      "energy_end_eV": -22.452503788985776,
+      "energy_start_eV": -22.45259344982309,
+      "max_displacement_A": 0.2976128160953522,
+      "molecule": "CH3OH",
+      "status": "GOOD"
+    },
+    {
+      "capped_steps": 0,
+      "drift_eV": 5.03210184987779e-05,
+      "energy_end_eV": -20.280603557446447,
+      "energy_start_eV": -20.280653878464946,
+      "max_displacement_A": 0.7638596892356873,
+      "molecule": "N2H4",
+      "status": "GOOD"
+    },
+    {
+      "capped_steps": 0,
+      "drift_eV": 2.5815676082174832e-05,
+      "energy_end_eV": -16.499974759712117,
+      "energy_start_eV": -16.5000005753882,
+      "max_displacement_A": 1.4068841934204102,
+      "molecule": "NH2OH",
+      "status": "GOOD"
+    },
+    {
+      "capped_steps": 0,
+      "drift_eV": 5.37813628316286e-05,
+      "energy_end_eV": -11.79177481526282,
+      "energy_start_eV": -11.79182859662565,
+      "max_displacement_A": 0.6012427806854248,
+      "molecule": "H2O2",
+      "status": "GOOD"
+    }
+  ],
+  "transferability": {
+    "barriers": "reported separately; no parameter tuning performed here",
+    "dissociation": "MODERATE: effective pair depths are diagnostics, not molecular thermochemistry, and several hold-outs differ materially",
+    "dynamics": "GOOD for preserved focused N-N and O-O recombination ensembles; other reactions need baselines",
+    "geometry": "ACCEPTABLE: ethanol/ethylamine transfer is close; dimethyl-ether C-O exposes environment dependence",
+    "heavy_heavy_curvature": "WEAK/UNCERTAIN: mixed normal modes; N-N width fit was rejected by capture dynamics",
+    "important_gaps": [
+      "no bundled high-level pointwise potential curves",
+      "collision accessibility is static-barrier based; no trajectory probability ensemble",
+      "limited preserved focused ensembles for H-H, C-H, C-C and C-O capture",
+      "double/triple bond tables remain inherited and unvalidated in this stage"
+    ],
+    "mean_holdout_geometry_percent_error": 0.5853335604853948,
+    "numerical_stability": "GOOD across deterministic and NVE probes",
+    "reaction_energies": "UNCERTAIN: complete-species engine energies are now reported, but their experimental comparators are BDE298-derived and calibration-linked",
+    "x_h_curvature": "STRONGEST AREA, but most X-H molecular bands remain calibration-linked"
+  },
+  "validation_mixtures": {
+    "compatibility": "additive presets only; existing mixture definitions and defaults are unchanged",
+    "limitation": "current mixture schema cannot combine loose atoms and molecules in one preset",
+    "nitrogen": "[validation] nitrogen radicals",
+    "oxygen": "[validation] oxygen radicals",
+    "stable": "[validation] stable small molecules"
+  },
+  "wall_seconds": 1735.0269266999967,
+  "whole_model_reaction_energies": [
+    {
+      "absolute_error": 0.05852702166866078,
+      "absolute_error_magnitude": 0.05852702166866078,
+      "calculation": "complete-species ChemistryModel Torch energy after isolated-fragment relaxation",
+      "classification": "derived comparison from calibration-linked BDE targets; not independent",
+      "limitation": "model electronic energy is compared with a BDE298-derived thermochemical value; ZPE and finite-temperature corrections are not included",
+      "model_delta_E_eV": 0.09152702166866078,
+      "percent_error": 177.35461111715387,
+      "reaction": "H + CH4 -> H2 + CH3",
+      "reference_delta_E_eV": 0.033,
+      "reference_quantity": "approximate reaction enthalpy from experimental BDE298 difference",
+      "relaxation_converged": true,
+      "species": {
+        "CH3": {
+          "atoms": 4,
+          "converged": true,
+          "energy_eV": -13.579731808262217,
+          "geometry": "engine-relaxed from a stable experimental-like starting geometry",
+          "initial_energy_eV": -13.578123793298525,
+          "maximum_force_eV_per_A": 1.0256852354022725e-12
+        },
+        "CH4": {
+          "atoms": 5,
+          "converged": true,
+          "energy_eV": -18.183886403128785,
+          "geometry": "engine-relaxed from a stable experimental-like starting geometry",
+          "initial_energy_eV": -18.182950509138596,
+          "maximum_force_eV_per_A": 1.4672707680866635e-12
+        },
+        "H": {
+          "atoms": 1,
+          "converged": true,
+          "energy_eV": 0.0,
+          "geometry": "isolated atom",
+          "maximum_force_eV_per_A": 0.0
+        },
+        "H2": {
+          "atoms": 2,
+          "converged": true,
+          "energy_eV": -4.512627573197906,
+          "geometry": "engine-relaxed from a stable experimental-like starting geometry",
+          "initial_energy_eV": -4.5125902758809895,
+          "maximum_force_eV_per_A": 7.993605777301127e-13
+        }
+      },
+      "status": "GOOD",
+      "status_basis": "absolute delta-E error; percentage error is retained but not used for near-thermoneutral reactions",
+      "terms": "the full engine energy, including bond order, environment softening, coordination, and angle terms"
+    },
+    {
+      "absolute_error": -0.0006939565735675224,
+      "absolute_error_magnitude": 0.0006939565735675224,
+      "calculation": "complete-species ChemistryModel Torch energy after isolated-fragment relaxation",
+      "classification": "derived comparison from calibration-linked BDE targets; not independent",
+      "limitation": "model electronic energy is compared with a BDE298-derived thermochemical value; ZPE and finite-temperature corrections are not included",
+      "model_delta_E_eV": 0.6443060434264325,
+      "percent_error": 0.10759016644457711,
+      "reaction": "H + H2O -> H2 + OH",
+      "reference_delta_E_eV": 0.645,
+      "reference_quantity": "approximate reaction enthalpy from experimental BDE298 difference",
+      "relaxation_converged": true,
+      "species": {
+        "H": {
+          "atoms": 1,
+          "converged": true,
+          "energy_eV": 0.0,
+          "geometry": "isolated atom",
+          "maximum_force_eV_per_A": 0.0
+        },
+        "H2": {
+          "atoms": 2,
+          "converged": true,
+          "energy_eV": -4.512627573197906,
+          "geometry": "engine-relaxed from a stable experimental-like starting geometry",
+          "initial_energy_eV": -4.5125902758809895,
+          "maximum_force_eV_per_A": 7.993605777301127e-13
+        },
+        "H2O": {
+          "atoms": 3,
+          "converged": true,
+          "energy_eV": -10.313867233248686,
+          "geometry": "engine-relaxed from a stable experimental-like starting geometry",
+          "initial_energy_eV": -10.313866876846312,
+          "maximum_force_eV_per_A": 1.3925976446587882e-07
+        },
+        "OH": {
+          "atoms": 2,
+          "converged": true,
+          "energy_eV": -5.156933616624347,
+          "geometry": "engine-relaxed from a stable experimental-like starting geometry",
+          "initial_energy_eV": -5.156933616624347,
+          "maximum_force_eV_per_A": 4.618527782440651e-14
+        }
+      },
+      "status": "GOOD",
+      "status_basis": "absolute delta-E error; percentage error is retained but not used for near-thermoneutral reactions",
+      "terms": "the full engine energy, including bond order, environment softening, coordination, and angle terms"
+    },
+    {
+      "absolute_error": -0.00010310826400639073,
+      "absolute_error_magnitude": 0.00010310826400639073,
+      "calculation": "complete-species ChemistryModel Torch energy after isolated-fragment relaxation",
+      "classification": "derived comparison from calibration-linked BDE targets; not independent",
+      "limitation": "model electronic energy is compared with a BDE298-derived thermochemical value; ZPE and finite-temperature corrections are not included",
+      "model_delta_E_eV": 0.13689689173599362,
+      "percent_error": 0.07526150657400782,
+      "reaction": "H + NH3 -> H2 + NH2",
+      "reference_delta_E_eV": 0.137,
+      "reference_quantity": "approximate reaction enthalpy from experimental BDE298 difference",
+      "relaxation_converged": true,
+      "species": {
+        "H": {
+          "atoms": 1,
+          "converged": true,
+          "energy_eV": 0.0,
+          "geometry": "isolated atom",
+          "maximum_force_eV_per_A": 0.0
+        },
+        "H2": {
+          "atoms": 2,
+          "converged": true,
+          "energy_eV": -4.512627573197906,
+          "geometry": "engine-relaxed from a stable experimental-like starting geometry",
+          "initial_energy_eV": -4.5125902758809895,
+          "maximum_force_eV_per_A": 7.993605777301127e-13
+        },
+        "NH2": {
+          "atoms": 3,
+          "converged": true,
+          "energy_eV": -9.299048971196907,
+          "geometry": "engine-relaxed from a stable experimental-like starting geometry",
+          "initial_energy_eV": -9.29194657479106,
+          "maximum_force_eV_per_A": 3.178002310492864e-05
+        },
+        "NH3": {
+          "atoms": 4,
+          "converged": true,
+          "energy_eV": -13.948573436130808,
+          "geometry": "engine-relaxed from a stable experimental-like starting geometry",
+          "initial_energy_eV": -13.531740845350653,
+          "maximum_force_eV_per_A": 0.0003579873140123948
+        }
+      },
+      "status": "GOOD",
+      "status_basis": "absolute delta-E error; percentage error is retained but not used for near-thermoneutral reactions",
+      "terms": "the full engine energy, including bond order, environment softening, coordination, and angle terms"
+    }
+  ]
+}
