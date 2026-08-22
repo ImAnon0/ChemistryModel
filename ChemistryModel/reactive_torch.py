@@ -1098,10 +1098,63 @@ class ReactiveSimulation:
 
         return movement * scale[:, None]
 
+
+    def build_interaction_context(self, positions):
+        from chemistry_engine.context import InteractionContext
+        import reactive as R
+
+        atomic_number_map = {
+            "H": 1,
+            "C": 6,
+            "N": 7,
+            "O": 8,
+        }
+
+        atomic_numbers = tuple(
+            atomic_number_map[R.ELEMENTS[int(t)]]
+            for t in self.types_numpy
+        )
+
+        return InteractionContext(
+            positions=positions,
+            element_types=self.types,
+            atomic_numbers=atomic_numbers,
+            neighbours=self.neighbours,
+            neighbour_mask=self.neighbour_mask,
+            box_size=self.box_size,
+            box_count=1,
+            atoms_per_box=self.atom_count,
+            batch_assignment=tuple(
+                0 for _ in range(self.atom_count)
+            ),
+        )
+
     def compute_forces(self):
         profile_sink = getattr(self, "_reactive_profile_sink", None)
 
         positions = self.positions.detach().requires_grad_(True)
+
+        if getattr(self, "use_chemistry_engine", False):
+          
+            context = self.build_interaction_context(positions)
+
+            result = self.chemistry_engine.energy(context)
+
+            # ChemistryEngine returns an EnergyResult. The legacy runtime
+            # expects a scalar total energy for autograd and reporting.
+            total = result.per_atom.sum()
+
+            gradient, = torch.autograd.grad(
+                total,
+                positions,
+                create_graph=False,
+            )
+
+            self._potential_per_atom = result.per_atom.detach()
+            self._potential_cache_source = self.positions
+            self._potential_cache_version = self.positions._version
+
+            return -gradient.detach(), total.detach()
 
         if profile_sink is not None:
             profile_token_forward = profile_sink.stage_begin(

@@ -44,8 +44,22 @@ class UnifiedRadialHamiltonian:
             extension_components = {}
             for term in self.extensions:
                 contribution = term.energy(context, total)
+
+                # EnergyResult.per_atom is expected to remain per-atom.
+                # Some extension terms (for example QEq electrostatics)
+                # naturally return a single scalar system contribution.
+                # Distribute scalar extensions across atoms before adding them
+                # to the per-atom Hamiltonian.
+                if contribution.ndim == 0:
+                    contribution_per_atom = (
+                        contribution
+                        / len(context.positions)
+                    )
+                else:
+                    contribution_per_atom = contribution
+
                 extension_components[term.name] = contribution
-                total = total + contribution
+                total = total + contribution_per_atom
 
         finally:
             self.base_energy.release_intermediates()
