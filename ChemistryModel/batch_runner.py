@@ -547,9 +547,27 @@ def simulation_physics_provenance(simulation):
         provenance.update({
             "physics_parameter_sha256": spec.parameter_sha256,
             "physics_enabled_terms": list(spec.enabled_terms),
+            "physics_enabled_extensions": list(spec.enabled_extensions),
             "physics_capacity_solver": spec.capacity.solver,
             "physics_geometry_convention": spec.geometry.convention,
         })
+        extension_terms = getattr(
+            getattr(simulation, "chemistry_engine", None),
+            "hamiltonian",
+            None,
+        )
+        extension_terms = getattr(extension_terms, "extensions", ())
+        extension_payload = {
+            term.name: term.provenance()
+            for term in extension_terms
+            if hasattr(term, "provenance")
+        }
+        if extension_payload:
+            from chemistry_engine.config import parameter_identity
+
+            encoded, digest = parameter_identity(extension_payload)
+            provenance["physics_extension_parameter_sha256"] = digest
+            provenance["physics_extension_parameter_payload_json"] = encoded
     return provenance
 
 

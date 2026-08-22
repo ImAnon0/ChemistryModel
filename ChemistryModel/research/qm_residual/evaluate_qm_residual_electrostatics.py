@@ -97,11 +97,9 @@ def evaluate_geometry(
         spec,
     )
 
-    per_atom = simulation.energy_per_atom(
-        simulation.positions
-    )
-
-    result = simulation._last_chemistry_result
+    positions = simulation.positions.detach().requires_grad_(True)
+    context = simulation.build_interaction_context(positions)
+    result = simulation.chemistry_engine.energy(context)
 
     if result is None:
         raise RuntimeError(
@@ -113,14 +111,21 @@ def evaluate_geometry(
             "EnergyResult has no components"
         )
 
-    energy = float(
-        result.components["total"]
-        .sum()
-        .detach()
-        .cpu()
-    )
-
     parts = result.components
+
+    enabled_total = parts["total"].sum()
+    electrostatic_tensor = parts["electrostatics"].sum()
+    electrostatic_gradient, = torch.autograd.grad(
+        electrostatic_tensor,
+        positions,
+        retain_graph=True,
+    )
+    enabled_gradient, = torch.autograd.grad(enabled_total, positions)
+    enabled_forces = -enabled_gradient.detach().cpu().to(torch.float64)
+    electrostatic_forces = -electrostatic_gradient.detach().cpu().to(torch.float64)
+    disabled_forces = enabled_forces - electrostatic_forces
+
+    energy = float(enabled_total.detach().cpu())
 
     def component(name):
         value = parts.get(name)
@@ -148,13 +153,15 @@ def evaluate_geometry(
 
     component_error = component_sum - energy
 
-    forces = simulation.forces.detach().cpu().to(torch.float64)
-    magnitudes = torch.linalg.norm(forces, dim=1)
+    magnitudes = torch.linalg.norm(enabled_forces, dim=1)
 
     force_rms = float(
         torch.sqrt(torch.mean(magnitudes ** 2))
     )
     force_max = float(torch.max(magnitudes))
+    disabled_magnitudes = torch.linalg.norm(disabled_forces, dim=1)
+    electrostatic_magnitudes = torch.linalg.norm(electrostatic_forces, dim=1)
+    disabled_energy = energy - electrostatics
 
     values = [
         energy,
@@ -192,6 +199,8 @@ def evaluate_geometry(
             "",
         ),
         "base_energy_eV": energy,
+        "unified_disabled_energy_eV": disabled_energy,
+        "electrostatics_enabled_energy_eV": energy,
         "base_bond_energy_eV": bond,
         "base_overcoord_energy_eV": over,
         "base_angle_energy_eV": angle,
@@ -199,6 +208,12 @@ def evaluate_geometry(
         "component_sum_error_eV": component_error,
         "base_force_rms_eV_per_angstrom": force_rms,
         "base_force_max_eV_per_angstrom": force_max,
+        "unified_disabled_force_max_eV_per_angstrom": float(
+            torch.max(disabled_magnitudes)
+        ),
+        "electrostatics_force_max_eV_per_angstrom": float(
+            torch.max(electrostatic_magnitudes)
+        ),
     }
 
 
@@ -211,6 +226,8 @@ FIELDNAMES = [
     "donor_distance_angstrom",
     "transfer_distance_angstrom",
     "base_energy_eV",
+    "unified_disabled_energy_eV",
+    "electrostatics_enabled_energy_eV",
     "base_bond_energy_eV",
     "base_overcoord_energy_eV",
     "base_angle_energy_eV",
@@ -218,6 +235,8 @@ FIELDNAMES = [
     "component_sum_error_eV",
     "base_force_rms_eV_per_angstrom",
     "base_force_max_eV_per_angstrom",
+    "unified_disabled_force_max_eV_per_angstrom",
+    "electrostatics_force_max_eV_per_angstrom",
 ]
 
 
@@ -235,6 +254,29 @@ def write_csv(path, rows):
         )
         writer.writeheader()
         writer.writerows(rows)
+
+
+def write_metadata(path, *, args, input_hash, rows):
+    systems = {}
+    for row in rows:
+        systems[row["system"]] = systems.get(row["system"], 0) + 1
+    metadata = {
+        "input": str(args.input),
+        "input_sha256": input_hash,
+        "output": str(args.output),
+        "evaluated_geometry_count": len(rows),
+        "system_counts": systems,
+        "requested_limit": args.limit,
+        "engine": "unified_radial_v1 + opt-in electrostatics",
+        "comparison": "same unified-radial engine with extension disabled/enabled",
+        "device": args.device,
+        "dtype": "torch.float64",
+        "box_size_angstrom": args.box_size,
+        "torch_version": torch.__version__,
+        "python_version": platform.python_version(),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(metadata, indent=2) + "\n", encoding="utf-8")
 
 
 def main():
@@ -264,14 +306,36 @@ def main():
         default="cpu",
     )
 
+    parser.add_argument(
+        "--box-size",
+        type=float,
+        default=DEFAULT_BOX_SIZE,
+    )
+
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=None,
+    )
+
     args = parser.parse_args()
 
     payload = load_payload(args.input)
 
     geometries = payload["geometries"]
+    if args.limit is not None:
+        if args.limit <= 0:
+            raise SystemExit("--limit must be positive")
+        geometries = geometries[: args.limit]
+    if args.box_size <= 0:
+        raise SystemExit("--box-size must be positive")
+    if args.device == "cuda" and not torch.cuda.is_available():
+        raise SystemExit("--device cuda requested but CUDA is unavailable")
+
+    input_hash = sha256_file(args.input)
 
     print(f"input      : {args.input}")
-    print(f"sha256     : {sha256_file(args.input)}")
+    print(f"sha256     : {input_hash}")
     print(f"geometries : {len(geometries)}")
     print(f"device     : {args.device}")
     print()
@@ -285,7 +349,7 @@ def main():
         result = evaluate_geometry(
             row,
             device=args.device,
-            box_size=DEFAULT_BOX_SIZE,
+            box_size=args.box_size,
         )
 
         results.append(result)
@@ -300,9 +364,16 @@ def main():
         args.output,
         results,
     )
+    write_metadata(
+        args.metadata,
+        args=args,
+        input_hash=input_hash,
+        rows=results,
+    )
 
     print()
     print(f"wrote : {args.output}")
+    print(f"meta  : {args.metadata}")
     print(f"rows  : {len(results)}")
 
 

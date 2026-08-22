@@ -46,19 +46,34 @@ class ElectrostaticEnergyTerm:
 
         return chi, hardness
 
-    def _build_qeq_matrix(self, context):
+    def _build_qeq_matrix(self, context, indices=None):
         positions = context.positions
+        if indices is not None:
+            positions = positions.index_select(0, indices)
         device = positions.device
         dtype = positions.dtype
 
+        atomic_numbers = context.atomic_numbers
+        if indices is not None:
+            atomic_numbers = tuple(
+                atomic_numbers[index]
+                for index in indices.detach().cpu().tolist()
+            )
+
         chi, hardness = self._parameter_arrays(
-            context.atomic_numbers,
+            atomic_numbers,
             device,
             dtype,
         )
 
-        distances = torch.cdist(positions, positions)
-        count = len(context.atomic_numbers)
+        displacement = positions[:, None, :] - positions[None, :, :]
+        box_size = float(getattr(context, "box_size", 0.0) or 0.0)
+        if box_size > 0.0:
+            displacement = displacement - box_size * torch.round(
+                displacement / box_size
+            )
+        distances = torch.linalg.vector_norm(displacement, dim=-1)
+        count = len(atomic_numbers)
 
         coupling = torch.zeros_like(distances)
         mask = ~torch.eye(count, dtype=torch.bool, device=device)
@@ -70,10 +85,27 @@ class ElectrostaticEnergyTerm:
 
         return chi, torch.diag(hardness) + coupling
 
-    def solve_charges(self, context):
-        chi, matrix = self._build_qeq_matrix(context)
-
+    def _box_indices(self, context):
         count = len(context.atomic_numbers)
+        assignments = getattr(context, "batch_assignment", None)
+        if assignments is None or len(assignments) != count:
+            assignments = (0,) * count
+
+        ordered_boxes = tuple(dict.fromkeys(int(value) for value in assignments))
+        device = context.positions.device
+        return tuple(
+            torch.tensor(
+                [index for index, value in enumerate(assignments) if int(value) == box],
+                device=device,
+                dtype=torch.long,
+            )
+            for box in ordered_boxes
+        )
+
+    def _solve_box(self, context, indices):
+        chi, matrix = self._build_qeq_matrix(context, indices)
+
+        count = len(indices)
         device = context.positions.device
         dtype = context.positions.dtype
 
@@ -105,15 +137,53 @@ class ElectrostaticEnergyTerm:
         )
 
         solution = torch.linalg.solve(augmented, rhs)
-        charges = solution[:-1]
+        return solution[:-1], chi, matrix
+
+    def solve_charges(self, context):
+        box_indices = self._box_indices(context)
+        box_solutions = [
+            self._solve_box(context, indices)
+            for indices in box_indices
+        ]
+
+        charges = torch.zeros(
+            len(context.atomic_numbers),
+            device=context.positions.device,
+            dtype=context.positions.dtype,
+        )
+        for indices, (box_charges, _, _) in zip(box_indices, box_solutions):
+            charges = charges.index_copy(0, indices, box_charges)
+        chi = torch.zeros_like(charges)
+        for indices, (_, box_chi, _) in zip(box_indices, box_solutions):
+            chi = chi.index_copy(0, indices, box_chi)
+
+        box_charge_sums = torch.stack([
+            box_charges.sum()
+            for box_charges, _, _ in box_solutions
+        ])
+        box_dipoles = torch.stack([
+            calculate_dipole(
+                context.positions.index_select(0, indices),
+                box_charges,
+            )
+            for indices, (box_charges, _, _) in zip(box_indices, box_solutions)
+        ])
 
         self.last_state = {
             "charges": charges,
             "charge_sum": charges.sum(),
             "dipole": calculate_dipole(context.positions, charges),
+            "box_charge_sums": box_charge_sums,
+            "box_dipoles": box_dipoles,
             "solver": "qeq",
-            "qeq_matrix": matrix,
+            "qeq_matrix": (
+                box_solutions[0][2]
+                if len(box_solutions) == 1
+                else tuple(solution[2] for solution in box_solutions)
+            ),
             "chi": chi,
+            "box_indices": box_indices,
+            "box_solutions": tuple(box_solutions),
         }
 
         return charges
@@ -121,16 +191,44 @@ class ElectrostaticEnergyTerm:
     def diagnostics(self):
         return self.last_state
 
+    def _release_solve_graph(self):
+        def detached(value):
+            if isinstance(value, torch.Tensor):
+                return value.detach()
+            if isinstance(value, tuple):
+                return tuple(detached(item) for item in value)
+            return value
+
+        self.last_state = {
+            name: detached(value)
+            for name, value in self.last_state.items()
+            if name != "box_solutions"
+        }
+
+    def provenance(self):
+        return {
+            "parameters": self.parameters,
+            "total_charge_per_box": self.total_charge,
+            "coupling": "minimum_image_unshielded_inverse_distance_v1",
+            "distance_unit": "angstrom",
+            "energy_unit": "nominal_eV_unverified",
+        }
+
     def energy(self, context, current_energy):
         charges = self.solve_charges(context)
 
         if not self.enabled:
-            return torch.zeros_like(current_energy)
+            contribution = torch.zeros_like(current_energy)
+            self._release_solve_graph()
+            return contribution
 
-        matrix = self.last_state["qeq_matrix"]
-        chi = self.last_state["chi"]
+        contribution = charges.sum() * 0.0
+        for box_charges, chi, matrix in self.last_state["box_solutions"]:
+            contribution = contribution + 0.5 * torch.dot(
+                box_charges,
+                matrix @ box_charges,
+            )
+            contribution = contribution + torch.dot(chi, box_charges)
 
-        contribution = 0.5 * torch.dot(charges, matrix @ charges)
-        contribution = contribution + torch.dot(chi, charges)
-
+        self._release_solve_graph()
         return contribution

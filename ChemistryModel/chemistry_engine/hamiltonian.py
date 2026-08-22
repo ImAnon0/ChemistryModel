@@ -42,6 +42,7 @@ class UnifiedRadialHamiltonian:
             total = base + capacity_correction + topology_correction
 
             extension_components = {}
+            extension_state = {}
             for term in self.extensions:
                 contribution = term.energy(context, total)
 
@@ -60,6 +61,9 @@ class UnifiedRadialHamiltonian:
 
                 extension_components[term.name] = contribution
                 total = total + contribution_per_atom
+                diagnostics = getattr(term, "diagnostics", None)
+                if diagnostics is not None:
+                    extension_state[term.name] = diagnostics()
 
         finally:
             self.base_energy.release_intermediates()
@@ -73,8 +77,12 @@ class UnifiedRadialHamiltonian:
             "total": total,
         }
 
+        state = dict(self.capacity_energy.state())
+        if extension_state:
+            state["extensions"] = extension_state
+
         return EnergyResult(
             per_atom=total,
             components=components,
-            state=self.capacity_energy.state(),
+            state=state,
         )

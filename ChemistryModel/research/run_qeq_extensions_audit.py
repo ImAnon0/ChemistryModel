@@ -127,16 +127,16 @@ def audit(name, case):
     electro = on_result.components["electrostatics"]
 
     reconstructed = (
-        on_result.components["base"]
-        + on_result.components["capacity_correction"]
-        + on_result.components["topology_correction"]
-        + electro
+        on_result.components["base"].sum()
+        + on_result.components["capacity_correction"].sum()
+        + on_result.components["topology_correction"].sum()
+        + electro.sum()
     )
 
     error = (
         reconstructed
-        - on_result.components["total"]
-    ).abs().max()
+        - on_result.components["total"].sum()
+    ).abs()
 
     print(
         "energy reconstruction error:",
@@ -166,7 +166,7 @@ def audit(name, case):
         ),
     )
 
-    state = on_result.state
+    state = on_result.state.get("extensions", {}).get("electrostatics", {})
 
     if "charge_sum" in state:
         print(
