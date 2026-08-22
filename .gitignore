@@ -48,3 +48,8 @@ mixtures.json
 timing_test/
 tmp_*/
 *_patch.txt
+
+# Generated research outputs
+ChemistryModel/research_data/benchmark/diagnostics/
+ChemistryModel/research_data/qm_residual/*_results.csv
+ChemistryModel/research_data/qm_residual/*_dataset.csv

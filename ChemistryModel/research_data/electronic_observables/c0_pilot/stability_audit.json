@@ -1,0 +1,95 @@
+{
+  "all_qm_records_ok": true,
+  "configuration_count": 235,
+  "maximum_total_charge_residual_e": 2.220446049250313e-16,
+  "minimum_response_eigenvalue": 0.9999999999999973,
+  "maximum_response_condition_number": 15.059543323347683,
+  "parameters_at_lower_bound": [
+    3,
+    5,
+    6
+  ],
+  "parameters_at_upper_bound": [],
+  "separated_OH_plus_H": {
+    "separation_A": 8.0,
+    "left_net_charge_e": 0.0,
+    "right_net_charge_e": 0.0,
+    "total_charge_e": 0.0,
+    "energy_eV": -0.16279547850237702
+  },
+  "separated_water_plus_ammonia": [
+    {
+      "separation_A": 8.0,
+      "left_net_charge_e": 0.0,
+      "right_net_charge_e": -5.551115123125783e-17,
+      "total_charge_e": 0.0,
+      "energy_eV": -0.8298089387783488
+    },
+    {
+      "separation_A": 20.0,
+      "left_net_charge_e": 0.0,
+      "right_net_charge_e": 8.326672684688674e-17,
+      "total_charge_e": 0.0,
+      "energy_eV": -0.8299460224805774
+    },
+    {
+      "separation_A": 100.0,
+      "left_net_charge_e": 0.0,
+      "right_net_charge_e": -8.326672684688674e-17,
+      "total_charge_e": -1.1102230246251565e-16,
+      "energy_eV": -0.8299495634222712
+    }
+  ],
+  "h2_polarizability_A3": {
+    "qm": [
+      [
+        0.17571141818148542,
+        5.758132750084074e-17,
+        3.243069335761123e-16
+      ],
+      [
+        4.1129519643457676e-17,
+        0.17571141818148525,
+        1.3761255692666358e-16
+      ],
+      [
+        2.1505931910706777e-16,
+        1.0080775769855386e-16,
+        0.9597187618711656
+      ]
+    ],
+    "c0": [
+      [
+        0.0,
+        0.0,
+        -0.0
+      ],
+      [
+        0.0,
+        0.0,
+        -0.0
+      ],
+      [
+        -0.0,
+        -0.0,
+        0.8202441770197269
+      ]
+    ],
+    "qm_eigenvalues": [
+      0.17571141818148533,
+      0.17571141818148545,
+      0.9597187618711658
+    ],
+    "c0_eigenvalues": [
+      0.0,
+      0.0,
+      0.8202441770197269
+    ]
+  },
+  "decision_gates": {
+    "positive_response": true,
+    "condition_below_1e6": true,
+    "charge_conservation_below_1e-12": true,
+    "no_bound_hits": false
+  }
+}

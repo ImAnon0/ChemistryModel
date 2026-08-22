@@ -1,0 +1,118 @@
+{
+  "convention": "continuous_sqe_c0_qm_pilot_v1",
+  "independent_parameter_count": 17,
+  "electronegativity_gauge": "H = 0 eV",
+  "elements": {
+    "1": {
+      "electronegativity_eV": 0.0,
+      "intrinsic_hardness_eV": 0.5000000000253296,
+      "gaussian_sigma_A": 0.5084244247902601,
+      "transfer_capacity_e2_per_eV": 0.270523081464942,
+      "covalent_radius_A_fixed": 0.31
+    },
+    "6": {
+      "electronegativity_eV": 1.6386147755878602,
+      "intrinsic_hardness_eV": 3.051431699952336,
+      "gaussian_sigma_A": 0.6016001477256615,
+      "transfer_capacity_e2_per_eV": 0.2431033789305596,
+      "covalent_radius_A_fixed": 0.76
+    },
+    "7": {
+      "electronegativity_eV": 1.7168620105884191,
+      "intrinsic_hardness_eV": 0.5000000007689258,
+      "gaussian_sigma_A": 0.8287566125665978,
+      "transfer_capacity_e2_per_eV": 0.21341991920282527,
+      "covalent_radius_A_fixed": 0.71
+    },
+    "8": {
+      "electronegativity_eV": 1.9039328852257482,
+      "intrinsic_hardness_eV": 0.5000000000001511,
+      "gaussian_sigma_A": 0.6233374711657373,
+      "transfer_capacity_e2_per_eV": 0.22964505839293026,
+      "covalent_radius_A_fixed": 0.66
+    }
+  },
+  "capacity_radius_scale": 2.1345178362651835,
+  "capacity_steepness": 3.1833168721070573,
+  "support_inner_A_fixed": 3.5,
+  "support_outer_A_fixed": 4.5,
+  "seed_vector": [
+    0.815,
+    2.371,
+    4.213,
+    10.0,
+    8.0,
+    9.0,
+    10.0,
+    0.45,
+    0.65,
+    0.6,
+    0.55,
+    0.08,
+    0.1,
+    0.095,
+    0.09,
+    1.25,
+    2.5
+  ],
+  "fitted_vector": [
+    1.6386147755878602,
+    1.7168620105884191,
+    1.9039328852257482,
+    0.5000000000253296,
+    3.051431699952336,
+    0.5000000007689258,
+    0.5000000000001511,
+    0.5084244247902601,
+    0.6016001477256615,
+    0.8287566125665978,
+    0.6233374711657373,
+    0.270523081464942,
+    0.2431033789305596,
+    0.21341991920282527,
+    0.22964505839293026,
+    2.1345178362651835,
+    3.1833168721070573
+  ],
+  "bounds": {
+    "lower": [
+      -5.0,
+      -5.0,
+      -5.0,
+      0.5,
+      0.5,
+      0.5,
+      0.5,
+      0.2,
+      0.2,
+      0.2,
+      0.2,
+      0.002,
+      0.002,
+      0.002,
+      0.002,
+      0.7,
+      0.2
+    ],
+    "upper": [
+      10.0,
+      10.0,
+      10.0,
+      30.0,
+      30.0,
+      30.0,
+      30.0,
+      1.5,
+      1.5,
+      1.5,
+      1.5,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      2.5,
+      8.0
+    ]
+  },
+  "selected_multistart_validation_score": 0.0009765866899177486
+}

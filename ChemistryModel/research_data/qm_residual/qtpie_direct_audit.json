@@ -1,0 +1,398 @@
+{
+  "direct_electrostatic_formulation": "gaussian-qtpie-candidate",
+  "comparison_note": "Disabled energies are reconstructed from the same unified-radial evaluation as enabled energies; old base_results.csv is a different model.",
+  "old_base_vs_disabled_unified": {
+    "formaldehyde": {
+      "count": 90,
+      "mae_eV": 0.658655512942349,
+      "rmse_eV": 1.3722821213642866,
+      "signed_mean_eV": -0.5816577620880042,
+      "maximum_absolute_eV": 4.427732827778227
+    },
+    "h3": {
+      "count": 90,
+      "mae_eV": 0.20673964504172207,
+      "rmse_eV": 0.593959401223047,
+      "signed_mean_eV": -0.14275938560812004,
+      "maximum_absolute_eV": 2.5381931529488098
+    },
+    "methane": {
+      "count": 90,
+      "mae_eV": 0.479960550075422,
+      "rmse_eV": 1.076909348647724,
+      "signed_mean_eV": -0.3620591038715564,
+      "maximum_absolute_eV": 3.9955944512736217
+    },
+    "water": {
+      "count": 90,
+      "mae_eV": 2.608993401458788,
+      "rmse_eV": 6.402357440692824,
+      "signed_mean_eV": -2.489195394057657,
+      "maximum_absolute_eV": 28.587732991931382
+    }
+  },
+  "qm_residual": {
+    "overall": {
+      "disabled": {
+        "count": 347,
+        "mae_eV": 0.9840754042882244,
+        "rmse_eV": 1.421161268088557,
+        "signed_mean_eV": 0.7063091341487916,
+        "maximum_absolute_eV": 3.3197512367739277
+      },
+      "enabled": {
+        "count": 347,
+        "mae_eV": 0.9844251605243403,
+        "rmse_eV": 1.4217650238406334,
+        "signed_mean_eV": 0.7073571983905165,
+        "maximum_absolute_eV": 3.3197512367739277
+      }
+    },
+    "by_system": {
+      "formaldehyde": {
+        "disabled": {
+          "count": 90,
+          "mae_eV": 0.895643255079956,
+          "rmse_eV": 1.308383547736378,
+          "signed_mean_eV": 0.4093262037120276,
+          "maximum_absolute_eV": 3.2219967559617224
+        },
+        "enabled": {
+          "count": 90,
+          "mae_eV": 0.8951088598057554,
+          "rmse_eV": 1.3089346694608222,
+          "signed_mean_eV": 0.4124284065565591,
+          "maximum_absolute_eV": 3.2249902429398336
+        },
+        "improved_count": 46,
+        "worsened_count": 43
+      },
+      "h3": {
+        "disabled": {
+          "count": 90,
+          "mae_eV": 1.330859728220158,
+          "rmse_eV": 1.8050079299609796,
+          "signed_mean_eV": 1.2066476709082872,
+          "maximum_absolute_eV": 3.3197512367739277
+        },
+        "enabled": {
+          "count": 90,
+          "mae_eV": 1.330859728220158,
+          "rmse_eV": 1.8050079299609796,
+          "signed_mean_eV": 1.206647670908287,
+          "maximum_absolute_eV": 3.3197512367739277
+        },
+        "improved_count": 19,
+        "worsened_count": 14
+      },
+      "methane": {
+        "disabled": {
+          "count": 90,
+          "mae_eV": 0.8687516249606034,
+          "rmse_eV": 1.2310260593802198,
+          "signed_mean_eV": 0.5487037711625249,
+          "maximum_absolute_eV": 2.9426155545903825
+        },
+        "enabled": {
+          "count": 90,
+          "mae_eV": 0.8687732663130093,
+          "rmse_eV": 1.2311403198508548,
+          "signed_mean_eV": 0.5488693782640197,
+          "maximum_absolute_eV": 2.9428959388553153
+        },
+        "improved_count": 43,
+        "worsened_count": 46
+      },
+      "water": {
+        "disabled": {
+          "count": 77,
+          "mae_eV": 0.8168993577214193,
+          "rmse_eV": 1.2334857584399466,
+          "signed_mean_eV": 0.6528348237555213,
+          "maximum_absolute_eV": 2.5161042245622642
+        },
+        "enabled": {
+          "count": 77,
+          "mae_eV": 0.8190748546940649,
+          "rmse_eV": 1.2358023273700312,
+          "signed_mean_eV": 0.6537384003365106,
+          "maximum_absolute_eV": 2.5183540059522525
+        },
+        "improved_count": 2,
+        "worsened_count": 73
+      }
+    },
+    "by_region": {
+      "off_path": {
+        "disabled": {
+          "count": 165,
+          "mae_eV": 1.1848050152793355,
+          "rmse_eV": 1.5693497067569024,
+          "signed_mean_eV": 0.9775888782856413,
+          "maximum_absolute_eV": 3.2925705973679538
+        },
+        "enabled": {
+          "count": 165,
+          "mae_eV": 1.1851982627267659,
+          "rmse_eV": 1.5699527779379663,
+          "signed_mean_eV": 0.978644453111157,
+          "maximum_absolute_eV": 3.2925705973679538
+        },
+        "improved_count": 44,
+        "worsened_count": 90
+      },
+      "product_like": {
+        "disabled": {
+          "count": 39,
+          "mae_eV": 0.38348515617281226,
+          "rmse_eV": 0.4568094747302502,
+          "signed_mean_eV": -0.38185559911581113,
+          "maximum_absolute_eV": 0.8633048280130069
+        },
+        "enabled": {
+          "count": 39,
+          "mae_eV": 0.38215198738715145,
+          "rmse_eV": 0.45541736410505096,
+          "signed_mean_eV": -0.38030686981274786,
+          "maximum_absolute_eV": 0.8575547061209523
+        },
+        "improved_count": 24,
+        "worsened_count": 10
+      },
+      "product_reference": {
+        "disabled": {
+          "count": 4,
+          "mae_eV": 0.1358439752780809,
+          "rmse_eV": 0.24471762651413978,
+          "signed_mean_eV": -0.10719035752590944,
+          "maximum_absolute_eV": 0.4860686656079807
+        },
+        "enabled": {
+          "count": 4,
+          "mae_eV": 0.13771344815526243,
+          "rmse_eV": 0.24492988399495816,
+          "signed_mean_eV": -0.1050253790136586,
+          "maximum_absolute_eV": 0.48547765433784207
+        },
+        "improved_count": 1,
+        "worsened_count": 1
+      },
+      "reactant_like": {
+        "disabled": {
+          "count": 33,
+          "mae_eV": 0.24190206436230066,
+          "rmse_eV": 0.2820123464299189,
+          "signed_mean_eV": -0.24190206436230066,
+          "maximum_absolute_eV": 0.6269244961147802
+        },
+        "enabled": {
+          "count": 33,
+          "mae_eV": 0.24217066443644605,
+          "rmse_eV": 0.28245088273923563,
+          "signed_mean_eV": -0.24217066443644605,
+          "maximum_absolute_eV": 0.6306574954624988
+        },
+        "improved_count": 13,
+        "worsened_count": 13
+      },
+      "reactant_reference": {
+        "disabled": {
+          "count": 4,
+          "mae_eV": 0.0,
+          "rmse_eV": 0.0,
+          "signed_mean_eV": 0.0,
+          "maximum_absolute_eV": 0.0
+        },
+        "enabled": {
+          "count": 4,
+          "mae_eV": 0.0,
+          "rmse_eV": 0.0,
+          "signed_mean_eV": 0.0,
+          "maximum_absolute_eV": 0.0
+        },
+        "improved_count": 0,
+        "worsened_count": 0
+      },
+      "transfer_region": {
+        "disabled": {
+          "count": 102,
+          "mae_eV": 1.2009732612854471,
+          "rmse_eV": 1.6670439728569464,
+          "signed_mean_eV": 1.049911789726236,
+          "maximum_absolute_eV": 3.3197512367739277
+        },
+        "enabled": {
+          "count": 102,
+          "mae_eV": 1.2018765110285,
+          "rmse_eV": 1.6679969051581747,
+          "signed_mean_eV": 1.0511795533659105,
+          "maximum_absolute_eV": 3.3197512367739277
+        },
+        "improved_count": 28,
+        "worsened_count": 62
+      }
+    }
+  },
+  "simple_systems": {
+    "H2": {
+      "charges": [
+        0.0,
+        0.0
+      ],
+      "charge_sum": 0.0,
+      "energy_eV": 0.0,
+      "dipole_e_angstrom": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "dipole_debye": 0.0,
+      "minimum_projected_eigenvalue": 0.31963424587776146,
+      "projected_condition_number": 1.0
+    },
+    "CH4": {
+      "charges": [
+        -7.841911660842172,
+        1.960477915210543,
+        1.960477915210543,
+        1.9604779152105432,
+        1.9604779152105432
+      ],
+      "charge_sum": 2.220446049250313e-16,
+      "energy_eV": -3.000154125519255,
+      "dipole_e_angstrom": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "dipole_debye": 0.0,
+      "minimum_projected_eigenvalue": 0.07805840221679915,
+      "projected_condition_number": 86.19945631452454
+    },
+    "H2O": {
+      "charges": [
+        -0.8477120994104411,
+        0.42404256204488816,
+        0.4236695373655531
+      ],
+      "charge_sum": 1.1102230246251565e-16,
+      "energy_eV": -1.471947456116015,
+      "dipole_e_angstrom": [
+        0.3054001705953599,
+        0.3940126697499644,
+        0.0
+      ],
+      "dipole_debye": 2.394460168905298,
+      "minimum_projected_eigenvalue": 2.7310788614820174,
+      "projected_condition_number": 1.7326169739438728
+    },
+    "CH2O": {
+      "charges": [
+        0.6824585544890407,
+        -0.3648354350153334,
+        -0.15881155973685362,
+        -0.1588115597368536
+      ],
+      "charge_sum": 8.326672684688674e-17,
+      "energy_eV": -0.38707081995961357,
+      "dipole_e_angstrom": [
+        -0.21911469273695838,
+        -2.7755575615628914e-17,
+        0.0
+      ],
+      "dipole_debye": 1.0524527247474862,
+      "minimum_projected_eigenvalue": 0.7283808871135184,
+      "projected_condition_number": 9.989590844522684
+    },
+    "H3": {
+      "charges": [
+        -0.0,
+        0.0,
+        0.0
+      ],
+      "charge_sum": 0.0,
+      "energy_eV": 0.0,
+      "dipole_e_angstrom": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "dipole_debye": 0.0,
+      "minimum_projected_eigenvalue": -0.7329848209083378,
+      "projected_condition_number": -7.442683708477988
+    }
+  },
+  "dissociation_scan": {
+    "pair": "neutral O + H under one global neutral constraint",
+    "rows": [
+      {
+        "distance_angstrom": 1.0,
+        "oxygen_charge_e": -0.4132201149302849,
+        "hydrogen_charge_e": 0.4132201149302848,
+        "energy_eV": -0.5741439755757544
+      },
+      {
+        "distance_angstrom": 2.0,
+        "oxygen_charge_e": -0.052157782924848066,
+        "hydrogen_charge_e": 0.052157782924848066,
+        "energy_eV": -0.01813652078850817
+      },
+      {
+        "distance_angstrom": 5.0,
+        "oxygen_charge_e": -2.406806180629418e-07,
+        "hydrogen_charge_e": 2.406806180629418e-07,
+        "energy_eV": -6.22547312066574e-13
+      },
+      {
+        "distance_angstrom": 10.0,
+        "oxygen_charge_e": -7.53597536585531e-26,
+        "hydrogen_charge_e": 7.535975365855312e-26,
+        "energy_eV": -6.92113012895638e-50
+      },
+      {
+        "distance_angstrom": 25.0,
+        "oxygen_charge_e": -5.006514973639264e-155,
+        "hydrogen_charge_e": 5.006514973639264e-155,
+        "energy_eV": -3.271261786101909e-308
+      },
+      {
+        "distance_angstrom": 100.0,
+        "oxygen_charge_e": 0.0,
+        "hydrogen_charge_e": 0.0,
+        "energy_eV": 0.0
+      }
+    ],
+    "asymptotic_charge_magnitude_e": 0.0,
+    "charge_localises_on_separation": true
+  },
+  "reaction_grid_smoothness": {
+    "formaldehyde": {
+      "grid_count": 64,
+      "maximum_adjacent_energy_change_eV": 5.079398034640988,
+      "maximum_adjacent_energy_slope_eV_per_angstrom": 39.50642914953961,
+      "maximum_adjacent_atomic_charge_change_e": 28.94728672288054,
+      "all_values_finite": true
+    },
+    "h3": {
+      "grid_count": 64,
+      "maximum_adjacent_energy_change_eV": 0.0,
+      "maximum_adjacent_energy_slope_eV_per_angstrom": 0.0,
+      "maximum_adjacent_atomic_charge_change_e": 0.0,
+      "all_values_finite": true
+    },
+    "methane": {
+      "grid_count": 64,
+      "maximum_adjacent_energy_change_eV": 160.3143493997213,
+      "maximum_adjacent_energy_slope_eV_per_angstrom": 1192.318820952253,
+      "maximum_adjacent_atomic_charge_change_e": 424.40030329648954,
+      "all_values_finite": true
+    },
+    "water": {
+      "grid_count": 64,
+      "maximum_adjacent_energy_change_eV": 0.1758983745300462,
+      "maximum_adjacent_energy_slope_eV_per_angstrom": 1.3680984682630037,
+      "maximum_adjacent_atomic_charge_change_e": 0.14427914334216996,
+      "all_values_finite": true
+    }
+  }
+}

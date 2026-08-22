@@ -20,6 +20,7 @@ from types import SimpleNamespace
 import torch
 
 from chemistry_engine.terms.electrostatics import ElectrostaticEnergyTerm
+from research.charge_localising_electrostatics import GaussianQTPIECandidate
 from research.electrostatics_diagnostics import known_diagnostic_cases
 
 
@@ -139,10 +140,15 @@ def _context(positions, atomic_numbers, box_size=30.0):
     )
 
 
-def _qeq_observation(coordinates, atomic_numbers, box_size=30.0):
+def _qeq_observation(
+    coordinates,
+    atomic_numbers,
+    box_size=30.0,
+    term_type=ElectrostaticEnergyTerm,
+):
     positions = torch.tensor(coordinates, dtype=torch.float64)
     context = _context(positions, atomic_numbers, box_size)
-    term = ElectrostaticEnergyTerm(enabled=True)
+    term = term_type(enabled=True)
     energy = term.energy(context, torch.zeros((), dtype=torch.float64))
     state = term.diagnostics()
     matrix = state["qeq_matrix"].detach()
@@ -166,25 +172,26 @@ def _qeq_observation(coordinates, atomic_numbers, box_size=30.0):
     }
 
 
-def _simple_systems():
+def _simple_systems(term_type=ElectrostaticEnergyTerm):
     cases = dict(known_diagnostic_cases())
     cases["H3"] = (
         [[-0.74, 0.0, 0.0], [0.0, 0.0, 0.0], [0.92, 0.0, 0.0]],
         (1, 1, 1),
     )
     return {
-        name: _qeq_observation(coordinates, atomic_numbers)
+        name: _qeq_observation(coordinates, atomic_numbers, term_type=term_type)
         for name, (coordinates, atomic_numbers) in cases.items()
     }
 
 
-def _dissociation_scan():
+def _dissociation_scan(term_type=ElectrostaticEnergyTerm):
     rows = []
     for distance in (1.0, 2.0, 5.0, 10.0, 25.0, 100.0):
         observation = _qeq_observation(
             [[0.0, 0.0, 0.0], [distance, 0.0, 0.0]],
             (8, 1),
             box_size=0.0,
+            term_type=term_type,
         )
         rows.append(
             {
@@ -202,7 +209,7 @@ def _dissociation_scan():
     }
 
 
-def _reaction_smoothness(geometry_path):
+def _reaction_smoothness(geometry_path, term_type=ElectrostaticEnergyTerm):
     payload = json.loads(geometry_path.read_text(encoding="utf-8"))
     rows = []
     for geometry in payload["geometries"]:
@@ -211,6 +218,7 @@ def _reaction_smoothness(geometry_path):
         observation = _qeq_observation(
             geometry["coordinates_angstrom"],
             [ATOMIC_NUMBERS[symbol] for symbol in geometry["symbols"]],
+            term_type=term_type,
         )
         coordinate = geometry["reaction_coordinate"]
         rows.append(
@@ -278,7 +286,17 @@ def main():
     parser.add_argument("--electrostatics", type=Path, default=DEFAULT_ELECTRO)
     parser.add_argument("--residual", type=Path, default=DEFAULT_RESIDUAL)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument(
+        "--formulation",
+        choices=("qeq", "gaussian-qtpie-candidate"),
+        default="qeq",
+    )
     args = parser.parse_args()
+
+    term_type = {
+        "qeq": ElectrostaticEnergyTerm,
+        "gaussian-qtpie-candidate": GaussianQTPIECandidate,
+    }[args.formulation]
 
     old_rows = _read_csv(args.old_base)
     electro_rows = _read_csv(args.electrostatics)
@@ -286,6 +304,7 @@ def main():
     compared = _same_engine_residuals(electro_rows, residual_rows)
 
     output = {
+        "direct_electrostatic_formulation": args.formulation,
         "comparison_note": (
             "Disabled energies are reconstructed from the same unified-radial "
             "evaluation as enabled energies; old base_results.csv is a different model."
@@ -301,9 +320,11 @@ def main():
             "by_system": _group_metrics(compared, "system"),
             "by_region": _group_metrics(compared, "region"),
         },
-        "simple_systems": _simple_systems(),
-        "dissociation_scan": _dissociation_scan(),
-        "reaction_grid_smoothness": _reaction_smoothness(args.geometries),
+        "simple_systems": _simple_systems(term_type),
+        "dissociation_scan": _dissociation_scan(term_type),
+        "reaction_grid_smoothness": _reaction_smoothness(
+            args.geometries, term_type
+        ),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(output, indent=2) + "\n", encoding="utf-8")

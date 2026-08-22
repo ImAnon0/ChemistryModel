@@ -1,0 +1,286 @@
+{
+  "model_id": "research_continuous_sqe_c0_v1",
+  "parameter_convention": "continuous_sqe_c0_provisional_seed_v1",
+  "parameter_count": 17,
+  "simple_systems": {
+    "H2": {
+      "energy_eV": 0.0,
+      "charges_e": [
+        0.0,
+        0.0
+      ],
+      "dipole_e_A": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "maximum_force_eV_per_A": 0.0,
+      "diagnostics": {
+        "atom_count": 2,
+        "edge_count": 1,
+        "active_edge_count": 1,
+        "minimum_response_eigenvalue": 2.2044196703609185,
+        "maximum_response_eigenvalue": 2.2044196703609185,
+        "response_condition_number": 1.0,
+        "minimum_hardness_eigenvalue": 13.36037071739788,
+        "hardness_condition_number": 3.1995275107046637,
+        "relative_solve_residual": 0.0,
+        "total_charge_residual_e": 0.0,
+        "maximum_absolute_charge_e": 0.0,
+        "maximum_absolute_transfer_e": 0.0,
+        "minimum_compliance_e2_per_eV": 0.04507433572904242,
+        "maximum_compliance_e2_per_eV": 0.04507433572904242,
+        "all_finite": true
+      }
+    },
+    "CH4": {
+      "energy_eV": -0.022392635561090047,
+      "charges_e": [
+        -0.054951252910650436,
+        0.01373781322766261,
+        0.013737813227662612,
+        0.013737813227662609,
+        0.013737813227662609
+      ],
+      "dipole_e_A": [
+        -1.734723475976807e-18,
+        0.0,
+        0.0
+      ],
+      "maximum_force_eV_per_A": 0.00258209822642784,
+      "diagnostics": {
+        "atom_count": 5,
+        "edge_count": 10,
+        "active_edge_count": 10,
+        "minimum_response_eigenvalue": 0.999999999999999,
+        "maximum_response_eigenvalue": 4.318422888815389,
+        "response_condition_number": 4.318422888815394,
+        "minimum_hardness_eigenvalue": 9.117316310082984,
+        "hardness_condition_number": 7.288546027068153,
+        "relative_solve_residual": 4.807722398634085e-17,
+        "total_charge_residual_e": 1.0408340855860843e-17,
+        "maximum_absolute_charge_e": 0.054951252910650436,
+        "maximum_absolute_transfer_e": 0.013737813227662612,
+        "minimum_compliance_e2_per_eV": 9.165555175119693e-10,
+        "maximum_compliance_e2_per_eV": 0.07279225409154477,
+        "all_finite": true
+      }
+    },
+    "H2O": {
+      "energy_eV": -0.3358158464555415,
+      "charges_e": [
+        -0.15941886848114958,
+        0.07972582473105785,
+        0.07969304375009173
+      ],
+      "dipole_e_A": [
+        0.05741046124179352,
+        0.0741145306875853,
+        0.0
+      ],
+      "maximum_force_eV_per_A": 0.129494582913544,
+      "diagnostics": {
+        "atom_count": 3,
+        "edge_count": 3,
+        "active_edge_count": 3,
+        "minimum_response_eigenvalue": 1.0,
+        "maximum_response_eigenvalue": 3.448884058699685,
+        "response_condition_number": 3.448884058699685,
+        "minimum_hardness_eigenvalue": 12.509393416133294,
+        "hardness_condition_number": 3.968089764188296,
+        "relative_solve_residual": 1.4589329820033677e-16,
+        "total_charge_residual_e": 0.0,
+        "maximum_absolute_charge_e": 0.15941886848114958,
+        "maximum_absolute_transfer_e": 0.079725829147053,
+        "minimum_compliance_e2_per_eV": 2.791465190310075e-05,
+        "maximum_compliance_e2_per_eV": 0.06527010206787841,
+        "all_finite": true
+      }
+    },
+    "CH2O": {
+      "energy_eV": -0.19688669729479824,
+      "charges_e": [
+        0.04344020435593597,
+        -0.10186972730588285,
+        0.02921476147497344,
+        0.029214761474973445
+      ],
+      "dipole_e_A": [
+        -0.16416303610508107,
+        -3.469446951953614e-18,
+        0.0
+      ],
+      "maximum_force_eV_per_A": 0.07203645148517597,
+      "diagnostics": {
+        "atom_count": 4,
+        "edge_count": 6,
+        "active_edge_count": 6,
+        "minimum_response_eigenvalue": 0.9999999999999999,
+        "maximum_response_eigenvalue": 3.711829654725967,
+        "response_condition_number": 3.7118296547259675,
+        "minimum_hardness_eigenvalue": 10.000387863787564,
+        "hardness_condition_number": 5.1538216585161845,
+        "relative_solve_residual": 1.1614234932661575e-16,
+        "total_charge_residual_e": 3.469446951953614e-18,
+        "maximum_absolute_charge_e": 0.10186972730588285,
+        "maximum_absolute_transfer_e": 0.10081840258795467,
+        "minimum_compliance_e2_per_eV": 1.1453376747856512e-08,
+        "maximum_compliance_e2_per_eV": 0.08251545048907619,
+        "all_finite": true
+      }
+    },
+    "H3": {
+      "energy_eV": 0.0,
+      "charges_e": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "dipole_e_A": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "maximum_force_eV_per_A": 0.0,
+      "diagnostics": {
+        "atom_count": 3,
+        "edge_count": 3,
+        "active_edge_count": 3,
+        "minimum_response_eigenvalue": 0.9999999999999997,
+        "maximum_response_eigenvalue": 2.3014426096856875,
+        "response_condition_number": 2.3014426096856884,
+        "minimum_hardness_eigenvalue": 11.99911562275009,
+        "hardness_condition_number": 4.386928435751551,
+        "relative_solve_residual": 0.0,
+        "total_charge_residual_e": 0.0,
+        "maximum_absolute_charge_e": 0.0,
+        "maximum_absolute_transfer_e": 0.0,
+        "minimum_compliance_e2_per_eV": 2.1623205624964696e-06,
+        "maximum_compliance_e2_per_eV": 0.04507433572904242,
+        "all_finite": true
+      }
+    }
+  },
+  "oh_separation": [
+    {
+      "distance_A": 0.8,
+      "oxygen_charge_e": -0.10664617196763274,
+      "energy_eV": -0.22465016124981835,
+      "minimum_response_eigenvalue": 2.9681703593762427,
+      "condition_number": 1.0
+    },
+    {
+      "distance_A": 1.0,
+      "oxygen_charge_e": -0.09423030272464997,
+      "energy_eV": -0.19849613268947514,
+      "minimum_response_eigenvalue": 2.7779601744289453,
+      "condition_number": 1.0
+    },
+    {
+      "distance_A": 1.5,
+      "oxygen_charge_e": -0.04532664372481322,
+      "energy_eV": -0.09548057500631904,
+      "minimum_response_eigenvalue": 1.5846658875793993,
+      "condition_number": 1.0
+    },
+    {
+      "distance_A": 2.0,
+      "oxygen_charge_e": -0.0037393128695227384,
+      "energy_eV": -0.007876862559649648,
+      "minimum_response_eigenvalue": 1.0353759662520827,
+      "condition_number": 1.0
+    },
+    {
+      "distance_A": 3.0,
+      "oxygen_charge_e": -3.3359672184160696e-08,
+      "energy_eV": -7.027214945593451e-08,
+      "minimum_response_eigenvalue": 1.0000003422692203,
+      "condition_number": 1.0
+    },
+    {
+      "distance_A": 3.5,
+      "oxygen_charge_e": -4.568214348037627e-12,
+      "energy_eV": -9.622943524141264e-12,
+      "minimum_response_eigenvalue": 1.0000000000483564,
+      "condition_number": 1.0
+    },
+    {
+      "distance_A": 4.0,
+      "oxygen_charge_e": -1.9488834247712317e-17,
+      "energy_eV": -4.105322934280599e-17,
+      "minimum_response_eigenvalue": 1.0000000000000002,
+      "condition_number": 1.0
+    },
+    {
+      "distance_A": 4.5,
+      "oxygen_charge_e": 0.0,
+      "energy_eV": 0.0,
+      "minimum_response_eigenvalue": 1.0,
+      "condition_number": 1.0
+    },
+    {
+      "distance_A": 5.0,
+      "oxygen_charge_e": 0.0,
+      "energy_eV": 0.0,
+      "minimum_response_eigenvalue": 1.0,
+      "condition_number": 1.0
+    },
+    {
+      "distance_A": 10.0,
+      "oxygen_charge_e": 0.0,
+      "energy_eV": 0.0,
+      "minimum_response_eigenvalue": 1.0,
+      "condition_number": 1.0
+    },
+    {
+      "distance_A": 100.0,
+      "oxygen_charge_e": 0.0,
+      "energy_eV": 0.0,
+      "minimum_response_eigenvalue": 1.0,
+      "condition_number": 1.0
+    }
+  ],
+  "reaction_grid_smoothness": {
+    "formaldehyde": {
+      "geometry_count": 64,
+      "maximum_adjacent_energy_change_eV": 0.003489592928985513,
+      "maximum_adjacent_atomic_charge_change_e": 0.00476400294671017,
+      "minimum_response_eigenvalue": 0.9999999999999981,
+      "maximum_condition_number": 4.053171708485848,
+      "all_values_finite": true
+    },
+    "h3": {
+      "geometry_count": 64,
+      "maximum_adjacent_energy_change_eV": 0.0,
+      "maximum_adjacent_atomic_charge_change_e": 0.0,
+      "minimum_response_eigenvalue": 0.9999999999999991,
+      "maximum_condition_number": 2.73453870090846,
+      "all_values_finite": true
+    },
+    "methane": {
+      "geometry_count": 64,
+      "maximum_adjacent_energy_change_eV": 0.0005728770717514618,
+      "maximum_adjacent_atomic_charge_change_e": 0.0019622747731059776,
+      "minimum_response_eigenvalue": 0.9999999999999979,
+      "maximum_condition_number": 4.308857528576946,
+      "all_values_finite": true
+    },
+    "water": {
+      "geometry_count": 64,
+      "maximum_adjacent_energy_change_eV": 0.017147286927496785,
+      "maximum_adjacent_atomic_charge_change_e": 0.011403058547732166,
+      "minimum_response_eigenvalue": 0.9999999999999982,
+      "maximum_condition_number": 4.252144129995881,
+      "all_values_finite": true
+    }
+  },
+  "gate_summary": {
+    "all_simple_finite": true,
+    "minimum_simple_response_eigenvalue": 0.999999999999999,
+    "maximum_simple_condition_number": 4.318422888815394,
+    "asymptotic_oh_charge_e": 0.0,
+    "all_reaction_grids_finite": true,
+    "minimum_reaction_grid_eigenvalue": 0.9999999999999979,
+    "maximum_reaction_grid_condition_number": 4.308857528576946
+  }
+}

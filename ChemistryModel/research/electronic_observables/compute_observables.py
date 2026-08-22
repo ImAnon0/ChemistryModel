@@ -128,6 +128,20 @@ def _density_observables(wfn, coordinates_angstrom):
     reconstructed = (mbis[:, None] * coordinates_bohr).sum(axis=0)
     reconstructed += mbis_dipoles.sum(axis=0)
 
+    coordinates = np.asarray(coordinates_angstrom, dtype=float)
+    centre = coordinates.mean(axis=0)
+    directions = np.asarray([
+        [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1],
+        *[[x, y, z] for x in (-1, 1) for y in (-1, 1) for z in (-1, 1)],
+    ], dtype=float)
+    directions /= np.linalg.norm(directions, axis=1)[:, None]
+    shell_radius = float(np.max(np.linalg.norm(coordinates - centre, axis=1)) + 2.0)
+    esp_points_angstrom = centre + shell_radius * directions
+    esp = psi4.core.ESPPropCalc(wfn).compute_esp_over_grid_in_memory(
+        psi4.core.Matrix.from_array(esp_points_angstrom / BOHR_TO_ANGSTROM)
+    )
+    esp = np.asarray(esp.np if hasattr(esp, "np") else esp, dtype=float).reshape(-1)
+
     return {
         "dipole_au": dipole.tolist(),
         "dipole_debye": (dipole * DIPOLE_AU_TO_DEBYE).tolist(),
@@ -139,6 +153,12 @@ def _density_observables(wfn, coordinates_angstrom):
         "mbis_atomic_quadrupoles_au": mbis_quadrupoles.tolist(),
         "mbis_reconstructed_dipole_au": reconstructed.tolist(),
         "mbis_dipole_reconstruction_error_au": float(np.linalg.norm(reconstructed - dipole)),
+        "external_potential": {
+            "points_angstrom": esp_points_angstrom.tolist(),
+            "potential_au": esp.tolist(),
+            "shell_radius_angstrom": shell_radius,
+            "convention": "Psi4 total molecular ESP on a 14-point enclosing shell",
+        },
     }
 
 
@@ -334,6 +354,7 @@ def main():
             "dipole": "Psi4 total electric dipole in the fixed input frame.",
             "polarizability": "Static analytic dipole polarizability in atomic units.",
             "mbis_multipoles": "Raw Psi4 component ordering and atomic-unit convention retained.",
+            "external_potential": "Psi4 total molecular ESP in atomic units on a fixed enclosing 14-point shell.",
         },
     }
     _write_atomic(args.metadata, metadata)
